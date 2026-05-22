@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/client/App';
+import { LinkEditorModal } from '../../src/client/components/LinkEditorModal';
 import { TmdbSearch } from '../../src/client/components/TmdbSearch';
 
 const fetchMock = vi.fn();
@@ -249,5 +250,33 @@ describe('App', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(screen.queryByLabelText(/tmdb movie results/i)).not.toBeInTheDocument();
+  });
+
+  it('disables link saves while a link request is already saving', () => {
+    const onSave = vi.fn();
+
+    render(
+      <LinkEditorModal
+        open
+        isSaving
+        links={[
+          {
+            providerName: 'Provider',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/watch'
+          }
+        ]}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />
+    );
+
+    const saveButton = screen.getByRole('button', { name: /^saving/i });
+    expect(saveButton).toBeDisabled();
+
+    fireEvent.click(saveButton);
+
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

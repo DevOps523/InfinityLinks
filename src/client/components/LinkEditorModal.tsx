@@ -12,6 +12,7 @@ export type MovieLinkInput = {
 type LinkEditorModalProps = {
   open: boolean;
   links: MovieLinkInput[];
+  isSaving?: boolean;
   onClose: () => void;
   onSave: (links: MovieLinkInput[]) => void;
 };
@@ -27,7 +28,7 @@ function emptyLink(): MovieLinkInput {
   };
 }
 
-export function LinkEditorModal({ open, links, onClose, onSave }: LinkEditorModalProps) {
+export function LinkEditorModal({ open, links, isSaving = false, onClose, onSave }: LinkEditorModalProps) {
   const [draftLinks, setDraftLinks] = useState<MovieLinkInput[]>(links.length > 0 ? links : [emptyLink()]);
   const [error, setError] = useState('');
   const addButtonRef = useRef<HTMLButtonElement>(null);
@@ -36,7 +37,8 @@ export function LinkEditorModal({ open, links, onClose, onSave }: LinkEditorModa
     open,
     dialogRef,
     initialFocusRef: addButtonRef,
-    onClose
+    onClose,
+    closeOnEscape: !isSaving
   });
 
   useEffect(() => {
@@ -62,6 +64,10 @@ export function LinkEditorModal({ open, links, onClose, onSave }: LinkEditorModa
   }
 
   function handleSave() {
+    if (isSaving) {
+      return;
+    }
+
     const nonEmptyLinks = draftLinks.filter((link) => link.providerName.trim() || link.url.trim());
     const hasPartialLink = nonEmptyLinks.some((link) => !link.providerName.trim() || !link.url.trim());
 
@@ -88,6 +94,7 @@ export function LinkEditorModal({ open, links, onClose, onSave }: LinkEditorModa
             className="button button--secondary"
             type="button"
             ref={addButtonRef}
+            disabled={isSaving}
             onClick={() => setDraftLinks((current) => [...current, emptyLink()])}
           >
             <Plus aria-hidden="true" size={16} />
@@ -120,7 +127,7 @@ export function LinkEditorModal({ open, links, onClose, onSave }: LinkEditorModa
                 URL
                 <input type="url" value={link.url} onChange={(event) => updateLink(index, 'url', event.target.value)} />
               </label>
-              <button className="icon-button icon-button--danger" type="button" aria-label="Remove link" onClick={() => removeLink(index)}>
+              <button className="icon-button icon-button--danger" type="button" aria-label="Remove link" disabled={isSaving} onClick={() => removeLink(index)}>
                 <Trash2 aria-hidden="true" size={18} />
               </button>
             </div>
@@ -128,12 +135,12 @@ export function LinkEditorModal({ open, links, onClose, onSave }: LinkEditorModa
         </div>
         {error ? <p className="field-error">{error}</p> : null}
         <div className="modal__actions">
-          <button className="button button--secondary" type="button" onClick={onClose}>
+          <button className="button button--secondary" type="button" onClick={onClose} disabled={isSaving}>
             Cancel
           </button>
-          <button className="button button--primary" type="button" onClick={handleSave}>
+          <button className="button button--primary" type="button" onClick={handleSave} disabled={isSaving}>
             <Save aria-hidden="true" size={16} />
-            Save links
+            {isSaving ? 'Saving...' : 'Save links'}
           </button>
         </div>
       </section>

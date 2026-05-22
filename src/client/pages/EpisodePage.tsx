@@ -426,6 +426,7 @@ export function EpisodePage({ seasonId, onBack }: EpisodePageProps) {
       <LinkEditorModal
         open={Boolean(linkModal)}
         links={linkModalLinks}
+        isSaving={isSavingLinks}
         onClose={() => {
           if (!isSavingLinks) {
             setLinkModal(null);

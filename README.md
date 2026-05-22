@@ -39,3 +39,13 @@ InfinityLinks is a local admin app for saving movie and TV streaming links and p
 - TV shows post one Telegram message per season after the first linked episode in that season is saved.
 - Telegram buttons are not used.
 
+## Verification
+
+Task 12 local verification completed with:
+
+- `npm.cmd test` passed: 10 test files, 78 tests.
+- `npm.cmd run build` passed.
+- `npm.cmd run db:migrate` passed.
+- Dev server started with dummy environment values at [http://127.0.0.1:3000](http://127.0.0.1:3000) and was stopped after verification.
+- Nonvisual HTTP smoke covered `/`, `/movies`, `/movies/new`, `/tv`, `/tv/new`, `/api/health`, `/api/movies`, and `/api/tv-shows`.
+- Visual Browser verification was not performed because no in-app browser tool was exposed and Playwright was not installed.

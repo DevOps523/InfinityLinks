@@ -178,6 +178,120 @@ describe('movie media API', () => {
     expect(response.body.movies.map((movie: { title: string }) => movie.title)).toEqual(['Alien', 'Arrival']);
   });
 
+  it('returns a movie with links by id', async () => {
+    const movie = db
+      .prepare(
+        "INSERT INTO movies (tmdb_id, title, year, poster_url, rating, quality, description) VALUES (27205, 'Inception', 2010, 'https://example.com/inception.jpg', 8.8, 'Full HD', 'Dream heist')"
+      )
+      .run();
+    db.prepare(
+      "INSERT INTO movie_links (movie_id, provider_name, quality, status, url) VALUES (?, 'Provider', 'Full HD', 'active', 'https://example.com/watch')"
+    ).run(movie.lastInsertRowid);
+
+    const response = await request(app()).get(`/api/movies/${movie.lastInsertRowid}`).expect(200);
+
+    expect(response.body.movie).toMatchObject({
+      id: movie.lastInsertRowid,
+      tmdbId: 27205,
+      title: 'Inception',
+      year: 2010,
+      posterUrl: 'https://example.com/inception.jpg',
+      rating: 8.8,
+      quality: 'Full HD',
+      description: 'Dream heist',
+      links: [
+        {
+          providerName: 'Provider',
+          quality: 'Full HD',
+          status: 'active',
+          url: 'https://example.com/watch'
+        }
+      ]
+    });
+  });
+
+  it('updates a movie with replacement links and queues a Telegram edit job for posted movies', async () => {
+    const movie = db
+      .prepare(
+        "INSERT INTO movies (title, year, poster_url, quality, description, telegram_message_id, post_status) VALUES ('Old Title', 2020, 'https://example.com/old.jpg', 'HD', 'Old description', 456, 'posted')"
+      )
+      .run();
+    db.prepare(
+      "INSERT INTO movie_links (movie_id, provider_name, quality, status, url) VALUES (?, 'Old Provider', 'HD', 'active', 'https://example.com/old')"
+    ).run(movie.lastInsertRowid);
+
+    const response = await request(app())
+      .put(`/api/movies/${movie.lastInsertRowid}`)
+      .send({
+        tmdbId: 27205,
+        title: 'Updated Title',
+        year: 2026,
+        posterUrl: 'https://example.com/new.jpg',
+        rating: 7.5,
+        quality: '4K',
+        description: 'Updated description',
+        links: [
+          {
+            providerName: 'New Provider',
+            quality: '4K',
+            status: 'active',
+            url: 'https://example.com/new'
+          },
+          {
+            providerName: 'Backup',
+            quality: 'HD',
+            status: 'inactive',
+            url: 'https://example.com/backup'
+          }
+        ]
+      })
+      .expect(200);
+
+    expect(response.body.movie).toMatchObject({
+      id: movie.lastInsertRowid,
+      tmdbId: 27205,
+      title: 'Updated Title',
+      year: 2026,
+      posterUrl: 'https://example.com/new.jpg',
+      rating: 7.5,
+      quality: '4K',
+      description: 'Updated description',
+      telegramMessageId: 456,
+      links: [
+        {
+          providerName: 'New Provider',
+          quality: '4K',
+          status: 'active',
+          url: 'https://example.com/new',
+          sortOrder: 0
+        },
+        {
+          providerName: 'Backup',
+          quality: 'HD',
+          status: 'inactive',
+          url: 'https://example.com/backup',
+          sortOrder: 1
+        }
+      ]
+    });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM movie_links WHERE provider_name = ?').get('Old Provider')).toEqual({
+      count: 0
+    });
+
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      job_type: 'edit',
+      entity_type: 'movie',
+      entity_id: movie.lastInsertRowid,
+      status: 'queued'
+    });
+    expect(JSON.parse(jobs[0].payload)).toEqual({
+      messageId: 456,
+      caption: expect.stringContaining('Updated Title (2026)')
+    });
+  });
+
   it('returns 400 JSON for invalid movie list filters', async () => {
     const response = await request(app()).get('/api/movies?year=abc').expect(400);
 

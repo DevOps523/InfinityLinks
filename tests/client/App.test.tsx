@@ -41,7 +41,7 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: /^add movie$/i })).toBeInTheDocument();
   });
 
-  it('shows action menu edit state and cancels delete confirmation without deleting', async () => {
+  it('cancels delete confirmation without deleting', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/api/movies' && !init?.method) {
         return {
@@ -71,7 +71,7 @@ describe('App', () => {
     expect(await screen.findByText('Arrival')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /open action menu/i }));
 
-    expect(screen.getByRole('menuitem', { name: /edit unavailable until movie editing is added/i })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: /^edit$/i })).toBeEnabled();
     fireEvent.click(screen.getByRole('menuitem', { name: /^delete$/i }));
 
     const dialog = screen.getByRole('dialog', { name: /delete movie/i });
@@ -81,6 +81,67 @@ describe('App', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: /delete movie/i })).not.toBeInTheDocument());
     expect(fetchMock).not.toHaveBeenCalledWith('/api/movies/7', expect.objectContaining({ method: 'DELETE' }));
+  });
+
+  it('opens the edit movie form from the movie action menu', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/movies' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => ({
+            movies: [
+              {
+                id: 7,
+                title: 'Arrival',
+                year: 2016,
+                description: 'First contact'
+              }
+            ]
+          })
+        };
+      }
+
+      if (url === '/api/movies/7' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => ({
+            movie: {
+              id: 7,
+              tmdbId: 329865,
+              title: 'Arrival',
+              year: 2016,
+              posterUrl: 'https://example.com/arrival.jpg',
+              description: 'First contact',
+              rating: 7.6,
+              quality: 'Full HD',
+              links: [
+                {
+                  providerName: 'Provider',
+                  quality: 'Full HD',
+                  status: 'active',
+                  url: 'https://example.com/watch'
+                }
+              ]
+            }
+          })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({})
+      };
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText('Arrival')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /open action menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /^edit$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^edit movie$/i })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Arrival')).toBeInTheDocument();
+    expect(screen.getByText('1 link added')).toBeInTheDocument();
   });
 
   it('does not reopen TMDB results immediately after selecting a result', async () => {

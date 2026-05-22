@@ -14,9 +14,10 @@ type Movie = {
 
 type MoviesPageProps = {
   onAddMovie: () => void;
+  onEditMovie: (id: number) => void;
 };
 
-export function MoviesPage({ onAddMovie }: MoviesPageProps) {
+export function MoviesPage({ onAddMovie, onEditMovie }: MoviesPageProps) {
   const { showToast } = useToast();
   const [movies, setMovies] = useState<Movie[]>([]);
   const [title, setTitle] = useState('');
@@ -106,8 +107,10 @@ export function MoviesPage({ onAddMovie }: MoviesPageProps) {
         return;
       }
       setMovieToDelete(null);
-      showToast('Movie deleted.');
       await loadMovies();
+      if (mountedRef.current) {
+        showToast('Movie deleted and list refreshed.');
+      }
     } catch (deleteError) {
       if (!mountedRef.current) {
         return;
@@ -172,7 +175,7 @@ export function MoviesPage({ onAddMovie }: MoviesPageProps) {
                     <td>{movie.description || 'No description'}</td>
                     <td>{movie.year ?? '-'}</td>
                     <td>
-                      <ActionMenu onDelete={() => setMovieToDelete(movie)} />
+                      <ActionMenu onEdit={() => onEditMovie(movie.id)} onDelete={() => setMovieToDelete(movie)} />
                     </td>
                   </tr>
                 ))}

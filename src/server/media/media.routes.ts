@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import type { AppDatabase } from '../db/database.js';
-import { createMovie, removeMovie, searchMovies } from './media.service.js';
+import { createMovie, getMovie, removeMovie, searchMovies, updateMovie } from './media.service.js';
 
 const MovieIdParamSchema = z.object({
   id: z.preprocess((value) => {
@@ -29,6 +29,38 @@ export function createMediaRouter(db: AppDatabase) {
     try {
       const movie = createMovie(db, req.body);
       res.status(201).json({ movie });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/movies/:id', (req, res, next) => {
+    try {
+      const { id } = MovieIdParamSchema.parse(req.params);
+      const movie = getMovie(db, id);
+
+      if (!movie) {
+        res.status(404).json({ error: 'Movie not found' });
+        return;
+      }
+
+      res.json({ movie });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.put('/movies/:id', (req, res, next) => {
+    try {
+      const { id } = MovieIdParamSchema.parse(req.params);
+      const movie = updateMovie(db, id, req.body);
+
+      if (!movie) {
+        res.status(404).json({ error: 'Movie not found' });
+        return;
+      }
+
+      res.json({ movie });
     } catch (error) {
       next(error);
     }

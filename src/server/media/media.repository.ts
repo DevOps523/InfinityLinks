@@ -200,6 +200,45 @@ export function createMovieWithLinks(db: AppDatabase, input: MovieInput): MovieW
   })();
 }
 
+export function updateMovieWithLinks(db: AppDatabase, id: number, input: MovieInput): MovieWithLinks | undefined {
+  return db.transaction(() => {
+    const existing = getMovieWithLinks(db, id);
+
+    if (!existing) {
+      return undefined;
+    }
+
+    db.prepare(
+      `UPDATE movies
+       SET tmdb_id = ?,
+           title = ?,
+           year = ?,
+           poster_url = ?,
+           description = ?,
+           rating = ?,
+           quality = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).run(
+      input.tmdbId ?? null,
+      input.title,
+      input.year ?? null,
+      input.posterUrl ? input.posterUrl : null,
+      input.description,
+      input.rating ?? null,
+      input.quality,
+      id
+    );
+
+    db.prepare('DELETE FROM movie_links WHERE movie_id = ?').run(id);
+    input.links.forEach((link, index) => {
+      insertMovieLink(db, id, link, index);
+    });
+
+    return getMovieWithLinks(db, id);
+  })();
+}
+
 export function deleteMovie(db: AppDatabase, id: number): MovieWithLinks | undefined {
   return db.transaction(() => {
     const movie = getMovieWithLinks(db, id);

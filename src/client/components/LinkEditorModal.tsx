@@ -1,5 +1,6 @@
 import { Plus, Save, Trash2 } from 'lucide-react';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useModalFocus } from './useModalFocus';
 
 export type MovieLinkInput = {
   providerName: string;
@@ -30,6 +31,13 @@ export function LinkEditorModal({ open, links, onClose, onSave }: LinkEditorModa
   const [draftLinks, setDraftLinks] = useState<MovieLinkInput[]>(links.length > 0 ? links : [emptyLink()]);
   const [error, setError] = useState('');
   const addButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const handleKeyDown = useModalFocus({
+    open,
+    dialogRef,
+    initialFocusRef: addButtonRef,
+    onClose
+  });
 
   useEffect(() => {
     if (open) {
@@ -37,19 +45,6 @@ export function LinkEditorModal({ open, links, onClose, onSave }: LinkEditorModa
       setError('');
     }
   }, [links, open]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    window.setTimeout(() => addButtonRef.current?.focus(), 0);
-
-    return () => {
-      previousFocus?.focus();
-    };
-  }, [open]);
 
   if (!open) {
     return null;
@@ -84,15 +79,9 @@ export function LinkEditorModal({ open, links, onClose, onSave }: LinkEditorModa
     );
   }
 
-  function handleKeyDown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      onClose();
-    }
-  }
-
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="links-title" onKeyDown={handleKeyDown}>
+      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="links-title" ref={dialogRef} onKeyDown={handleKeyDown}>
         <div className="modal__header">
           <h2 id="links-title">Streaming links</h2>
           <button

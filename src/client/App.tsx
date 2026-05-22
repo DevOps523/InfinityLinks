@@ -4,9 +4,9 @@ import { ToastProvider } from './components/ToastProvider';
 import { MovieForm } from './pages/MovieForm';
 import { MoviesPage } from './pages/MoviesPage';
 
-function renderPage(page: PageKey, setPage: (page: PageKey) => void) {
+function renderPage(page: PageKey, setPage: (page: PageKey) => void, editingMovieId: number | null, setEditingMovieId: (id: number | null) => void) {
   if (page === 'add-movie') {
-    return <MovieForm onSaved={() => setPage('movies')} />;
+    return <MovieForm movieId={editingMovieId ?? undefined} onSaved={() => setPage('movies')} />;
   }
 
   if (page === 'tv-shows') {
@@ -35,17 +35,35 @@ function renderPage(page: PageKey, setPage: (page: PageKey) => void) {
     );
   }
 
-  return <MoviesPage onAddMovie={() => setPage('add-movie')} />;
+  return (
+    <MoviesPage
+      onAddMovie={() => {
+        setEditingMovieId(null);
+        setPage('add-movie');
+      }}
+      onEditMovie={(id) => {
+        setEditingMovieId(id);
+        setPage('add-movie');
+      }}
+    />
+  );
 }
 
 export function App() {
   const [page, setPage] = useState<PageKey>('movies');
+  const [editingMovieId, setEditingMovieId] = useState<number | null>(null);
 
   return (
     <ToastProvider>
       <div className="app-shell">
-        <Sidebar currentPage={page} onNavigate={setPage} />
-        <main className="content-shell">{renderPage(page, setPage)}</main>
+        <Sidebar
+          currentPage={page}
+          onNavigate={(nextPage) => {
+            setEditingMovieId(null);
+            setPage(nextPage);
+          }}
+        />
+        <main className="content-shell">{renderPage(page, setPage, editingMovieId, setEditingMovieId)}</main>
       </div>
     </ToastProvider>
   );

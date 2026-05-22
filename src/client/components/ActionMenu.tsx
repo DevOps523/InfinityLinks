@@ -2,13 +2,15 @@ import { Edit, MoreVertical, Trash2 } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
 type ActionMenuProps = {
+  onEdit: () => void;
   onDelete: () => void;
 };
 
-export function ActionMenu({ onDelete }: ActionMenuProps) {
+export function ActionMenu({ onEdit, onDelete }: ActionMenuProps) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) {
@@ -29,6 +31,7 @@ export function ActionMenu({ onDelete }: ActionMenuProps) {
 
     document.addEventListener('pointerdown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
+    window.setTimeout(() => editButtonRef.current?.focus(), 0);
 
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
@@ -55,9 +58,11 @@ export function ActionMenu({ onDelete }: ActionMenuProps) {
             className="action-menu__item"
             type="button"
             role="menuitem"
-            disabled
-            title="Edit unavailable until movie editing is added"
-            aria-label="Edit unavailable until movie editing is added"
+            ref={editButtonRef}
+            onClick={() => {
+              setOpen(false);
+              onEdit();
+            }}
           >
             <Edit aria-hidden="true" size={16} />
             Edit

@@ -1,11 +1,17 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import type { AppDatabase } from '../db/database.js';
 import { createMovie, removeMovie, searchMovies } from './media.service.js';
 
-function parseId(value: string) {
-  const id = Number(value);
-  return Number.isInteger(id) && id > 0 ? id : undefined;
-}
+const MovieIdParamSchema = z.object({
+  id: z.preprocess((value) => {
+    if (typeof value !== 'string' || !/^\d+$/.test(value.trim())) {
+      return value;
+    }
+
+    return Number(value);
+  }, z.number().int().positive())
+});
 
 export function createMediaRouter(db: AppDatabase) {
   const router = Router();
@@ -30,11 +36,8 @@ export function createMediaRouter(db: AppDatabase) {
 
   router.delete('/movies/:id', (req, res, next) => {
     try {
-      const id = parseId(req.params.id);
-
-      if (id !== undefined) {
-        removeMovie(db, id);
-      }
+      const { id } = MovieIdParamSchema.parse(req.params);
+      removeMovie(db, id);
 
       res.status(204).end();
     } catch (error) {

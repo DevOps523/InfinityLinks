@@ -192,6 +192,20 @@ describe('movie media API', () => {
     });
   });
 
+  it('returns 400 JSON for unknown movie list filters', async () => {
+    const response = await request(app()).get('/api/movies?yeer=2026').expect(400);
+
+    expect(response.body).toMatchObject({
+      error: 'Validation failed',
+      issues: [
+        expect.objectContaining({
+          path: '',
+          message: expect.any(String)
+        })
+      ]
+    });
+  });
+
   it('permanently deletes movie rows', async () => {
     const movie = db.prepare("INSERT INTO movies (title, year, quality) VALUES ('Deleted Movie', 2026, '4K')").run();
     db.prepare(
@@ -205,6 +219,20 @@ describe('movie media API', () => {
     });
     expect(db.prepare('SELECT COUNT(*) AS count FROM movie_links WHERE movie_id = ?').get(movie.lastInsertRowid)).toEqual({
       count: 0
+    });
+  });
+
+  it('returns 400 JSON for invalid delete movie ids', async () => {
+    const response = await request(app()).delete('/api/movies/not-a-number').expect(400);
+
+    expect(response.body).toMatchObject({
+      error: 'Validation failed',
+      issues: [
+        expect.objectContaining({
+          path: 'id',
+          message: expect.any(String)
+        })
+      ]
     });
   });
 

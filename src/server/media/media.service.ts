@@ -28,7 +28,7 @@ const MovieSearchQuerySchema = z
         return Number(value);
       }, z.number().int().positive().optional())
   })
-  .passthrough();
+  .strict();
 
 export function createMovie(db: AppDatabase, body: unknown) {
   const input = MovieInputSchema.parse(body);

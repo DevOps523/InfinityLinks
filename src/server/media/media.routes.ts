@@ -1,9 +1,26 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import type { AppDatabase } from '../db/database.js';
-import { createMovie, getMovie, removeMovie, searchMovies, updateMovie } from './media.service.js';
+import {
+  addSeason,
+  createEpisodeLinks,
+  createEpisodes,
+  createMovie,
+  createTvShow,
+  getEpisodesForSeason,
+  getMovie,
+  getSeasonsForTvShow,
+  removeEpisode,
+  removeEpisodeLink,
+  removeMovie,
+  removeSeason,
+  removeTvShow,
+  searchMovies,
+  searchTvShows,
+  updateMovie
+} from './media.service.js';
 
-const MovieIdParamSchema = z.object({
+const IdParamSchema = z.object({
   id: z.preprocess((value) => {
     if (typeof value !== 'string' || !/^\d+$/.test(value.trim())) {
       return value;
@@ -36,7 +53,7 @@ export function createMediaRouter(db: AppDatabase) {
 
   router.get('/movies/:id', (req, res, next) => {
     try {
-      const { id } = MovieIdParamSchema.parse(req.params);
+      const { id } = IdParamSchema.parse(req.params);
       const movie = getMovie(db, id);
 
       if (!movie) {
@@ -52,7 +69,7 @@ export function createMediaRouter(db: AppDatabase) {
 
   router.put('/movies/:id', (req, res, next) => {
     try {
-      const { id } = MovieIdParamSchema.parse(req.params);
+      const { id } = IdParamSchema.parse(req.params);
       const movie = updateMovie(db, id, req.body);
 
       if (!movie) {
@@ -68,9 +85,135 @@ export function createMediaRouter(db: AppDatabase) {
 
   router.delete('/movies/:id', (req, res, next) => {
     try {
-      const { id } = MovieIdParamSchema.parse(req.params);
+      const { id } = IdParamSchema.parse(req.params);
       removeMovie(db, id);
 
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/tv-shows', (req, res, next) => {
+    try {
+      const tvShows = searchTvShows(db, req.query);
+      res.json({ tvShows });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/tv-shows', (req, res, next) => {
+    try {
+      const tvShow = createTvShow(db, req.body);
+      res.status(201).json({ tvShow });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/tv-shows/:id', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      removeTvShow(db, id);
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/tv-shows/:id/seasons', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const seasons = getSeasonsForTvShow(db, id);
+      res.json({ seasons });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/tv-shows/:id/seasons', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const season = addSeason(db, id, req.body);
+
+      if (!season) {
+        res.status(404).json({ error: 'TV show not found' });
+        return;
+      }
+
+      res.status(201).json({ season });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/seasons/:id', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      removeSeason(db, id);
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/seasons/:id/episodes', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const episodes = getEpisodesForSeason(db, id);
+      res.json({ episodes });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/seasons/:id/episodes/bulk', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const episodes = createEpisodes(db, id, req.body);
+
+      if (!episodes) {
+        res.status(404).json({ error: 'Season not found' });
+        return;
+      }
+
+      res.status(201).json({ episodes });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/episodes/:id', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      removeEpisode(db, id);
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/episodes/:id/links', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const links = createEpisodeLinks(db, id, req.body);
+
+      if (!links) {
+        res.status(404).json({ error: 'Episode not found' });
+        return;
+      }
+
+      res.status(201).json({ links });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/episode-links/:id', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      removeEpisodeLink(db, id);
       res.status(204).end();
     } catch (error) {
       next(error);

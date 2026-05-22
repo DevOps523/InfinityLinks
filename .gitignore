@@ -1,6 +1,10 @@
 .superpowers/
 node_modules/
 .env
+.env.*
+!.env.example
 dist/
 *.sqlite
+*.sqlite-*
 *.sqlite3
+*.sqlite3-*

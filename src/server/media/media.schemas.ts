@@ -14,8 +14,8 @@ const MediaInputBaseSchema = z.object({
   tmdbId: z.number().int().positive().optional(),
   title: z.string().trim().min(1),
   year: z.number().int().positive().optional(),
-  posterUrl: z.string().url().optional(),
-  rating: z.number().min(0).max(10).optional(),
+  posterUrl: z.union([z.string().url(), z.literal('')]).optional(),
+  rating: z.number().optional(),
   quality: QualitySchema,
   description: z.string().default('')
 });

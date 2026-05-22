@@ -44,14 +44,15 @@ function normalizeResult(mediaType: TmdbMediaType, result: TmdbApiResult): TmdbR
   }
 
   const rawTitle = mediaType === 'movie' ? result.title : result.name;
-  if (typeof rawTitle !== 'string' || rawTitle.trim().length === 0) {
+  const title = typeof rawTitle === 'string' ? rawTitle.trim() : '';
+  if (title.length === 0) {
     return null;
   }
 
   const rawDate = mediaType === 'movie' ? result.release_date : result.first_air_date;
   const normalized: TmdbResult = {
     tmdbId: result.id,
-    title: rawTitle,
+    title,
     description: typeof result.overview === 'string' ? result.overview : ''
   };
 
@@ -73,7 +74,7 @@ function normalizeResult(mediaType: TmdbMediaType, result: TmdbApiResult): TmdbR
 
 function logApiCall(
   db: AppDatabase,
-  status: 'success' | 'failed',
+  status: 'succeeded' | 'failed',
   metadata: Record<string, unknown>,
   summary: { responseSummary?: string; errorSummary?: string } = {}
 ) {
@@ -133,7 +134,7 @@ export async function searchTmdb(
        updated_at = CURRENT_TIMESTAMP`
   ).run(mediaType, query, JSON.stringify(results));
 
-  logApiCall(db, 'success', metadata, { responseSummary: JSON.stringify({ count: results.length }) });
+  logApiCall(db, 'succeeded', metadata, { responseSummary: JSON.stringify({ count: results.length }) });
 
   return results;
 }

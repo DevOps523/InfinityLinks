@@ -25,6 +25,10 @@ export function createApp(options: CreateAppOptions = {}) {
     app.use('/api/tmdb', createTmdbRouter(options.db, options.config));
   }
 
+  app.use('/api', (_req, res) => {
+    res.status(404).json({ error: 'API route not found' });
+  });
+
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     const message = error instanceof Error ? error.message : 'Unexpected server error';
     res.status(500).json({ error: message });

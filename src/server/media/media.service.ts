@@ -2,8 +2,10 @@ import type { AppDatabase } from '../db/database.js';
 import { formatMovieCaption, formatSeasonCaption } from '../telegram/telegram.formatter.js';
 import {
   cancelPendingTelegramDeleteJobs,
+  cancelPendingTelegramEditJobs,
   cancelPendingTelegramSendJobs,
   enqueueTelegramJob,
+  upsertPendingTelegramDeleteJob,
   upsertActiveTelegramSendJob
 } from '../telegram/telegram.queue.js';
 import {
@@ -17,18 +19,43 @@ import {
   deleteMovie,
   deleteSeason,
   deleteTvShow,
+  getEpisode,
   getMovieWithLinks,
+  getSeason,
   getSeasonPostData,
+  getTvShow,
+  hasEpisodeNumbers,
+  hasSeasonNumber,
   listEpisodes,
   listMovies,
   listSeasons,
   listTvShows,
+  updateEpisode,
+  updateEpisodeLink,
   updateMovieWithLinks,
+  updateSeason,
+  updateTvShow as updateTvShowRow,
   type Season,
   type SeasonPostData
 } from './media.repository.js';
-import { BulkEpisodeInputSchema, LinkInputSchema, MovieInputSchema, SeasonInputSchema, TvShowInputSchema } from './media.schemas.js';
+import {
+  BulkEpisodeInputSchema,
+  EpisodeInputSchema,
+  LinkInputSchema,
+  MovieInputSchema,
+  SeasonInputSchema,
+  TvShowInputSchema
+} from './media.schemas.js';
 import { z } from 'zod';
+
+export class MediaHttpError extends Error {
+  constructor(
+    public readonly statusCode: number,
+    message: string
+  ) {
+    super(message);
+  }
+}
 
 const SearchQuerySchema = z
   .object({
@@ -56,10 +83,10 @@ const SearchQuerySchema = z
   .strict();
 
 const EpisodeLinksBodySchema = z.union([
-  LinkInputSchema.array(),
+  LinkInputSchema.array().min(1),
   z
     .object({
-      links: LinkInputSchema.array()
+      links: LinkInputSchema.array().min(1)
     })
     .strict()
 ]).transform((value) => (Array.isArray(value) ? value : value.links));
@@ -88,9 +115,10 @@ function syncSeasonPostAfterContentChange(db: AppDatabase, seasonId: number) {
 
   if (!hasLinkedEpisode(postData)) {
     cancelPendingTelegramSendJobs(db, 'season', seasonId);
+    cancelPendingTelegramEditJobs(db, 'season', seasonId);
 
     if (postData.telegramMessageId) {
-      enqueueTelegramJob(db, 'delete', 'season', seasonId, {
+      upsertPendingTelegramDeleteJob(db, 'season', seasonId, {
         messageId: postData.telegramMessageId
       });
     }
@@ -119,9 +147,10 @@ function syncSeasonPostAfterContentChange(db: AppDatabase, seasonId: number) {
 
 function queueSeasonDelete(db: AppDatabase, season: Season) {
   cancelPendingTelegramSendJobs(db, 'season', season.id);
+  cancelPendingTelegramEditJobs(db, 'season', season.id);
 
   if (season.telegramMessageId) {
-    enqueueTelegramJob(db, 'delete', 'season', season.id, {
+    upsertPendingTelegramDeleteJob(db, 'season', season.id, {
       messageId: season.telegramMessageId
     });
   }
@@ -215,6 +244,28 @@ export function createTvShow(db: AppDatabase, body: unknown) {
   return insertTvShow(db, input);
 }
 
+export function getTvShowById(db: AppDatabase, id: number) {
+  return getTvShow(db, id);
+}
+
+export function updateTvShow(db: AppDatabase, id: number, body: unknown) {
+  const input = TvShowInputSchema.parse(body);
+
+  return db.transaction(() => {
+    const tvShow = updateTvShowRow(db, id, input);
+
+    if (!tvShow) {
+      return undefined;
+    }
+
+    listSeasons(db, id).forEach((season) => {
+      syncSeasonPostAfterContentChange(db, season.id);
+    });
+
+    return tvShow;
+  })();
+}
+
 export function removeTvShow(db: AppDatabase, id: number) {
   return db.transaction(() => {
     const tvShow = deleteTvShow(db, id);
@@ -233,7 +284,32 @@ export function getSeasonsForTvShow(db: AppDatabase, tvShowId: number) {
 
 export function addSeason(db: AppDatabase, tvShowId: number, body: unknown) {
   const input = SeasonInputSchema.parse(body);
+
+  if (hasSeasonNumber(db, tvShowId, input.seasonNumber)) {
+    throw new MediaHttpError(409, 'Season number already exists');
+  }
+
   return createSeason(db, tvShowId, input);
+}
+
+export function updateSeasonById(db: AppDatabase, id: number, body: unknown) {
+  const input = SeasonInputSchema.parse(body);
+
+  return db.transaction(() => {
+    const existing = getSeason(db, id);
+
+    if (!existing) {
+      return undefined;
+    }
+
+    if (hasSeasonNumber(db, existing.tvShowId, input.seasonNumber, id)) {
+      throw new MediaHttpError(409, 'Season number already exists');
+    }
+
+    const season = updateSeason(db, id, input);
+    syncSeasonPostAfterContentChange(db, id);
+    return season;
+  })();
 }
 
 export function removeSeason(db: AppDatabase, id: number) {
@@ -254,7 +330,42 @@ export function getEpisodesForSeason(db: AppDatabase, seasonId: number) {
 
 export function createEpisodes(db: AppDatabase, seasonId: number, body: unknown) {
   const input = BulkEpisodeInputSchema.parse(body);
+
+  const season = getSeason(db, seasonId);
+  if (!season) {
+    return undefined;
+  }
+
+  const episodeNumbers = Array.from({ length: input.count }, (_, index) => input.startEpisode + index);
+  if (hasEpisodeNumbers(db, seasonId, episodeNumbers)) {
+    throw new MediaHttpError(409, 'Episode number already exists');
+  }
+
   return bulkCreateEpisodes(db, seasonId, input);
+}
+
+export function updateEpisodeById(db: AppDatabase, id: number, body: unknown) {
+  const input = EpisodeInputSchema.parse(body);
+
+  return db.transaction(() => {
+    const existing = getEpisode(db, id);
+
+    if (!existing) {
+      return undefined;
+    }
+
+    if (hasEpisodeNumbers(db, existing.seasonId, [input.episodeNumber], id)) {
+      throw new MediaHttpError(409, 'Episode number already exists');
+    }
+
+    const episode = updateEpisode(db, id, input);
+
+    if (episode) {
+      syncSeasonPostAfterContentChange(db, episode.season.id);
+    }
+
+    return episode;
+  })();
 }
 
 export function removeEpisode(db: AppDatabase, id: number) {
@@ -294,6 +405,20 @@ export function createEpisodeLinks(db: AppDatabase, episodeId: number, body: unk
 export function removeEpisodeLink(db: AppDatabase, id: number) {
   return db.transaction(() => {
     const link = deleteEpisodeLink(db, id);
+
+    if (link) {
+      syncSeasonPostAfterContentChange(db, link.season.id);
+    }
+
+    return link;
+  })();
+}
+
+export function updateEpisodeLinkById(db: AppDatabase, id: number, body: unknown) {
+  const input = LinkInputSchema.parse(body);
+
+  return db.transaction(() => {
+    const link = updateEpisodeLink(db, id, input);
 
     if (link) {
       syncSeasonPostAfterContentChange(db, link.season.id);

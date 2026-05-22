@@ -53,6 +53,20 @@ function createLinkedSeason(options: { posterUrl?: string | null; telegramMessag
   };
 }
 
+function createPostedLinkedSeason() {
+  const ids = createLinkedSeason({ telegramMessageId: 456 });
+  const link = db
+    .prepare(
+      "INSERT INTO episode_links (episode_id, provider_name, quality, status, url) VALUES (?, 'Infinity Stream', 'HD', 'active', 'https://example.com/chronos/s2/e1')"
+    )
+    .run(ids.episodeId);
+
+  return {
+    ...ids,
+    linkId: Number(link.lastInsertRowid)
+  };
+}
+
 beforeEach(() => {
   db = createDatabase(':memory:');
   migrate(db);
@@ -112,6 +126,112 @@ describe('tv media API', () => {
     });
   });
 
+  it('returns and updates a TV show, then queues edits for posted seasons', async () => {
+    const { showId, seasonId } = createPostedLinkedSeason();
+
+    const getResponse = await request(app()).get(`/api/tv-shows/${showId}`).expect(200);
+    expect(getResponse.body.tvShow).toMatchObject({
+      id: showId,
+      title: 'Chronos',
+      year: 2025
+    });
+
+    const updateResponse = await request(app())
+      .put(`/api/tv-shows/${showId}`)
+      .send({
+        tmdbId: 1234,
+        title: 'Chronos Updated',
+        year: 2026,
+        posterUrl: 'https://example.com/chronos-updated.jpg',
+        rating: 8.2,
+        quality: 'Full HD',
+        description: 'New season metadata.'
+      })
+      .expect(200);
+
+    expect(updateResponse.body.tvShow).toMatchObject({
+      id: showId,
+      title: 'Chronos Updated',
+      year: 2026,
+      posterUrl: 'https://example.com/chronos-updated.jpg',
+      quality: 'Full HD'
+    });
+
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      job_type: 'edit',
+      entity_type: 'season',
+      entity_id: seasonId
+    });
+    expect(JSON.parse(jobs[0].payload)).toMatchObject({
+      messageId: 456,
+      caption: expect.stringContaining('Chronos Updated (2026)')
+    });
+  });
+
+  it('updates a season number and queues an edit for posted seasons', async () => {
+    const { seasonId } = createPostedLinkedSeason();
+
+    const response = await request(app()).put(`/api/seasons/${seasonId}`).send({ seasonNumber: 3 }).expect(200);
+
+    expect(response.body.season).toMatchObject({
+      id: seasonId,
+      seasonNumber: 3
+    });
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(JSON.parse(jobs[0].payload)).toMatchObject({
+      messageId: 456,
+      caption: expect.stringContaining('Season 3')
+    });
+  });
+
+  it('updates an episode number and queues an edit for posted seasons', async () => {
+    const { episodeId } = createPostedLinkedSeason();
+
+    const response = await request(app()).put(`/api/episodes/${episodeId}`).send({ episodeNumber: 4 }).expect(200);
+
+    expect(response.body.episode).toMatchObject({
+      id: episodeId,
+      episodeNumber: 4
+    });
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(JSON.parse(jobs[0].payload)).toMatchObject({
+      messageId: 456,
+      caption: expect.stringContaining('Episode 4')
+    });
+  });
+
+  it('updates an episode link and queues an edit for posted seasons', async () => {
+    const { linkId } = createPostedLinkedSeason();
+
+    const response = await request(app())
+      .put(`/api/episode-links/${linkId}`)
+      .send({
+        providerName: 'Mirror',
+        quality: 'Full HD',
+        status: 'inactive',
+        url: 'https://example.com/chronos/s2/e1/mirror'
+      })
+      .expect(200);
+
+    expect(response.body.link).toMatchObject({
+      id: linkId,
+      providerName: 'Mirror',
+      quality: 'Full HD',
+      status: 'inactive',
+      url: 'https://example.com/chronos/s2/e1/mirror'
+    });
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(JSON.parse(jobs[0].payload)).toMatchObject({
+      messageId: 456,
+      caption: expect.stringContaining('Mirror')
+    });
+  });
+
   it('creates multiple episodes for a season', async () => {
     const show = db.prepare("INSERT INTO tv_shows (title, quality) VALUES ('Chronos', 'HD')").run();
     const season = db
@@ -128,6 +248,28 @@ describe('tv media API', () => {
       expect.objectContaining({ seasonId: Number(season.lastInsertRowid), episodeNumber: 4 }),
       expect.objectContaining({ seasonId: Number(season.lastInsertRowid), episodeNumber: 5 })
     ]);
+  });
+
+  it('returns controlled JSON for duplicate seasons and overlapping bulk episodes', async () => {
+    const show = db.prepare("INSERT INTO tv_shows (title, quality) VALUES ('Chronos', 'HD')").run();
+    const season = db.prepare('INSERT INTO seasons (tv_show_id, season_number) VALUES (?, 1)').run(show.lastInsertRowid);
+    db.prepare('INSERT INTO episodes (season_id, episode_number) VALUES (?, 3)').run(season.lastInsertRowid);
+
+    const duplicateSeason = await request(app())
+      .post(`/api/tv-shows/${show.lastInsertRowid}/seasons`)
+      .send({ seasonNumber: 1 })
+      .expect(409);
+    expect(duplicateSeason.body).toMatchObject({
+      error: expect.any(String)
+    });
+
+    const overlappingEpisodes = await request(app())
+      .post(`/api/seasons/${season.lastInsertRowid}/episodes/bulk`)
+      .send({ startEpisode: 2, count: 3 })
+      .expect(409);
+    expect(overlappingEpisodes.body).toMatchObject({
+      error: expect.any(String)
+    });
   });
 
   it('queues one Telegram season send job when the first linked episode is added', async () => {
@@ -300,6 +442,32 @@ describe('tv media API', () => {
     expect(JSON.parse(jobs[0].payload)).toEqual({ messageId: 456 });
   });
 
+  it('does not create duplicate pending season delete jobs when delete sync repeats', async () => {
+    const { seasonId, episodeId } = createLinkedSeason({ telegramMessageId: 456 });
+    const firstLink = db
+      .prepare(
+        "INSERT INTO episode_links (episode_id, provider_name, quality, status, url) VALUES (?, 'Infinity Stream', 'HD', 'active', 'https://example.com/chronos/s2/e1')"
+      )
+      .run(episodeId);
+    const secondLink = db
+      .prepare(
+        "INSERT INTO episode_links (episode_id, provider_name, quality, status, url) VALUES (?, 'Mirror', 'HD', 'active', 'https://example.com/chronos/s2/e1/mirror')"
+      )
+      .run(episodeId);
+
+    await request(app()).delete(`/api/episode-links/${firstLink.lastInsertRowid}`).expect(204);
+    await request(app()).delete(`/api/episode-links/${secondLink.lastInsertRowid}`).expect(204);
+    await request(app()).delete(`/api/episodes/${episodeId}`).expect(204);
+
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      job_type: 'delete',
+      entity_type: 'season',
+      entity_id: seasonId
+    });
+  });
+
   it('cancels stale pending season deletes when content becomes publishable again', async () => {
     const { seasonId, episodeId } = createLinkedSeason({ telegramMessageId: 456 });
     db.prepare(
@@ -374,5 +542,15 @@ describe('tv media API', () => {
       .send({ title: '', quality: 'BluRay' })
       .expect(400);
     expect(invalidBodyResponse.body).toMatchObject({ error: 'Validation failed' });
+  });
+
+  it('returns 400 JSON for empty episode link arrays', async () => {
+    const { episodeId } = createLinkedSeason();
+
+    const response = await request(app()).post(`/api/episodes/${episodeId}/links`).send({ links: [] }).expect(400);
+
+    expect(response.body).toMatchObject({
+      error: 'Validation failed'
+    });
   });
 });

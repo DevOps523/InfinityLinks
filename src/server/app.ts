@@ -48,6 +48,15 @@ export function createApp(options: CreateAppOptions = {}) {
       return;
     }
 
+    if (typeof error === 'object' && error !== null && 'statusCode' in error) {
+      const statusCode = (error as { statusCode: unknown }).statusCode;
+      if (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 600) {
+        const message = error instanceof Error ? error.message : 'Request failed';
+        res.status(statusCode).json({ error: message });
+        return;
+      }
+    }
+
     const message = error instanceof Error ? error.message : 'Unexpected server error';
     res.status(500).json({ error: message });
   });

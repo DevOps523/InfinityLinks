@@ -10,6 +10,7 @@ import {
   getEpisodesForSeason,
   getMovie,
   getSeasonsForTvShow,
+  getTvShowById,
   removeEpisode,
   removeEpisodeLink,
   removeMovie,
@@ -17,7 +18,11 @@ import {
   removeTvShow,
   searchMovies,
   searchTvShows,
-  updateMovie
+  updateEpisodeById,
+  updateEpisodeLinkById,
+  updateMovie,
+  updateSeasonById,
+  updateTvShow
 } from './media.service.js';
 
 const IdParamSchema = z.object({
@@ -112,6 +117,38 @@ export function createMediaRouter(db: AppDatabase) {
     }
   });
 
+  router.get('/tv-shows/:id', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const tvShow = getTvShowById(db, id);
+
+      if (!tvShow) {
+        res.status(404).json({ error: 'TV show not found' });
+        return;
+      }
+
+      res.json({ tvShow });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.put('/tv-shows/:id', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const tvShow = updateTvShow(db, id, req.body);
+
+      if (!tvShow) {
+        res.status(404).json({ error: 'TV show not found' });
+        return;
+      }
+
+      res.json({ tvShow });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.delete('/tv-shows/:id', (req, res, next) => {
     try {
       const { id } = IdParamSchema.parse(req.params);
@@ -158,6 +195,22 @@ export function createMediaRouter(db: AppDatabase) {
     }
   });
 
+  router.put('/seasons/:id', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const season = updateSeasonById(db, id, req.body);
+
+      if (!season) {
+        res.status(404).json({ error: 'Season not found' });
+        return;
+      }
+
+      res.json({ season });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get('/seasons/:id/episodes', (req, res, next) => {
     try {
       const { id } = IdParamSchema.parse(req.params);
@@ -194,6 +247,22 @@ export function createMediaRouter(db: AppDatabase) {
     }
   });
 
+  router.put('/episodes/:id', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const episode = updateEpisodeById(db, id, req.body);
+
+      if (!episode) {
+        res.status(404).json({ error: 'Episode not found' });
+        return;
+      }
+
+      res.json({ episode });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post('/episodes/:id/links', (req, res, next) => {
     try {
       const { id } = IdParamSchema.parse(req.params);
@@ -215,6 +284,22 @@ export function createMediaRouter(db: AppDatabase) {
       const { id } = IdParamSchema.parse(req.params);
       removeEpisodeLink(db, id);
       res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.put('/episode-links/:id', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const link = updateEpisodeLinkById(db, id, req.body);
+
+      if (!link) {
+        res.status(404).json({ error: 'Episode link not found' });
+        return;
+      }
+
+      res.json({ link });
     } catch (error) {
       next(error);
     }

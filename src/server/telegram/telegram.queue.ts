@@ -214,6 +214,58 @@ export function cancelPendingTelegramDeleteJobs(db: AppDatabase, entityType: Tel
     .run(entityType, entityId);
 }
 
+export function cancelPendingTelegramEditJobs(db: AppDatabase, entityType: TelegramEntityType, entityId: number) {
+  return db
+    .prepare(
+      `DELETE FROM telegram_jobs
+       WHERE job_type = 'edit'
+         AND entity_type = ?
+         AND entity_id = ?
+         AND status IN ('queued', 'waiting_retry')`
+    )
+    .run(entityType, entityId);
+}
+
+export function upsertPendingTelegramDeleteJob(
+  db: AppDatabase,
+  entityType: TelegramEntityType,
+  entityId: number,
+  payload: TelegramDeleteJobPayload
+) {
+  const editableJobs = db
+    .prepare(
+      `SELECT id
+       FROM telegram_jobs
+       WHERE job_type = 'delete'
+         AND entity_type = ?
+         AND entity_id = ?
+         AND status IN ('queued', 'waiting_retry')
+       ORDER BY created_at ASC, id ASC`
+    )
+    .all(entityType, entityId) as Array<{ id: number }>;
+
+  if (editableJobs.length === 0) {
+    return enqueueTelegramJob(db, 'delete', entityType, entityId, payload);
+  }
+
+  const [jobToUpdate, ...duplicateJobs] = editableJobs;
+  const result = db
+    .prepare(
+      `UPDATE telegram_jobs
+       SET payload = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    )
+    .run(JSON.stringify(payload), jobToUpdate.id);
+
+  if (duplicateJobs.length > 0) {
+    const placeholders = duplicateJobs.map(() => '?').join(', ');
+    db.prepare(`DELETE FROM telegram_jobs WHERE id IN (${placeholders})`).run(...duplicateJobs.map((job) => job.id));
+  }
+
+  return result;
+}
+
 async function runTelegramJob(client: TelegramClient, job: TelegramJobRow) {
   const payload = JSON.parse(job.payload) as TelegramJobPayload;
 

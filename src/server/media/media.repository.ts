@@ -110,6 +110,10 @@ export type DeletedEpisodeLink = EpisodeLink & {
   season: Season;
 };
 
+export type EpisodeLinkWithSeason = EpisodeLink & {
+  season: Season;
+};
+
 export type SeasonPostData = {
   id: number;
   tvShowId: number;
@@ -491,7 +495,7 @@ export function createTvShow(db: AppDatabase, input: TvShowInput): TvShow {
   return tvShow;
 }
 
-function getTvShow(db: AppDatabase, id: number): TvShow | undefined {
+export function getTvShow(db: AppDatabase, id: number): TvShow | undefined {
   const row = db
     .prepare(
       `SELECT id, tmdb_id, title, year, poster_url, description, rating, quality, created_at, updated_at
@@ -501,6 +505,38 @@ function getTvShow(db: AppDatabase, id: number): TvShow | undefined {
     .get(id) as TvShowRow | undefined;
 
   return row ? mapTvShow(row) : undefined;
+}
+
+export function updateTvShow(db: AppDatabase, id: number, input: TvShowInput): TvShow | undefined {
+  return db.transaction(() => {
+    if (!getTvShow(db, id)) {
+      return undefined;
+    }
+
+    db.prepare(
+      `UPDATE tv_shows
+       SET tmdb_id = ?,
+           title = ?,
+           year = ?,
+           poster_url = ?,
+           description = ?,
+           rating = ?,
+           quality = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).run(
+      input.tmdbId ?? null,
+      input.title,
+      input.year ?? null,
+      input.posterUrl ? input.posterUrl : null,
+      input.description,
+      input.rating ?? null,
+      input.quality,
+      id
+    );
+
+    return getTvShow(db, id);
+  })();
 }
 
 export function deleteTvShow(db: AppDatabase, id: number): DeletedTvShow | undefined {
@@ -531,6 +567,20 @@ export function createSeason(db: AppDatabase, tvShowId: number, input: SeasonInp
   })();
 }
 
+export function hasSeasonNumber(db: AppDatabase, tvShowId: number, seasonNumber: number, excludeId?: number) {
+  const row = db
+    .prepare(
+      `SELECT 1 AS found
+       FROM seasons
+       WHERE tv_show_id = ?
+         AND season_number = ?
+         AND (? IS NULL OR id != ?)`
+    )
+    .get(tvShowId, seasonNumber, excludeId ?? null, excludeId ?? null) as { found: number } | undefined;
+
+  return Boolean(row);
+}
+
 export function listSeasons(db: AppDatabase, tvShowId: number) {
   return (
     db
@@ -544,7 +594,7 @@ export function listSeasons(db: AppDatabase, tvShowId: number) {
   ).map(mapSeason);
 }
 
-function getSeason(db: AppDatabase, id: number): Season | undefined {
+export function getSeason(db: AppDatabase, id: number): Season | undefined {
   const row = db
     .prepare(
       `SELECT id, tv_show_id, season_number, telegram_message_id, post_status, created_at, updated_at
@@ -554,6 +604,25 @@ function getSeason(db: AppDatabase, id: number): Season | undefined {
     .get(id) as SeasonRow | undefined;
 
   return row ? mapSeason(row) : undefined;
+}
+
+export function updateSeason(db: AppDatabase, id: number, input: SeasonInput): Season | undefined {
+  return db.transaction(() => {
+    const season = getSeason(db, id);
+
+    if (!season) {
+      return undefined;
+    }
+
+    db.prepare(
+      `UPDATE seasons
+       SET season_number = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).run(input.seasonNumber, id);
+
+    return getSeason(db, id);
+  })();
 }
 
 export function deleteSeason(db: AppDatabase, id: number): Season | undefined {
@@ -585,6 +654,26 @@ export function bulkCreateEpisodes(db: AppDatabase, seasonId: number, input: Bul
   })();
 }
 
+export function hasEpisodeNumbers(db: AppDatabase, seasonId: number, episodeNumbers: number[], excludeId?: number) {
+  if (episodeNumbers.length === 0) {
+    return false;
+  }
+
+  const placeholders = episodeNumbers.map(() => '?').join(', ');
+  const row = db
+    .prepare(
+      `SELECT 1 AS found
+       FROM episodes
+       WHERE season_id = ?
+         AND episode_number IN (${placeholders})
+         AND (? IS NULL OR id != ?)
+       LIMIT 1`
+    )
+    .get(seasonId, ...episodeNumbers, excludeId ?? null, excludeId ?? null) as { found: number } | undefined;
+
+  return Boolean(row);
+}
+
 export function listEpisodes(db: AppDatabase, seasonId: number) {
   return (
     db
@@ -598,7 +687,7 @@ export function listEpisodes(db: AppDatabase, seasonId: number) {
   ).map(mapEpisode);
 }
 
-function getEpisode(db: AppDatabase, id: number): Episode | undefined {
+export function getEpisode(db: AppDatabase, id: number): Episode | undefined {
   const row = db
     .prepare(
       `SELECT id, season_id, episode_number, created_at, updated_at
@@ -608,6 +697,31 @@ function getEpisode(db: AppDatabase, id: number): Episode | undefined {
     .get(id) as EpisodeRow | undefined;
 
   return row ? mapEpisode(row) : undefined;
+}
+
+export function updateEpisode(db: AppDatabase, id: number, input: { episodeNumber: number }): DeletedEpisode | undefined {
+  return db.transaction(() => {
+    const episode = getEpisode(db, id);
+
+    if (!episode) {
+      return undefined;
+    }
+
+    const season = getSeason(db, episode.seasonId);
+    if (!season) {
+      return undefined;
+    }
+
+    db.prepare(
+      `UPDATE episodes
+       SET episode_number = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).run(input.episodeNumber, id);
+
+    const updated = getEpisode(db, id);
+    return updated ? { ...updated, season } : undefined;
+  })();
 }
 
 export function deleteEpisode(db: AppDatabase, id: number): DeletedEpisode | undefined {
@@ -714,6 +828,45 @@ export function deleteEpisodeLink(db: AppDatabase, id: number): DeletedEpisodeLi
 
     db.prepare('DELETE FROM episode_links WHERE id = ?').run(id);
     return { ...mapEpisodeLink(link), season };
+  })();
+}
+
+export function updateEpisodeLink(db: AppDatabase, id: number, input: LinkInput): EpisodeLinkWithSeason | undefined {
+  return db.transaction(() => {
+    const link = db
+      .prepare(
+        `SELECT id, episode_id, provider_name, quality, status, url, sort_order, created_at, updated_at
+         FROM episode_links
+         WHERE id = ?`
+      )
+      .get(id) as EpisodeLinkRow | undefined;
+
+    if (!link) {
+      return undefined;
+    }
+
+    const episode = getEpisode(db, link.episode_id);
+    if (!episode) {
+      return undefined;
+    }
+
+    const season = getSeason(db, episode.seasonId);
+    if (!season) {
+      return undefined;
+    }
+
+    db.prepare(
+      `UPDATE episode_links
+       SET provider_name = ?,
+           quality = ?,
+           status = ?,
+           url = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).run(input.providerName, input.quality, input.status, input.url, id);
+
+    const [updated] = listEpisodeLinksByIds(db, [id]);
+    return updated ? { ...updated, season } : undefined;
   })();
 }
 

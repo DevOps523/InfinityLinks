@@ -34,14 +34,14 @@ describe('telegram queue', () => {
     };
 
     enqueueTelegramJob(db, 'send', 'movie', 7, {
-      photo: 'https://example.com/poster.jpg',
+      posterUrl: 'https://example.com/poster.jpg',
       caption: 'Inception (2010)'
     });
 
     await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
 
     expect(client.sendPhotoPost).toHaveBeenCalledWith({
-      photo: 'https://example.com/poster.jpg',
+      posterUrl: 'https://example.com/poster.jpg',
       caption: 'Inception (2010)'
     });
     expect(client.editPhotoCaption).not.toHaveBeenCalled();
@@ -67,7 +67,7 @@ describe('telegram queue', () => {
     };
 
     enqueueTelegramJob(db, 'send', 'movie', 7, {
-      photo: 'https://example.com/poster.jpg',
+      posterUrl: 'https://example.com/poster.jpg',
       caption: 'Inception (2010)'
     });
 
@@ -91,11 +91,11 @@ describe('telegram queue', () => {
     };
 
     const olderJob = enqueueTelegramJob(db, 'send', 'movie', 1, {
-      photo: 'https://example.com/older.jpg',
+      posterUrl: 'https://example.com/older.jpg',
       caption: 'Older job'
     });
     const newerJob = enqueueTelegramJob(db, 'send', 'movie', 2, {
-      photo: 'https://example.com/newer.jpg',
+      posterUrl: 'https://example.com/newer.jpg',
       caption: 'Newer job'
     });
 
@@ -115,7 +115,7 @@ describe('telegram queue', () => {
     await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
 
     expect(client.sendPhotoPost).toHaveBeenCalledWith({
-      photo: 'https://example.com/older.jpg',
+      posterUrl: 'https://example.com/older.jpg',
       caption: 'Older job'
     });
 
@@ -135,7 +135,7 @@ describe('telegram client', () => {
 
     await expect(
       client.sendPhotoPost({
-        photo: 'https://example.com/poster.jpg',
+        posterUrl: 'https://example.com/poster.jpg',
         caption: 'Inception (2010)'
       })
     ).rejects.toThrow('Telegram sendPhoto returned invalid JSON');

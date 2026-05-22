@@ -5,7 +5,7 @@ export function queueSendPost(
   db: AppDatabase,
   entityType: TelegramEntityType,
   entityId: number,
-  payload: { photo: string; caption: string }
+  payload: { posterUrl: string; caption: string }
 ) {
   return enqueueTelegramJob(db, 'send', entityType, entityId, payload);
 }

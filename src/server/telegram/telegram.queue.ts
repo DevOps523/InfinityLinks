@@ -1,12 +1,12 @@
 import type { AppDatabase } from '../db/database.js';
-import { TelegramRateLimitError, type createTelegramClient } from './telegram.client.js';
+import { TelegramRateLimitError, type TelegramClient } from './telegram.client.js';
 
 export type TelegramJobType = 'send' | 'edit' | 'delete';
 export type TelegramEntityType = 'movie' | 'season';
 
 export type TelegramJobPayload =
   | {
-      photo: string;
+      posterUrl: string;
       caption: string;
     }
   | {
@@ -16,8 +16,6 @@ export type TelegramJobPayload =
   | {
       messageId: number;
     };
-
-type TelegramClient = ReturnType<typeof createTelegramClient>;
 
 type TelegramJobRow = {
   id: number;
@@ -52,7 +50,7 @@ async function runTelegramJob(client: TelegramClient, job: TelegramJobRow) {
   const payload = JSON.parse(job.payload) as TelegramJobPayload;
 
   if (job.job_type === 'send') {
-    await client.sendPhotoPost(payload as { photo: string; caption: string });
+    await client.sendPhotoPost(payload as { posterUrl: string; caption: string });
     return;
   }
 

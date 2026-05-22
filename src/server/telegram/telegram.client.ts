@@ -81,9 +81,9 @@ export function createTelegramClient(config: TelegramClientConfig, fetcher: Tele
   }
 
   return {
-    async sendPhotoPost(input: { photo: string; caption: string }): Promise<TelegramMessageResult> {
+    async sendPhotoPost(input: { posterUrl: string; caption: string }): Promise<TelegramMessageResult> {
       const payload = await post('sendPhoto', {
-        photo: input.photo,
+        photo: input.posterUrl,
         caption: input.caption
       });
       const messageId = payload.result?.message_id;
@@ -109,3 +109,5 @@ export function createTelegramClient(config: TelegramClientConfig, fetcher: Tele
     }
   };
 }
+
+export type TelegramClient = ReturnType<typeof createTelegramClient>;

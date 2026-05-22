@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server/index.ts",
     "build": "tsc --noEmit && vite build",
-    "start": "node dist-server/index.js",
+    "start": "tsx src/server/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "tsx src/server/db/migrate.ts"

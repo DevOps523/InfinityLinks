@@ -130,4 +130,49 @@ describe('telegram caption formatter', () => {
     expect(caption).toContain('...');
     expect(caption).not.toContain('final sentence that should be trimmed away.');
   });
+
+  it('normalizes null year and rating like missing values', () => {
+    const caption = formatMovieCaption({
+      title: 'Null Case',
+      year: null,
+      rating: null,
+      quality: 'HD',
+      description: 'Nullable database values should not leak into captions.',
+      links: []
+    });
+
+    expect(caption).toBe(
+      ['Null Case', 'Quality: HD', '', 'Nullable database values should not leak into captions.'].join('\n')
+    );
+    expect(caption).not.toContain('(null)');
+    expect(caption).not.toContain('Rating: null');
+  });
+
+  it('omits overflowing required link lines instead of truncating URLs', () => {
+    const longLinks = Array.from({ length: 40 }, (_, index) => ({
+      providerName: `Provider ${index + 1}`,
+      quality: '4K',
+      status: 'Active',
+      url: `https://example.com/media/${String(index + 1).padStart(2, '0')}/abcdefghijklmnopqrstuvwxyz`
+    }));
+
+    const caption = formatMovieCaption({
+      title: 'Required Overflow',
+      year: 2026,
+      rating: 9.4,
+      quality: '4K',
+      links: longLinks
+    });
+
+    expect(caption.length).toBeLessThanOrEqual(1024);
+    expect(caption).toContain('Required Overflow (2026)');
+    expect(caption).toContain('Provider 1 [4K, Active]: https://example.com/media/01/abcdefghijklmnopqrstuvwxyz');
+    expect(caption).not.toContain('...');
+
+    for (const line of caption.split('\n')) {
+      if (line.includes('https://')) {
+        expect(line).toMatch(/^Provider \d+ \[4K, Active\]: https:\/\/example\.com\/media\/\d{2}\/abcdefghijklmnopqrstuvwxyz$/);
+      }
+    }
+  });
 });

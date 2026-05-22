@@ -23,13 +23,19 @@ InfinityLinks is a local admin app for saving movie and TV streaming links and p
    DATABASE_PATH=./data/infinitylinks.sqlite
    ```
 
-3. Start the local app:
+3. Build the frontend assets served by the local Express app:
+
+   ```sh
+   npm run build
+   ```
+
+4. Start the local app:
 
    ```sh
    npm run dev
    ```
 
-4. Open [http://127.0.0.1:3000](http://127.0.0.1:3000).
+5. Open [http://127.0.0.1:3000](http://127.0.0.1:3000).
 
 ## MVP Scope
 

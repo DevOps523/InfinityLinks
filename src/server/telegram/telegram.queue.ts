@@ -49,6 +49,13 @@ type EntityPostStatusUpdate = {
   postStatus: string;
 };
 
+type SendPostState = {
+  exists: boolean;
+  canPublish: boolean;
+};
+
+const ENTITY_NO_LONGER_PUBLISHABLE_ERROR = 'Entity no longer publishable after send completed';
+
 function formatSqliteTimestamp(date: Date) {
   return date.toISOString().replace('T', ' ').slice(0, 19);
 }
@@ -102,6 +109,107 @@ function getPostStatusForJobType(jobType: TelegramJobType) {
   }
 
   return 'posted';
+}
+
+function hasText(value: string | null | undefined) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function getSendPostState(db: AppDatabase, entityType: TelegramEntityType, entityId: number): SendPostState {
+  if (entityType === 'movie') {
+    const row = db
+      .prepare(
+        `SELECT post_status, poster_url,
+                EXISTS (
+                  SELECT 1
+                  FROM movie_links
+                  WHERE movie_links.movie_id = movies.id
+                ) AS has_links
+         FROM movies
+         WHERE id = ?`
+      )
+      .get(entityId) as { post_status: string; poster_url: string | null; has_links: 0 | 1 } | undefined;
+
+    if (!row) {
+      return { exists: false, canPublish: false };
+    }
+
+    return {
+      exists: true,
+      canPublish: row.post_status !== 'deleted' && hasText(row.poster_url) && row.has_links === 1
+    };
+  }
+
+  const row = db
+    .prepare(
+      `SELECT seasons.post_status,
+              tv_shows.poster_url,
+              EXISTS (
+                SELECT 1
+                FROM episodes
+                JOIN episode_links ON episode_links.episode_id = episodes.id
+                WHERE episodes.season_id = seasons.id
+              ) AS has_links
+       FROM seasons
+       JOIN tv_shows ON tv_shows.id = seasons.tv_show_id
+       WHERE seasons.id = ?`
+    )
+    .get(entityId) as { post_status: string; poster_url: string | null; has_links: 0 | 1 } | undefined;
+
+  if (!row) {
+    return { exists: false, canPublish: false };
+  }
+
+  return {
+    exists: true,
+    canPublish: row.post_status !== 'deleted' && hasText(row.poster_url) && row.has_links === 1
+  };
+}
+
+function getLatestActiveSendPayload(db: AppDatabase, job: TelegramJobRow) {
+  const row = db
+    .prepare(
+      `SELECT payload
+       FROM telegram_jobs
+       WHERE job_type = 'send'
+         AND entity_type = ?
+         AND entity_id = ?
+         AND status IN ('queued', 'waiting_retry', 'running')
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 1`
+    )
+    .get(job.entity_type, job.entity_id) as { payload: string } | undefined;
+
+  return (row ? JSON.parse(row.payload) : JSON.parse(job.payload)) as TelegramSendJobPayload;
+}
+
+function cancelOtherActiveSendJobs(db: AppDatabase, job: TelegramJobRow) {
+  return db
+    .prepare(
+      `DELETE FROM telegram_jobs
+       WHERE job_type = 'send'
+         AND entity_type = ?
+         AND entity_id = ?
+         AND id <> ?
+         AND status IN ('queued', 'waiting_retry')`
+    )
+    .run(job.entity_type, job.entity_id, job.id);
+}
+
+function failOtherActiveSendJobs(db: AppDatabase, job: TelegramJobRow, message: string) {
+  return db
+    .prepare(
+      `UPDATE telegram_jobs
+       SET status = 'failed',
+           last_error = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE job_type = 'send'
+         AND entity_type = ?
+         AND entity_id = ?
+         AND id <> ?
+         AND status IN ('queued', 'waiting_retry')`
+    )
+    .run(message, job.entity_type, job.entity_id, job.id);
 }
 
 function failOrphanedSendJobs(db: AppDatabase) {
@@ -203,15 +311,17 @@ export function upsertActiveTelegramSendJob(
 ) {
   const editableJobs = db
     .prepare(
-      `SELECT id
+      `SELECT id, status
        FROM telegram_jobs
        WHERE job_type = 'send'
          AND entity_type = ?
          AND entity_id = ?
-         AND status IN ('queued', 'waiting_retry')
-       ORDER BY created_at ASC, id ASC`
+         AND status IN ('queued', 'waiting_retry', 'running')
+       ORDER BY CASE WHEN status = 'running' THEN 0 ELSE 1 END,
+                created_at ASC,
+                id ASC`
     )
-    .all(entityType, entityId) as Array<{ id: number }>;
+    .all(entityType, entityId) as Array<{ id: number; status: string }>;
 
   if (editableJobs.length === 0) {
     return enqueueTelegramJob(db, 'send', entityType, entityId, payload);
@@ -229,7 +339,9 @@ export function upsertActiveTelegramSendJob(
 
   if (duplicateJobs.length > 0) {
     const placeholders = duplicateJobs.map(() => '?').join(', ');
-    db.prepare(`DELETE FROM telegram_jobs WHERE id IN (${placeholders})`).run(...duplicateJobs.map((job) => job.id));
+    db.prepare(`DELETE FROM telegram_jobs WHERE id IN (${placeholders}) AND status IN ('queued', 'waiting_retry')`).run(
+      ...duplicateJobs.map((job) => job.id)
+    );
   }
 
   return result;
@@ -364,6 +476,100 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
 
   try {
     const result = await runTelegramJob(client, job);
+
+    if (job.job_type === 'send' && result?.messageId !== undefined) {
+      const state = getSendPostState(db, job.entity_type, job.entity_id);
+
+      if (!state.canPublish) {
+        try {
+          await client.deleteMessage({ messageId: result.messageId });
+        } catch (cleanupError) {
+          const cleanupMessage = `${ENTITY_NO_LONGER_PUBLISHABLE_ERROR}; cleanup failed: ${getErrorMessage(cleanupError)}`;
+          const retryAfter = getRetryAfter(cleanupError);
+          db.transaction(() => {
+            if (state.exists) {
+              updateEntityPostStatus(db, job.entity_type, job.entity_id, {
+                messageId: null,
+                postStatus: 'failed'
+              });
+            }
+
+            db.prepare(
+              `UPDATE telegram_jobs
+               SET status = 'failed',
+                   last_error = ?,
+                   updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?`
+            ).run(cleanupMessage, job.id);
+            failOtherActiveSendJobs(db, job, cleanupMessage);
+            const deleteJob = enqueueTelegramJob(db, 'delete', job.entity_type, job.entity_id, {
+              messageId: result.messageId
+            });
+
+            if (retryAfter !== undefined) {
+              db.prepare(
+                `UPDATE telegram_jobs
+                 SET status = 'waiting_retry',
+                     next_run_at = ?,
+                     last_error = ?,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?`
+              ).run(
+                formatSqliteTimestamp(new Date(Date.now() + retryAfter * 1000)),
+                getErrorMessage(cleanupError),
+                deleteJob.lastInsertRowid
+              );
+            }
+          })();
+          return false;
+        }
+
+        db.transaction(() => {
+          if (state.exists) {
+            updateEntityPostStatus(db, job.entity_type, job.entity_id, {
+              messageId: null,
+              postStatus: 'deleted'
+            });
+          }
+          db.prepare(
+            `UPDATE telegram_jobs
+             SET status = 'failed',
+                 last_error = ?,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`
+          ).run(ENTITY_NO_LONGER_PUBLISHABLE_ERROR, job.id);
+          failOtherActiveSendJobs(db, job, ENTITY_NO_LONGER_PUBLISHABLE_ERROR);
+        })();
+        return true;
+      }
+
+      const sentPayload = JSON.parse(job.payload) as TelegramSendJobPayload;
+      const latestPayload = getLatestActiveSendPayload(db, job);
+
+      db.transaction(() => {
+        updateEntityPostStatus(db, job.entity_type, job.entity_id, {
+          messageId: result.messageId,
+          postStatus: 'posted'
+        });
+        cancelOtherActiveSendJobs(db, job);
+        db.prepare(
+          `UPDATE telegram_jobs
+           SET status = 'succeeded',
+               last_error = NULL,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`
+        ).run(job.id);
+
+        if (latestPayload.caption !== sentPayload.caption) {
+          enqueueTelegramJob(db, 'edit', job.entity_type, job.entity_id, {
+            messageId: result.messageId,
+            caption: latestPayload.caption
+          });
+        }
+      })();
+      return true;
+    }
+
     db.transaction(() => {
       updateEntityPostStatus(db, job.entity_type, job.entity_id, {
         ...(job.job_type === 'delete' ? { messageId: null } : {}),

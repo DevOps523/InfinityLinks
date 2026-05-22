@@ -37,6 +37,7 @@ import {
   updateMovieWithLinks,
   updateSeason,
   updateTvShow as updateTvShowRow,
+  type MovieWithLinks,
   type Season,
   type SeasonPostData
 } from './media.repository.js';
@@ -106,6 +107,40 @@ function buildSeasonPayload(postData: SeasonPostData) {
     posterUrl: postData.posterUrl,
     caption: formatSeasonCaption(postData)
   };
+}
+
+function isMoviePublishable(movie: MovieWithLinks): movie is MovieWithLinks & { posterUrl: string } {
+  return movie.links.length > 0 && Boolean(movie.posterUrl);
+}
+
+function syncMoviePostAfterContentChange(db: AppDatabase, movie: MovieWithLinks) {
+  if (!isMoviePublishable(movie)) {
+    cancelPendingTelegramSendJobs(db, 'movie', movie.id);
+    cancelPendingTelegramEditJobs(db, 'movie', movie.id);
+
+    if (movie.telegramMessageId) {
+      upsertPendingTelegramDeleteJob(db, 'movie', movie.id, {
+        messageId: movie.telegramMessageId
+      });
+    }
+
+    return;
+  }
+
+  cancelPendingTelegramDeleteJobs(db, 'movie', movie.id);
+
+  if (movie.telegramMessageId) {
+    enqueueTelegramJob(db, 'edit', 'movie', movie.id, {
+      messageId: movie.telegramMessageId,
+      caption: formatMovieCaption(movie)
+    });
+    return;
+  }
+
+  upsertActiveTelegramSendJob(db, 'movie', movie.id, {
+    posterUrl: movie.posterUrl,
+    caption: formatMovieCaption(movie)
+  });
 }
 
 function syncSeasonPostAfterContentChange(db: AppDatabase, seasonId: number) {
@@ -198,19 +233,7 @@ export function updateMovie(db: AppDatabase, id: number, body: unknown) {
       return undefined;
     }
 
-    if (movie.telegramMessageId) {
-      enqueueTelegramJob(db, 'edit', 'movie', movie.id, {
-        messageId: movie.telegramMessageId,
-        caption: formatMovieCaption(movie)
-      });
-    } else if (movie.links.length > 0 && movie.posterUrl) {
-      upsertActiveTelegramSendJob(db, 'movie', movie.id, {
-        posterUrl: movie.posterUrl,
-        caption: formatMovieCaption(movie)
-      });
-    } else {
-      cancelPendingTelegramSendJobs(db, 'movie', movie.id);
-    }
+    syncMoviePostAfterContentChange(db, movie);
 
     return movie;
   })();
@@ -221,9 +244,10 @@ export function removeMovie(db: AppDatabase, id: number) {
     const movie = deleteMovie(db, id);
 
     cancelPendingTelegramSendJobs(db, 'movie', id);
+    cancelPendingTelegramEditJobs(db, 'movie', id);
 
     if (movie?.telegramMessageId) {
-      enqueueTelegramJob(db, 'delete', 'movie', movie.id, {
+      upsertPendingTelegramDeleteJob(db, 'movie', movie.id, {
         messageId: movie.telegramMessageId
       });
     }

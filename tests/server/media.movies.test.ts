@@ -292,6 +292,41 @@ describe('movie media API', () => {
     });
   });
 
+  it('queues a Telegram delete job when a posted movie update removes all links', async () => {
+    const movie = db
+      .prepare(
+        "INSERT INTO movies (title, year, poster_url, quality, description, telegram_message_id, post_status) VALUES ('Posted Movie', 2020, 'https://example.com/old.jpg', 'HD', 'Old description', 456, 'posted')"
+      )
+      .run();
+    db.prepare(
+      "INSERT INTO movie_links (movie_id, provider_name, quality, status, url) VALUES (?, 'Old Provider', 'HD', 'active', 'https://example.com/old')"
+    ).run(movie.lastInsertRowid);
+
+    await request(app())
+      .put(`/api/movies/${movie.lastInsertRowid}`)
+      .send({
+        title: 'Posted Movie',
+        year: 2020,
+        posterUrl: 'https://example.com/old.jpg',
+        quality: 'HD',
+        description: 'No links remain',
+        links: []
+      })
+      .expect(200);
+
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      job_type: 'delete',
+      entity_type: 'movie',
+      entity_id: movie.lastInsertRowid,
+      status: 'queued'
+    });
+    expect(JSON.parse(jobs[0].payload)).toEqual({
+      messageId: 456
+    });
+  });
+
   it('updates an existing active Telegram send job instead of queuing duplicates for unposted movie edits', async () => {
     const createResponse = await request(app())
       .post('/api/movies')

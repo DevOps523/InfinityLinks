@@ -48,12 +48,31 @@ function getSeasonPostState(db: AppDatabase, id: number) {
 }
 
 function createMovieRow(db: AppDatabase, id: number, title = `Movie ${id}`) {
-  db.prepare('INSERT OR IGNORE INTO movies (id, title, quality, description) VALUES (?, ?, ?, ?)').run(id, title, 'HD', 'Queued movie');
+  db.prepare('INSERT OR IGNORE INTO movies (id, title, poster_url, quality, description) VALUES (?, ?, ?, ?, ?)').run(
+    id,
+    title,
+    `https://example.com/${id}.jpg`,
+    'HD',
+    'Queued movie'
+  );
+  db.prepare(
+    'INSERT OR IGNORE INTO movie_links (movie_id, provider_name, quality, status, url) VALUES (?, ?, ?, ?, ?)'
+  ).run(id, 'Provider', 'HD', 'active', `https://example.com/watch/${id}`);
 }
 
 function createSeasonRow(db: AppDatabase, id: number) {
-  db.prepare('INSERT OR IGNORE INTO tv_shows (id, title, quality, description) VALUES (?, ?, ?, ?)').run(id, `Show ${id}`, 'HD', 'Queued show');
+  db.prepare('INSERT OR IGNORE INTO tv_shows (id, title, poster_url, quality, description) VALUES (?, ?, ?, ?, ?)').run(
+    id,
+    `Show ${id}`,
+    `https://example.com/show-${id}.jpg`,
+    'HD',
+    'Queued show'
+  );
   db.prepare('INSERT OR IGNORE INTO seasons (id, tv_show_id, season_number) VALUES (?, ?, ?)').run(id, id, 1);
+  db.prepare('INSERT OR IGNORE INTO episodes (id, season_id, episode_number) VALUES (?, ?, ?)').run(id, id, 1);
+  db.prepare(
+    'INSERT OR IGNORE INTO episode_links (episode_id, provider_name, quality, status, url) VALUES (?, ?, ?, ?, ?)'
+  ).run(id, 'Provider', 'HD', 'active', `https://example.com/watch/show-${id}`);
 }
 
 function parseSqliteTimestamp(value: string) {
@@ -345,7 +364,7 @@ describe('telegram queue', () => {
     db.close();
   });
 
-  it('leaves running send payload unchanged and inserts a queued follow-up send', () => {
+  it('coalesces running send follow-up payloads without inserting another send', () => {
     const db = setupDb();
     const runningJob = enqueueTelegramJob(db, 'send', 'movie', 7, {
       posterUrl: 'https://example.com/running.jpg',
@@ -364,24 +383,91 @@ describe('telegram queue', () => {
     });
 
     const jobs = getJobs(db);
-    expect(jobs).toHaveLength(2);
+    expect(jobs).toHaveLength(1);
     expect(jobs[0]).toMatchObject({
       id: runningJob.lastInsertRowid,
       status: 'running'
     });
     expect(JSON.parse(jobs[0].payload)).toEqual({
+      posterUrl: 'https://example.com/follow-up.jpg',
+      caption: 'Follow-up caption'
+    });
+
+    db.close();
+  });
+
+  it('coalesces a running send follow-up into one post and a final caption edit', async () => {
+    const db = setupDb();
+    const client = {
+      sendPhotoPost: vi.fn(async () => {
+        upsertActiveTelegramSendJob(db, 'movie', 7, {
+          posterUrl: 'https://example.com/follow-up.jpg',
+          caption: 'Follow-up caption'
+        });
+        return { messageId: 888 };
+      }),
+      editPhotoCaption: vi.fn(async () => undefined),
+      deleteMessage: vi.fn()
+    };
+
+    createMovieRow(db, 7, 'Running Movie');
+    enqueueTelegramJob(db, 'send', 'movie', 7, {
       posterUrl: 'https://example.com/running.jpg',
       caption: 'Running caption'
     });
-    expect(jobs[1]).toMatchObject({
-      job_type: 'send',
-      entity_type: 'movie',
-      entity_id: 7,
-      status: 'queued'
-    });
-    expect(JSON.parse(jobs[1].payload)).toEqual({
-      posterUrl: 'https://example.com/follow-up.jpg',
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
+
+    expect(client.sendPhotoPost).toHaveBeenCalledTimes(1);
+    expect(client.deleteMessage).not.toHaveBeenCalled();
+    expect(getJobs(db).filter((job) => job.job_type === 'send')).toHaveLength(1);
+    expect(getJobs(db).filter((job) => job.job_type === 'edit')).toHaveLength(1);
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
+
+    expect(client.sendPhotoPost).toHaveBeenCalledTimes(1);
+    expect(client.editPhotoCaption).toHaveBeenCalledWith({
+      messageId: 888,
       caption: 'Follow-up caption'
+    });
+    expect(getMoviePostState(db, 7)).toEqual({
+      telegram_message_id: 888,
+      post_status: 'posted'
+    });
+
+    db.close();
+  });
+
+  it('deletes the just-sent Telegram message when a movie is deleted while the send is running', async () => {
+    const db = setupDb();
+    const client = {
+      sendPhotoPost: vi.fn(async () => {
+        db.prepare('DELETE FROM movies WHERE id = ?').run(7);
+        return { messageId: 999 };
+      }),
+      editPhotoCaption: vi.fn(),
+      deleteMessage: vi.fn(async () => undefined)
+    };
+
+    createMovieRow(db, 7, 'Deleted During Send');
+    enqueueTelegramJob(db, 'send', 'movie', 7, {
+      posterUrl: 'https://example.com/deleted.jpg',
+      caption: 'Deleted During Send'
+    });
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
+
+    expect(client.sendPhotoPost).toHaveBeenCalledTimes(1);
+    expect(client.deleteMessage).toHaveBeenCalledWith({
+      messageId: 999
+    });
+    expect(getJob(db)).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+      last_error: 'Entity no longer publishable after send completed'
+    });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM movies WHERE id = ?').get(7)).toEqual({
+      count: 0
     });
 
     db.close();

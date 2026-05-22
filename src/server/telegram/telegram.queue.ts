@@ -1,21 +1,40 @@
+import type Database from 'better-sqlite3';
 import type { AppDatabase } from '../db/database.js';
-import { TelegramRateLimitError, type TelegramClient } from './telegram.client.js';
+import type { TelegramClient } from './telegram.client.js';
 
 export type TelegramJobType = 'send' | 'edit' | 'delete';
 export type TelegramEntityType = 'movie' | 'season';
+export const TELEGRAM_JOB_LEASE_MS = 5 * 60 * 1000;
 
-export type TelegramJobPayload =
+export type TelegramSendJobPayload = {
+  posterUrl: string;
+  caption: string;
+};
+
+export type TelegramEditJobPayload = {
+  messageId: number;
+  caption: string;
+};
+
+export type TelegramDeleteJobPayload = {
+  messageId: number;
+};
+
+export type TelegramJobInput =
   | {
-      posterUrl: string;
-      caption: string;
+      jobType: 'send';
+      payload: TelegramSendJobPayload;
     }
   | {
-      messageId: number;
-      caption: string;
+      jobType: 'edit';
+      payload: TelegramEditJobPayload;
     }
   | {
-      messageId: number;
+      jobType: 'delete';
+      payload: TelegramDeleteJobPayload;
     };
+
+export type TelegramJobPayload = TelegramJobInput['payload'];
 
 type TelegramJobRow = {
   id: number;
@@ -31,6 +50,52 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function getRetryAfter(error: unknown) {
+  if (typeof error !== 'object' || error === null || !('retryAfter' in error)) {
+    return undefined;
+  }
+
+  const retryAfter = (error as { retryAfter: unknown }).retryAfter;
+  return typeof retryAfter === 'number' && Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined;
+}
+
+export function recoverStaleRunningTelegramJobs(db: AppDatabase, leaseMs = TELEGRAM_JOB_LEASE_MS) {
+  const cutoff = formatSqliteTimestamp(new Date(Date.now() - leaseMs));
+
+  return db
+    .prepare(
+      `UPDATE telegram_jobs
+       SET status = 'queued',
+           next_run_at = CURRENT_TIMESTAMP,
+           last_error = 'Recovered stale running job after queue worker lease expired',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE status = 'running'
+         AND updated_at <= ?`
+    )
+    .run(cutoff);
+}
+
+export function enqueueTelegramJob(
+  db: AppDatabase,
+  jobType: 'send',
+  entityType: TelegramEntityType,
+  entityId: number,
+  payload: TelegramSendJobPayload
+): Database.RunResult;
+export function enqueueTelegramJob(
+  db: AppDatabase,
+  jobType: 'edit',
+  entityType: TelegramEntityType,
+  entityId: number,
+  payload: TelegramEditJobPayload
+): Database.RunResult;
+export function enqueueTelegramJob(
+  db: AppDatabase,
+  jobType: 'delete',
+  entityType: TelegramEntityType,
+  entityId: number,
+  payload: TelegramDeleteJobPayload
+): Database.RunResult;
 export function enqueueTelegramJob(
   db: AppDatabase,
   jobType: TelegramJobType,
@@ -64,6 +129,8 @@ async function runTelegramJob(client: TelegramClient, job: TelegramJobRow) {
 
 export async function processNextTelegramJob(db: AppDatabase, client: TelegramClient): Promise<boolean> {
   const job = db.transaction(() => {
+    recoverStaleRunningTelegramJobs(db);
+
     const selected = db
       .prepare(
         `SELECT id, job_type, payload
@@ -107,8 +174,9 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
     return true;
   } catch (error) {
     const message = getErrorMessage(error);
+    const retryAfter = getRetryAfter(error);
 
-    if (error instanceof TelegramRateLimitError) {
+    if (retryAfter !== undefined) {
       db.prepare(
         `UPDATE telegram_jobs
          SET status = 'waiting_retry',
@@ -116,7 +184,7 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
              last_error = ?,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`
-      ).run(formatSqliteTimestamp(new Date(Date.now() + error.retryAfter * 1000)), message, job.id);
+      ).run(formatSqliteTimestamp(new Date(Date.now() + retryAfter * 1000)), message, job.id);
       return false;
     }
 

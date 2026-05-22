@@ -73,7 +73,7 @@ export function createTelegramClient(config: TelegramClientConfig, fetcher: Tele
       throw new Error(`Telegram ${method} returned invalid JSON`);
     }
 
-    if (!response.ok || payload.ok === false) {
+    if (!response.ok || payload.ok !== true) {
       throwTelegramError(response, payload, method);
     }
 

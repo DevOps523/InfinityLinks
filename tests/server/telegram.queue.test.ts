@@ -82,6 +82,127 @@ describe('telegram queue', () => {
     db.close();
   });
 
+  it('delays any error with a positive retryAfter for retry', async () => {
+    const db = setupDb();
+    const before = Date.now();
+    const retryError = new Error('Generic throttled');
+    Object.assign(retryError, { retryAfter: 7 });
+    const client = {
+      sendPhotoPost: vi.fn(async () => {
+        throw retryError;
+      }),
+      editPhotoCaption: vi.fn(),
+      deleteMessage: vi.fn()
+    };
+
+    enqueueTelegramJob(db, 'send', 'movie', 7, {
+      posterUrl: 'https://example.com/poster.jpg',
+      caption: 'Inception (2010)'
+    });
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(false);
+
+    const job = getJob(db);
+    expect(job.status).toBe('waiting_retry');
+    expect(job.attempts).toBe(1);
+    expect(job.last_error).toBe('Generic throttled');
+    expect(parseSqliteTimestamp(job.next_run_at)).toBeGreaterThanOrEqual(before + 7_000 - 1_000);
+
+    db.close();
+  });
+
+  it('recovers a stale running job before selecting the next job', async () => {
+    const db = setupDb();
+    const client = {
+      sendPhotoPost: vi.fn(async () => ({ messageId: 123 })),
+      editPhotoCaption: vi.fn(),
+      deleteMessage: vi.fn()
+    };
+
+    const staleJob = enqueueTelegramJob(db, 'send', 'movie', 7, {
+      posterUrl: 'https://example.com/stale.jpg',
+      caption: 'Stale job'
+    });
+    db.prepare(
+      `UPDATE telegram_jobs
+       SET status = 'running',
+           attempts = 1,
+           updated_at = datetime('now', '-6 minutes')
+       WHERE id = ?`
+    ).run(staleJob.lastInsertRowid);
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
+
+    expect(client.sendPhotoPost).toHaveBeenCalledWith({
+      posterUrl: 'https://example.com/stale.jpg',
+      caption: 'Stale job'
+    });
+    expect(getJob(db)).toMatchObject({
+      status: 'succeeded',
+      attempts: 2,
+      last_error: null
+    });
+
+    db.close();
+  });
+
+  it('dispatches edit and delete jobs to the matching client methods', async () => {
+    const db = setupDb();
+    const client = {
+      sendPhotoPost: vi.fn(async () => ({ messageId: 123 })),
+      editPhotoCaption: vi.fn(async () => undefined),
+      deleteMessage: vi.fn(async () => undefined)
+    };
+
+    enqueueTelegramJob(db, 'edit', 'movie', 7, {
+      messageId: 123,
+      caption: 'Updated caption'
+    });
+    enqueueTelegramJob(db, 'delete', 'season', 8, {
+      messageId: 456
+    });
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
+
+    expect(client.editPhotoCaption).toHaveBeenCalledWith({
+      messageId: 123,
+      caption: 'Updated caption'
+    });
+    expect(client.deleteMessage).toHaveBeenCalledWith({
+      messageId: 456
+    });
+    expect(client.sendPhotoPost).not.toHaveBeenCalled();
+
+    db.close();
+  });
+
+  it('marks non-rate-limit failures as failed', async () => {
+    const db = setupDb();
+    const client = {
+      sendPhotoPost: vi.fn(async () => {
+        throw new Error('Telegram is unavailable');
+      }),
+      editPhotoCaption: vi.fn(),
+      deleteMessage: vi.fn()
+    };
+
+    enqueueTelegramJob(db, 'send', 'movie', 7, {
+      posterUrl: 'https://example.com/poster.jpg',
+      caption: 'Inception (2010)'
+    });
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(false);
+
+    expect(getJob(db)).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+      last_error: 'Telegram is unavailable'
+    });
+
+    db.close();
+  });
+
   it('processes the oldest eligible job before a newer job with an earlier next_run_at', async () => {
     const db = setupDb();
     const client = {
@@ -139,5 +260,22 @@ describe('telegram client', () => {
         caption: 'Inception (2010)'
       })
     ).rejects.toThrow('Telegram sendPhoto returned invalid JSON');
+  });
+
+  it('requires successful Telegram responses to explicitly include ok true', async () => {
+    const client = createTelegramClient(
+      {
+        botToken: 'test-token',
+        channelId: '@channel'
+      },
+      vi.fn(async () => Response.json({ result: { message_id: 123 } }))
+    );
+
+    await expect(
+      client.sendPhotoPost({
+        posterUrl: 'https://example.com/poster.jpg',
+        caption: 'Inception (2010)'
+      })
+    ).rejects.toThrow('Telegram sendPhoto failed');
   });
 });

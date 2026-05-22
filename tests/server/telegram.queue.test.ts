@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createDatabase, type AppDatabase } from '../../src/server/db/database.js';
 import { migrate } from '../../src/server/db/migrate.js';
 import { createTelegramClient, TelegramRateLimitError } from '../../src/server/telegram/telegram.client.js';
-import { enqueueTelegramJob, processNextTelegramJob } from '../../src/server/telegram/telegram.queue.js';
+import { enqueueTelegramJob, processNextTelegramJob, upsertActiveTelegramSendJob } from '../../src/server/telegram/telegram.queue.js';
 
 function setupDb() {
   const db = createDatabase(':memory:');
@@ -13,11 +13,24 @@ function setupDb() {
 function getJob(db: AppDatabase) {
   return db.prepare('SELECT * FROM telegram_jobs').get() as {
     id: number;
+    payload: string;
     status: string;
     attempts: number;
     next_run_at: string;
     last_error: string | null;
   };
+}
+
+function getJobs(db: AppDatabase) {
+  return db.prepare('SELECT * FROM telegram_jobs ORDER BY id ASC').all() as Array<{
+    id: number;
+    job_type: string;
+    entity_type: string;
+    entity_id: number;
+    payload: string;
+    status: string;
+    next_run_at: string;
+  }>;
 }
 
 function parseSqliteTimestamp(value: string) {
@@ -238,6 +251,84 @@ describe('telegram queue', () => {
     expect(client.sendPhotoPost).toHaveBeenCalledWith({
       posterUrl: 'https://example.com/older.jpg',
       caption: 'Older job'
+    });
+
+    db.close();
+  });
+
+  it('updates waiting_retry send payload without changing retry timing', () => {
+    const db = setupDb();
+    const job = enqueueTelegramJob(db, 'send', 'movie', 7, {
+      posterUrl: 'https://example.com/old.jpg',
+      caption: 'Old caption'
+    });
+    db.prepare(
+      `UPDATE telegram_jobs
+       SET status = 'waiting_retry',
+           next_run_at = datetime('now', '+10 minutes'),
+           last_error = 'Rate limited'
+       WHERE id = ?`
+    ).run(job.lastInsertRowid);
+
+    const before = getJob(db);
+
+    upsertActiveTelegramSendJob(db, 'movie', 7, {
+      posterUrl: 'https://example.com/new.jpg',
+      caption: 'New caption'
+    });
+
+    const after = getJob(db);
+    expect(after).toMatchObject({
+      id: before.id,
+      status: 'waiting_retry',
+      next_run_at: before.next_run_at,
+      last_error: 'Rate limited'
+    });
+    expect(JSON.parse(after.payload)).toEqual({
+      posterUrl: 'https://example.com/new.jpg',
+      caption: 'New caption'
+    });
+
+    db.close();
+  });
+
+  it('leaves running send payload unchanged and inserts a queued follow-up send', () => {
+    const db = setupDb();
+    const runningJob = enqueueTelegramJob(db, 'send', 'movie', 7, {
+      posterUrl: 'https://example.com/running.jpg',
+      caption: 'Running caption'
+    });
+    db.prepare(
+      `UPDATE telegram_jobs
+       SET status = 'running',
+           attempts = 1
+       WHERE id = ?`
+    ).run(runningJob.lastInsertRowid);
+
+    upsertActiveTelegramSendJob(db, 'movie', 7, {
+      posterUrl: 'https://example.com/follow-up.jpg',
+      caption: 'Follow-up caption'
+    });
+
+    const jobs = getJobs(db);
+    expect(jobs).toHaveLength(2);
+    expect(jobs[0]).toMatchObject({
+      id: runningJob.lastInsertRowid,
+      status: 'running'
+    });
+    expect(JSON.parse(jobs[0].payload)).toEqual({
+      posterUrl: 'https://example.com/running.jpg',
+      caption: 'Running caption'
+    });
+    expect(jobs[1]).toMatchObject({
+      job_type: 'send',
+      entity_type: 'movie',
+      entity_id: 7,
+      status: 'queued'
+    });
+    expect(JSON.parse(jobs[1].payload)).toEqual({
+      posterUrl: 'https://example.com/follow-up.jpg',
+      caption: 'Follow-up caption'
     });
 
     db.close();

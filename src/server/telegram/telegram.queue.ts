@@ -117,29 +117,27 @@ export function upsertActiveTelegramSendJob(
   entityId: number,
   payload: TelegramSendJobPayload
 ) {
-  const activeJobs = db
+  const editableJobs = db
     .prepare(
       `SELECT id
        FROM telegram_jobs
        WHERE job_type = 'send'
          AND entity_type = ?
          AND entity_id = ?
-         AND status IN ('queued', 'waiting_retry', 'running')
+         AND status IN ('queued', 'waiting_retry')
        ORDER BY created_at ASC, id ASC`
     )
     .all(entityType, entityId) as Array<{ id: number }>;
 
-  if (activeJobs.length === 0) {
+  if (editableJobs.length === 0) {
     return enqueueTelegramJob(db, 'send', entityType, entityId, payload);
   }
 
-  const [jobToUpdate, ...duplicateJobs] = activeJobs;
+  const [jobToUpdate, ...duplicateJobs] = editableJobs;
   const result = db
     .prepare(
       `UPDATE telegram_jobs
        SET payload = ?,
-           next_run_at = CURRENT_TIMESTAMP,
-           last_error = NULL,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`
     )

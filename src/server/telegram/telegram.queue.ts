@@ -151,6 +151,18 @@ export function upsertActiveTelegramSendJob(
   return result;
 }
 
+export function cancelPendingTelegramSendJobs(db: AppDatabase, entityType: TelegramEntityType, entityId: number) {
+  return db
+    .prepare(
+      `DELETE FROM telegram_jobs
+       WHERE job_type = 'send'
+         AND entity_type = ?
+         AND entity_id = ?
+         AND status IN ('queued', 'waiting_retry')`
+    )
+    .run(entityType, entityId);
+}
+
 async function runTelegramJob(client: TelegramClient, job: TelegramJobRow) {
   const payload = JSON.parse(job.payload) as TelegramJobPayload;
 

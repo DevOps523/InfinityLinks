@@ -347,6 +347,97 @@ describe('movie media API', () => {
     });
   });
 
+  it('removes pending Telegram send jobs when an unposted movie edit removes all links', async () => {
+    const createResponse = await request(app())
+      .post('/api/movies')
+      .send({
+        title: 'No Links Later',
+        year: 2024,
+        posterUrl: 'https://example.com/poster.jpg',
+        quality: 'HD',
+        description: 'Initially publishable',
+        links: [
+          {
+            providerName: 'Provider',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/watch'
+          }
+        ]
+      })
+      .expect(201);
+
+    expect(getTelegramJobs()).toHaveLength(1);
+
+    await request(app())
+      .put(`/api/movies/${createResponse.body.movie.id}`)
+      .send({
+        title: 'No Links Later',
+        year: 2024,
+        posterUrl: 'https://example.com/poster.jpg',
+        quality: 'HD',
+        description: 'No longer publishable',
+        links: []
+      })
+      .expect(200);
+
+    expect(getTelegramJobs()).toEqual([]);
+  });
+
+  it('removes pending Telegram send jobs when an unposted movie edit removes poster', async () => {
+    const createResponse = await request(app())
+      .post('/api/movies')
+      .send({
+        title: 'No Poster Later',
+        year: 2024,
+        posterUrl: 'https://example.com/poster.jpg',
+        quality: 'HD',
+        description: 'Initially publishable',
+        links: [
+          {
+            providerName: 'Provider',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/watch'
+          }
+        ]
+      })
+      .expect(201);
+
+    const queuedJob = getTelegramJobs()[0];
+    db.prepare(
+      `UPDATE telegram_jobs
+       SET status = 'waiting_retry',
+           next_run_at = datetime('now', '+5 minutes')
+       WHERE entity_id = ?`
+    ).run(createResponse.body.movie.id);
+
+    await request(app())
+      .put(`/api/movies/${createResponse.body.movie.id}`)
+      .send({
+        title: 'No Poster Later',
+        year: 2024,
+        posterUrl: '',
+        quality: 'HD',
+        description: 'No longer publishable',
+        links: [
+          {
+            providerName: 'Provider',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/watch'
+          }
+        ]
+      })
+      .expect(200);
+
+    expect(queuedJob).toMatchObject({
+      job_type: 'send',
+      status: 'queued'
+    });
+    expect(getTelegramJobs()).toEqual([]);
+  });
+
   it('returns 400 JSON for invalid movie list filters', async () => {
     const response = await request(app()).get('/api/movies?year=abc').expect(400);
 

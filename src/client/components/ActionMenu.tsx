@@ -1,16 +1,21 @@
-import { Edit, MoreVertical, Trash2 } from 'lucide-react';
+import { Edit, MoreVertical, Trash2, type LucideIcon } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
 type ActionMenuProps = {
+  extraActions?: Array<{
+    label: string;
+    icon: LucideIcon;
+    onSelect: () => void;
+  }>;
   onEdit: () => void;
   onDelete: () => void;
 };
 
-export function ActionMenu({ onEdit, onDelete }: ActionMenuProps) {
+export function ActionMenu({ extraActions = [], onEdit, onDelete }: ActionMenuProps) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
-  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const firstButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) {
@@ -31,7 +36,7 @@ export function ActionMenu({ onEdit, onDelete }: ActionMenuProps) {
 
     document.addEventListener('pointerdown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
-    window.setTimeout(() => editButtonRef.current?.focus(), 0);
+    window.setTimeout(() => firstButtonRef.current?.focus(), 0);
 
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
@@ -54,11 +59,30 @@ export function ActionMenu({ onEdit, onDelete }: ActionMenuProps) {
       </button>
       {open ? (
         <div className="action-menu__panel" id={menuId} role="menu">
+          {extraActions.map((action, index) => {
+            const Icon = action.icon;
+            return (
+              <button
+                className="action-menu__item"
+                type="button"
+                role="menuitem"
+                ref={index === 0 ? firstButtonRef : undefined}
+                key={action.label}
+                onClick={() => {
+                  setOpen(false);
+                  action.onSelect();
+                }}
+              >
+                <Icon aria-hidden="true" size={16} />
+                {action.label}
+              </button>
+            );
+          })}
           <button
             className="action-menu__item"
             type="button"
             role="menuitem"
-            ref={editButtonRef}
+            ref={extraActions.length === 0 ? firstButtonRef : undefined}
             onClick={() => {
               setOpen(false);
               onEdit();

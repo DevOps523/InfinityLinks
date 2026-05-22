@@ -1,38 +1,88 @@
 import { useState } from 'react';
 import { Sidebar, type PageKey } from './components/Sidebar';
 import { ToastProvider } from './components/ToastProvider';
+import { EpisodePage } from './pages/EpisodePage';
 import { MovieForm } from './pages/MovieForm';
 import { MoviesPage } from './pages/MoviesPage';
+import { SeasonPage } from './pages/SeasonPage';
+import { TvShowForm } from './pages/TvShowForm';
+import { TvShowsPage } from './pages/TvShowsPage';
 
-function renderPage(page: PageKey, setPage: (page: PageKey) => void, editingMovieId: number | null, setEditingMovieId: (id: number | null) => void) {
+type AppState = {
+  editingMovieId: number | null;
+  editingTvShowId: number | null;
+  selectedTvShowId: number | null;
+  selectedSeasonId: number | null;
+  openSeasonDialogOnEntry: boolean;
+};
+
+type AppActions = {
+  setPage: (page: PageKey) => void;
+  setEditingMovieId: (id: number | null) => void;
+  setEditingTvShowId: (id: number | null) => void;
+  setSelectedTvShowId: (id: number | null) => void;
+  setSelectedSeasonId: (id: number | null) => void;
+  setOpenSeasonDialogOnEntry: (open: boolean) => void;
+};
+
+function renderPage(page: PageKey, state: AppState, actions: AppActions) {
+  const { editingMovieId, editingTvShowId, selectedTvShowId, selectedSeasonId, openSeasonDialogOnEntry } = state;
+  const { setPage, setEditingMovieId, setEditingTvShowId, setSelectedTvShowId, setSelectedSeasonId, setOpenSeasonDialogOnEntry } = actions;
+
   if (page === 'add-movie') {
     return <MovieForm movieId={editingMovieId ?? undefined} onSaved={() => setPage('movies')} />;
   }
 
   if (page === 'tv-shows') {
     return (
-      <section className="page-section">
-        <div className="page-header">
-          <div>
-            <h1>TV Shows</h1>
-            <p>TV show management will be added in a later task.</p>
-          </div>
-        </div>
-      </section>
+      <TvShowsPage
+        onAddTvShow={() => {
+          setEditingTvShowId(null);
+          setPage('add-tv-show');
+        }}
+        onEditTvShow={(id) => {
+          setEditingTvShowId(id);
+          setPage('add-tv-show');
+        }}
+        onManageSeasons={(id) => {
+          setSelectedTvShowId(id);
+          setSelectedSeasonId(null);
+          setOpenSeasonDialogOnEntry(true);
+          setPage('seasons');
+        }}
+      />
     );
   }
 
   if (page === 'add-tv-show') {
+    return <TvShowForm tvShowId={editingTvShowId ?? undefined} onSaved={() => setPage('tv-shows')} />;
+  }
+
+  if (page === 'seasons') {
+    if (!selectedTvShowId) {
+      return <div className="state-panel">Choose a TV show before managing seasons.</div>;
+    }
+
     return (
-      <section className="page-section">
-        <div className="page-header">
-          <div>
-            <h1>Add TV Show</h1>
-            <p>TV show creation will be added in a later task.</p>
-          </div>
-        </div>
-      </section>
+      <SeasonPage
+        tvShowId={selectedTvShowId}
+        openAddOnEntry={openSeasonDialogOnEntry}
+        onAddEntryHandled={() => setOpenSeasonDialogOnEntry(false)}
+        onBack={() => setPage('tv-shows')}
+        onManageEpisodes={(seasonId) => {
+          setSelectedSeasonId(seasonId);
+          setPage('episodes');
+        }}
+      />
     );
+  }
+
+  if (page === 'episodes') {
+    if (!selectedSeasonId) {
+      return <div className="state-panel">Choose a season before managing episodes.</div>;
+    }
+
+    return <EpisodePage seasonId={selectedSeasonId} onBack={() => setPage('seasons')} />;
   }
 
   return (
@@ -52,6 +102,10 @@ function renderPage(page: PageKey, setPage: (page: PageKey) => void, editingMovi
 export function App() {
   const [page, setPage] = useState<PageKey>('movies');
   const [editingMovieId, setEditingMovieId] = useState<number | null>(null);
+  const [editingTvShowId, setEditingTvShowId] = useState<number | null>(null);
+  const [selectedTvShowId, setSelectedTvShowId] = useState<number | null>(null);
+  const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
+  const [openSeasonDialogOnEntry, setOpenSeasonDialogOnEntry] = useState(false);
 
   return (
     <ToastProvider>
@@ -60,10 +114,36 @@ export function App() {
           currentPage={page}
           onNavigate={(nextPage) => {
             setEditingMovieId(null);
+            setEditingTvShowId(null);
+            if (nextPage === 'movies' || nextPage === 'tv-shows' || nextPage === 'add-tv-show') {
+              setSelectedSeasonId(null);
+            }
+            if (nextPage === 'movies' || nextPage === 'add-movie' || nextPage === 'tv-shows' || nextPage === 'add-tv-show') {
+              setSelectedTvShowId(null);
+            }
             setPage(nextPage);
           }}
         />
-        <main className="content-shell">{renderPage(page, setPage, editingMovieId, setEditingMovieId)}</main>
+        <main className="content-shell">
+          {renderPage(
+            page,
+            {
+              editingMovieId,
+              editingTvShowId,
+              selectedTvShowId,
+              selectedSeasonId,
+              openSeasonDialogOnEntry
+            },
+            {
+              setPage,
+              setEditingMovieId,
+              setEditingTvShowId,
+              setSelectedTvShowId,
+              setSelectedSeasonId,
+              setOpenSeasonDialogOnEntry
+            }
+          )}
+        </main>
       </div>
     </ToastProvider>
   );

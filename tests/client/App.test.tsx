@@ -41,6 +41,70 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: /^add movie$/i })).toBeInTheDocument();
   });
 
+  it('renders the Add TV Show form after clicking Add TV Show', async () => {
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
+
+    expect(screen.getByRole('heading', { name: /^add tv show$/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/tmdb search/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^quality$/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^save tv show$/i })).toBeInTheDocument();
+  });
+
+  it('opens season management from the TV show action menu', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/movies' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => ({ movies: [] })
+        };
+      }
+
+      if (url === '/api/tv-shows' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => ({
+            tvShows: [
+              {
+                id: 3,
+                title: 'Dark',
+                year: 2017,
+                description: 'Missing children and time loops'
+              }
+            ]
+          })
+        };
+      }
+
+      if (url === '/api/tv-shows/3/seasons' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => ({ seasons: [] })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({})
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
+
+    expect(await screen.findByText('Dark')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /open action menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /^add season$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^seasons$/i })).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: /^add season$/i });
+    expect(within(dialog).getByLabelText(/season number/i)).toBeInTheDocument();
+  });
+
   it('cancels delete confirmation without deleting', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/api/movies' && !init?.method) {

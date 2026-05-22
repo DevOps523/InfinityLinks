@@ -1,6 +1,6 @@
 import { Clapperboard, Film, Plus, Tv } from 'lucide-react';
 
-export type PageKey = 'movies' | 'add-movie' | 'tv-shows' | 'add-tv-show';
+export type PageKey = 'movies' | 'add-movie' | 'tv-shows' | 'add-tv-show' | 'seasons' | 'episodes';
 
 type SidebarProps = {
   currentPage: PageKey;

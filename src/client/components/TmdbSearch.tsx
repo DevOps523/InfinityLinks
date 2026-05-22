@@ -13,9 +13,10 @@ export type TmdbResult = {
 
 type TmdbSearchProps = {
   onSelect: (result: TmdbResult) => void;
+  type?: 'movie' | 'tv';
 };
 
-export function TmdbSearch({ onSelect }: TmdbSearchProps) {
+export function TmdbSearch({ onSelect, type = 'movie' }: TmdbSearchProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<TmdbResult[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
@@ -35,7 +36,7 @@ export function TmdbSearch({ onSelect }: TmdbSearchProps) {
     requestIdRef.current = requestId;
     const timeout = window.setTimeout(() => {
       setStatus('loading');
-      apiJson<{ results: TmdbResult[] }>(`/api/tmdb/search?type=movie&query=${encodeURIComponent(trimmed)}`, {
+      apiJson<{ results: TmdbResult[] }>(`/api/tmdb/search?type=${type}&query=${encodeURIComponent(trimmed)}`, {
         signal: controller.signal
       })
         .then((payload) => {
@@ -62,7 +63,7 @@ export function TmdbSearch({ onSelect }: TmdbSearchProps) {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [query]);
+  }, [query, type]);
 
   return (
     <div className="tmdb-search">
@@ -83,7 +84,7 @@ export function TmdbSearch({ onSelect }: TmdbSearchProps) {
       {status === 'loading' ? <p className="field-hint">Searching...</p> : null}
       {status === 'error' ? <p className="field-error">TMDB search failed.</p> : null}
       {results.length > 0 ? (
-        <div className="tmdb-search__results" aria-label="TMDB movie results">
+        <div className="tmdb-search__results" aria-label={`TMDB ${type === 'tv' ? 'TV show' : 'movie'} results`}>
           {results.map((result) => (
             <button
               key={result.tmdbId}

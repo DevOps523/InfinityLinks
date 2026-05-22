@@ -263,7 +263,7 @@ td {
   right: 0;
   top: 44px;
   z-index: 5;
-  width: 140px;
+  width: 164px;
   border: 1px solid #d8e0ea;
   border-radius: 8px;
   background: #ffffff;
@@ -412,6 +412,15 @@ td {
   padding: 16px;
 }
 
+.modal--narrow {
+  max-width: 460px;
+}
+
+.modal-form {
+  display: grid;
+  gap: 14px;
+}
+
 .modal__header {
   display: flex;
   flex-wrap: wrap;
@@ -438,6 +447,42 @@ td {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 12px;
+}
+
+.table--compact {
+  min-width: 520px;
+}
+
+.link-list {
+  display: grid;
+  gap: 10px;
+}
+
+.link-list__item {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.link-list__item strong,
+.link-list__item span,
+.link-list__item a {
+  display: block;
+}
+
+.link-list__item span,
+.link-list__item a {
+  overflow-wrap: anywhere;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.link-list__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .dialog {
@@ -543,5 +588,10 @@ td {
   .link-editor__row {
     grid-template-columns: 1fr 120px 120px 1.4fr 40px;
     align-items: end;
+  }
+
+  .link-list__item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
   }
 }

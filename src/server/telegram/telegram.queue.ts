@@ -59,7 +59,28 @@ function getRetryAfter(error: unknown) {
   return typeof retryAfter === 'number' && Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined;
 }
 
+function failOrphanedMovieSendJobs(db: AppDatabase) {
+  return db
+    .prepare(
+      `UPDATE telegram_jobs
+       SET status = 'failed',
+           last_error = 'Entity no longer exists',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE job_type = 'send'
+         AND entity_type = 'movie'
+         AND status IN ('queued', 'waiting_retry', 'running')
+         AND NOT EXISTS (
+           SELECT 1
+           FROM movies
+           WHERE movies.id = telegram_jobs.entity_id
+         )`
+    )
+    .run();
+}
+
 export function recoverStaleRunningTelegramJobs(db: AppDatabase, leaseMs = TELEGRAM_JOB_LEASE_MS) {
+  failOrphanedMovieSendJobs(db);
+
   const cutoff = formatSqliteTimestamp(new Date(Date.now() - leaseMs));
 
   return db
@@ -181,6 +202,7 @@ async function runTelegramJob(client: TelegramClient, job: TelegramJobRow) {
 
 export async function processNextTelegramJob(db: AppDatabase, client: TelegramClient): Promise<boolean> {
   const job = db.transaction(() => {
+    failOrphanedMovieSendJobs(db);
     recoverStaleRunningTelegramJobs(db);
 
     const selected = db

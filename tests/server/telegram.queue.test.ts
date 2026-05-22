@@ -33,6 +33,10 @@ function getJobs(db: AppDatabase) {
   }>;
 }
 
+function createMovieRow(db: AppDatabase, id: number, title = `Movie ${id}`) {
+  db.prepare('INSERT OR IGNORE INTO movies (id, title, quality, description) VALUES (?, ?, ?, ?)').run(id, title, 'HD', 'Queued movie');
+}
+
 function parseSqliteTimestamp(value: string) {
   return new Date(`${value.replace(' ', 'T')}Z`).getTime();
 }
@@ -46,6 +50,7 @@ describe('telegram queue', () => {
       deleteMessage: vi.fn()
     };
 
+    createMovieRow(db, 7, 'Inception');
     enqueueTelegramJob(db, 'send', 'movie', 7, {
       posterUrl: 'https://example.com/poster.jpg',
       caption: 'Inception (2010)'
@@ -79,6 +84,7 @@ describe('telegram queue', () => {
       deleteMessage: vi.fn()
     };
 
+    createMovieRow(db, 7, 'Inception');
     enqueueTelegramJob(db, 'send', 'movie', 7, {
       posterUrl: 'https://example.com/poster.jpg',
       caption: 'Inception (2010)'
@@ -108,6 +114,7 @@ describe('telegram queue', () => {
       deleteMessage: vi.fn()
     };
 
+    createMovieRow(db, 7, 'Inception');
     enqueueTelegramJob(db, 'send', 'movie', 7, {
       posterUrl: 'https://example.com/poster.jpg',
       caption: 'Inception (2010)'
@@ -132,6 +139,7 @@ describe('telegram queue', () => {
       deleteMessage: vi.fn()
     };
 
+    createMovieRow(db, 7, 'Stale job');
     const staleJob = enqueueTelegramJob(db, 'send', 'movie', 7, {
       posterUrl: 'https://example.com/stale.jpg',
       caption: 'Stale job'
@@ -200,6 +208,7 @@ describe('telegram queue', () => {
       deleteMessage: vi.fn()
     };
 
+    createMovieRow(db, 7, 'Inception');
     enqueueTelegramJob(db, 'send', 'movie', 7, {
       posterUrl: 'https://example.com/poster.jpg',
       caption: 'Inception (2010)'
@@ -224,6 +233,8 @@ describe('telegram queue', () => {
       deleteMessage: vi.fn()
     };
 
+    createMovieRow(db, 1, 'Older job');
+    createMovieRow(db, 2, 'Newer job');
     const olderJob = enqueueTelegramJob(db, 'send', 'movie', 1, {
       posterUrl: 'https://example.com/older.jpg',
       caption: 'Older job'
@@ -329,6 +340,42 @@ describe('telegram queue', () => {
     expect(JSON.parse(jobs[1].payload)).toEqual({
       posterUrl: 'https://example.com/follow-up.jpg',
       caption: 'Follow-up caption'
+    });
+
+    db.close();
+  });
+
+  it('does not recover or send stale running movie send jobs when the movie was deleted', async () => {
+    const db = setupDb();
+    const client = {
+      sendPhotoPost: vi.fn(async () => ({ messageId: 123 })),
+      editPhotoCaption: vi.fn(),
+      deleteMessage: vi.fn()
+    };
+
+    const movie = db
+      .prepare("INSERT INTO movies (title, year, poster_url, quality, description) VALUES ('Deleted Movie', 2026, 'https://example.com/deleted.jpg', 'HD', 'Deleted')")
+      .run();
+    const job = enqueueTelegramJob(db, 'send', 'movie', Number(movie.lastInsertRowid), {
+      posterUrl: 'https://example.com/deleted.jpg',
+      caption: 'Deleted Movie (2026)'
+    });
+    db.prepare(
+      `UPDATE telegram_jobs
+       SET status = 'running',
+           attempts = 1,
+           updated_at = datetime('now', '-6 minutes')
+       WHERE id = ?`
+    ).run(job.lastInsertRowid);
+    db.prepare('DELETE FROM movies WHERE id = ?').run(movie.lastInsertRowid);
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(false);
+
+    expect(client.sendPhotoPost).not.toHaveBeenCalled();
+    expect(getJob(db)).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+      last_error: 'Entity no longer exists'
     });
 
     db.close();

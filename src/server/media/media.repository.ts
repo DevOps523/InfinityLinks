@@ -81,6 +81,10 @@ export type Episode = {
   updatedAt: string;
 };
 
+export type EpisodeWithLinks = Episode & {
+  links: EpisodeLink[];
+};
+
 export type EpisodeLink = {
   id: number;
   episodeId: number;
@@ -699,6 +703,19 @@ export function getEpisode(db: AppDatabase, id: number): Episode | undefined {
   return row ? mapEpisode(row) : undefined;
 }
 
+export function getEpisodeWithLinks(db: AppDatabase, id: number): EpisodeWithLinks | undefined {
+  const episode = getEpisode(db, id);
+
+  if (!episode) {
+    return undefined;
+  }
+
+  return {
+    ...episode,
+    links: listEpisodeLinks(db, id)
+  };
+}
+
 export function updateEpisode(db: AppDatabase, id: number, input: { episodeNumber: number }): DeletedEpisode | undefined {
   return db.transaction(() => {
     const episode = getEpisode(db, id);
@@ -800,6 +817,18 @@ function listEpisodeLinks(db: AppDatabase, episodeId: number) {
       )
       .all(episodeId) as EpisodeLinkRow[]
   ).map(mapEpisodeLink);
+}
+
+export function getEpisodeLink(db: AppDatabase, id: number): EpisodeLink | undefined {
+  const link = db
+    .prepare(
+      `SELECT id, episode_id, provider_name, quality, status, url, sort_order, created_at, updated_at
+       FROM episode_links
+       WHERE id = ?`
+    )
+    .get(id) as EpisodeLinkRow | undefined;
+
+  return link ? mapEpisodeLink(link) : undefined;
 }
 
 export function deleteEpisodeLink(db: AppDatabase, id: number): DeletedEpisodeLink | undefined {

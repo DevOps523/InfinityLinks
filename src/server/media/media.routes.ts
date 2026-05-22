@@ -7,8 +7,11 @@ import {
   createEpisodes,
   createMovie,
   createTvShow,
+  getEpisodeById,
+  getEpisodeLinkById,
   getEpisodesForSeason,
   getMovie,
+  getSeasonById,
   getSeasonsForTvShow,
   getTvShowById,
   removeEpisode,
@@ -195,6 +198,22 @@ export function createMediaRouter(db: AppDatabase) {
     }
   });
 
+  router.get('/seasons/:id', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const season = getSeasonById(db, id);
+
+      if (!season) {
+        res.status(404).json({ error: 'Season not found' });
+        return;
+      }
+
+      res.json({ season });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.put('/seasons/:id', (req, res, next) => {
     try {
       const { id } = IdParamSchema.parse(req.params);
@@ -247,6 +266,22 @@ export function createMediaRouter(db: AppDatabase) {
     }
   });
 
+  router.get('/episodes/:id', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const episode = getEpisodeById(db, id);
+
+      if (!episode) {
+        res.status(404).json({ error: 'Episode not found' });
+        return;
+      }
+
+      res.json({ episode });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.put('/episodes/:id', (req, res, next) => {
     try {
       const { id } = IdParamSchema.parse(req.params);
@@ -284,6 +319,22 @@ export function createMediaRouter(db: AppDatabase) {
       const { id } = IdParamSchema.parse(req.params);
       removeEpisodeLink(db, id);
       res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/episode-links/:id', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const link = getEpisodeLinkById(db, id);
+
+      if (!link) {
+        res.status(404).json({ error: 'Episode link not found' });
+        return;
+      }
+
+      res.json({ link });
     } catch (error) {
       next(error);
     }

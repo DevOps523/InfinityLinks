@@ -232,6 +232,49 @@ describe('tv media API', () => {
     });
   });
 
+  it('returns one season, one episode with links, and one episode link for edit surfaces', async () => {
+    const { seasonId, episodeId, linkId } = createPostedLinkedSeason();
+
+    const seasonResponse = await request(app()).get(`/api/seasons/${seasonId}`).expect(200);
+    expect(seasonResponse.body.season).toMatchObject({
+      id: seasonId,
+      seasonNumber: 2,
+      telegramMessageId: 456
+    });
+
+    const episodeResponse = await request(app()).get(`/api/episodes/${episodeId}`).expect(200);
+    expect(episodeResponse.body.episode).toMatchObject({
+      id: episodeId,
+      seasonId,
+      episodeNumber: 1,
+      links: [
+        expect.objectContaining({
+          id: linkId,
+          providerName: 'Infinity Stream',
+          quality: 'HD',
+          status: 'active',
+          url: 'https://example.com/chronos/s2/e1'
+        })
+      ]
+    });
+
+    const linkResponse = await request(app()).get(`/api/episode-links/${linkId}`).expect(200);
+    expect(linkResponse.body.link).toMatchObject({
+      id: linkId,
+      episodeId,
+      providerName: 'Infinity Stream',
+      quality: 'HD',
+      status: 'active',
+      url: 'https://example.com/chronos/s2/e1'
+    });
+  });
+
+  it('returns 400 for invalid read ids and 404 for missing read entities', async () => {
+    await request(app()).get('/api/seasons/nope').expect(400);
+    await request(app()).get('/api/episodes/999').expect(404);
+    await request(app()).get('/api/episode-links/999').expect(404);
+  });
+
   it('creates multiple episodes for a season', async () => {
     const show = db.prepare("INSERT INTO tv_shows (title, quality) VALUES ('Chronos', 'HD')").run();
     const season = db

@@ -20,6 +20,8 @@ import {
   deleteSeason,
   deleteTvShow,
   getEpisode,
+  getEpisodeLink,
+  getEpisodeWithLinks,
   getMovieWithLinks,
   getSeason,
   getSeasonPostData,
@@ -282,6 +284,10 @@ export function getSeasonsForTvShow(db: AppDatabase, tvShowId: number) {
   return listSeasons(db, tvShowId);
 }
 
+export function getSeasonById(db: AppDatabase, id: number) {
+  return getSeason(db, id);
+}
+
 export function addSeason(db: AppDatabase, tvShowId: number, body: unknown) {
   const input = SeasonInputSchema.parse(body);
 
@@ -326,6 +332,10 @@ export function removeSeason(db: AppDatabase, id: number) {
 
 export function getEpisodesForSeason(db: AppDatabase, seasonId: number) {
   return listEpisodes(db, seasonId);
+}
+
+export function getEpisodeById(db: AppDatabase, id: number) {
+  return getEpisodeWithLinks(db, id);
 }
 
 export function createEpisodes(db: AppDatabase, seasonId: number, body: unknown) {
@@ -412,6 +422,10 @@ export function removeEpisodeLink(db: AppDatabase, id: number) {
 
     return link;
   })();
+}
+
+export function getEpisodeLinkById(db: AppDatabase, id: number) {
+  return getEpisodeLink(db, id);
 }
 
 export function updateEpisodeLinkById(db: AppDatabase, id: number, body: unknown) {

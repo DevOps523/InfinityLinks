@@ -35,7 +35,7 @@ async function readTelegramJson(response: Response): Promise<TelegramApiResponse
   try {
     return (await response.json()) as TelegramApiResponse;
   } catch {
-    return {};
+    throw new Error('Telegram response returned invalid JSON');
   }
 }
 
@@ -66,7 +66,12 @@ export function createTelegramClient(config: TelegramClientConfig, fetcher: Tele
         ...body
       })
     });
-    const payload = await readTelegramJson(response);
+    let payload: TelegramApiResponse;
+    try {
+      payload = await readTelegramJson(response);
+    } catch {
+      throw new Error(`Telegram ${method} returned invalid JSON`);
+    }
 
     if (!response.ok || payload.ok === false) {
       throwTelegramError(response, payload, method);

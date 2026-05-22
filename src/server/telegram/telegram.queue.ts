@@ -72,7 +72,7 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
          FROM telegram_jobs
          WHERE status IN ('queued', 'waiting_retry')
            AND next_run_at <= CURRENT_TIMESTAMP
-         ORDER BY next_run_at ASC, created_at ASC, id ASC
+         ORDER BY created_at ASC, id ASC
          LIMIT 1`
       )
       .get() as TelegramJobRow | undefined;

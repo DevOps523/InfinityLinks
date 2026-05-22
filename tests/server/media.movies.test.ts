@@ -102,6 +102,9 @@ describe('movie media API', () => {
         }
       ]
     });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM movies WHERE id = ?').get(response.body.movie.id)).toEqual({
+      count: 1
+    });
 
     const jobs = getTelegramJobs();
     expect(jobs).toHaveLength(1);
@@ -117,6 +120,53 @@ describe('movie media API', () => {
     });
   });
 
+  it('returns 400 JSON for invalid movie bodies', async () => {
+    const response = await request(app())
+      .post('/api/movies')
+      .send({
+        title: '',
+        quality: 'BluRay',
+        links: []
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      error: 'Validation failed',
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          path: 'title',
+          message: expect.any(String)
+        }),
+        expect.objectContaining({
+          path: 'quality',
+          message: expect.any(String)
+        })
+      ])
+    });
+  });
+
+  it('does not enqueue a Telegram send job when a movie has links but no poster', async () => {
+    await request(app())
+      .post('/api/movies')
+      .send({
+        title: 'Posterless',
+        year: 2026,
+        quality: 'HD',
+        description: 'A movie without poster art.',
+        links: [
+          {
+            providerName: 'Infinity Stream',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/watch/posterless'
+          }
+        ]
+      })
+      .expect(201);
+
+    expect(getTelegramJobs()).toEqual([]);
+  });
+
   it('lists movies filtered by title', async () => {
     db.prepare("INSERT INTO movies (title, year, quality, description) VALUES ('Arrival', 2016, 'HD', 'First contact')")
       .run();
@@ -126,6 +176,20 @@ describe('movie media API', () => {
     const response = await request(app()).get('/api/movies?title=A').expect(200);
 
     expect(response.body.movies.map((movie: { title: string }) => movie.title)).toEqual(['Alien', 'Arrival']);
+  });
+
+  it('returns 400 JSON for invalid movie list filters', async () => {
+    const response = await request(app()).get('/api/movies?year=abc').expect(400);
+
+    expect(response.body).toMatchObject({
+      error: 'Validation failed',
+      issues: [
+        expect.objectContaining({
+          path: 'year',
+          message: expect.any(String)
+        })
+      ]
+    });
   });
 
   it('permanently deletes movie rows', async () => {
@@ -141,6 +205,26 @@ describe('movie media API', () => {
     });
     expect(db.prepare('SELECT COUNT(*) AS count FROM movie_links WHERE movie_id = ?').get(movie.lastInsertRowid)).toEqual({
       count: 0
+    });
+  });
+
+  it('queues a Telegram delete job when deleting a movie with a Telegram message id', async () => {
+    const movie = db
+      .prepare("INSERT INTO movies (title, year, quality, telegram_message_id) VALUES ('Posted Movie', 2026, '4K', 456)")
+      .run();
+
+    await request(app()).delete(`/api/movies/${movie.lastInsertRowid}`).expect(204);
+
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      job_type: 'delete',
+      entity_type: 'movie',
+      entity_id: movie.lastInsertRowid,
+      status: 'queued'
+    });
+    expect(JSON.parse(jobs[0].payload)).toEqual({
+      messageId: 456
     });
   });
 });

@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ZodError } from 'zod';
 import type { AppConfig } from './config.js';
 import type { AppDatabase } from './db/database.js';
 import { createMediaRouter } from './media/media.routes.js';
@@ -13,6 +14,10 @@ type CreateAppOptions = {
   db?: AppDatabase;
   config?: AppConfig;
 };
+
+function formatZodPath(path: Array<number | string>) {
+  return path.map(String).join('.');
+}
 
 export function createApp(options: CreateAppOptions = {}) {
   const app = express();
@@ -32,6 +37,17 @@ export function createApp(options: CreateAppOptions = {}) {
   });
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (error instanceof ZodError) {
+      res.status(400).json({
+        error: 'Validation failed',
+        issues: error.issues.map((issue) => ({
+          path: formatZodPath(issue.path),
+          message: issue.message
+        }))
+      });
+      return;
+    }
+
     const message = error instanceof Error ? error.message : 'Unexpected server error';
     res.status(500).json({ error: message });
   });

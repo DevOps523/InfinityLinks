@@ -292,6 +292,61 @@ describe('movie media API', () => {
     });
   });
 
+  it('updates an existing active Telegram send job instead of queuing duplicates for unposted movie edits', async () => {
+    const createResponse = await request(app())
+      .post('/api/movies')
+      .send({
+        title: 'Queued Movie',
+        year: 2024,
+        posterUrl: 'https://example.com/old.jpg',
+        quality: 'HD',
+        description: 'Queued description',
+        links: [
+          {
+            providerName: 'Provider',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/old'
+          }
+        ]
+      })
+      .expect(201);
+
+    expect(getTelegramJobs()).toHaveLength(1);
+
+    await request(app())
+      .put(`/api/movies/${createResponse.body.movie.id}`)
+      .send({
+        title: 'Queued Movie Updated',
+        year: 2025,
+        posterUrl: 'https://example.com/new.jpg',
+        quality: '4K',
+        description: 'Updated queued description',
+        links: [
+          {
+            providerName: 'Provider',
+            quality: '4K',
+            status: 'active',
+            url: 'https://example.com/new'
+          }
+        ]
+      })
+      .expect(200);
+
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      job_type: 'send',
+      entity_type: 'movie',
+      entity_id: createResponse.body.movie.id,
+      status: 'queued'
+    });
+    expect(JSON.parse(jobs[0].payload)).toEqual({
+      posterUrl: 'https://example.com/new.jpg',
+      caption: expect.stringContaining('Queued Movie Updated (2025)')
+    });
+  });
+
   it('returns 400 JSON for invalid movie list filters', async () => {
     const response = await request(app()).get('/api/movies?year=abc').expect(400);
 

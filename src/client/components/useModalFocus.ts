@@ -23,12 +23,13 @@ export function useModalFocus({ open, dialogRef, initialFocusRef, onClose, close
     }
 
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    window.setTimeout(() => {
+    const focusTimeout = window.setTimeout(() => {
       const target = initialFocusRef?.current ?? (dialogRef.current ? getFocusableElements(dialogRef.current)[0] : undefined);
       target?.focus();
     }, 0);
 
     return () => {
+      window.clearTimeout(focusTimeout);
       previousFocus?.focus();
     };
   }, [dialogRef, initialFocusRef, open]);

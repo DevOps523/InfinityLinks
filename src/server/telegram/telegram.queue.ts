@@ -111,6 +111,48 @@ export function enqueueTelegramJob(
     .run(jobType, entityType, entityId, JSON.stringify(payload));
 }
 
+export function upsertActiveTelegramSendJob(
+  db: AppDatabase,
+  entityType: TelegramEntityType,
+  entityId: number,
+  payload: TelegramSendJobPayload
+) {
+  const activeJobs = db
+    .prepare(
+      `SELECT id
+       FROM telegram_jobs
+       WHERE job_type = 'send'
+         AND entity_type = ?
+         AND entity_id = ?
+         AND status IN ('queued', 'waiting_retry', 'running')
+       ORDER BY created_at ASC, id ASC`
+    )
+    .all(entityType, entityId) as Array<{ id: number }>;
+
+  if (activeJobs.length === 0) {
+    return enqueueTelegramJob(db, 'send', entityType, entityId, payload);
+  }
+
+  const [jobToUpdate, ...duplicateJobs] = activeJobs;
+  const result = db
+    .prepare(
+      `UPDATE telegram_jobs
+       SET payload = ?,
+           next_run_at = CURRENT_TIMESTAMP,
+           last_error = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    )
+    .run(JSON.stringify(payload), jobToUpdate.id);
+
+  if (duplicateJobs.length > 0) {
+    const placeholders = duplicateJobs.map(() => '?').join(', ');
+    db.prepare(`DELETE FROM telegram_jobs WHERE id IN (${placeholders})`).run(...duplicateJobs.map((job) => job.id));
+  }
+
+  return result;
+}
+
 async function runTelegramJob(client: TelegramClient, job: TelegramJobRow) {
   const payload = JSON.parse(job.payload) as TelegramJobPayload;
 

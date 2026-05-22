@@ -1,6 +1,6 @@
 import type { AppDatabase } from '../db/database.js';
 import { formatMovieCaption } from '../telegram/telegram.formatter.js';
-import { enqueueTelegramJob } from '../telegram/telegram.queue.js';
+import { enqueueTelegramJob, upsertActiveTelegramSendJob } from '../telegram/telegram.queue.js';
 import { createMovieWithLinks, deleteMovie, getMovieWithLinks, listMovies, updateMovieWithLinks } from './media.repository.js';
 import { MovieInputSchema } from './media.schemas.js';
 import { z } from 'zod';
@@ -76,7 +76,7 @@ export function updateMovie(db: AppDatabase, id: number, body: unknown) {
         caption: formatMovieCaption(movie)
       });
     } else if (movie.links.length > 0 && movie.posterUrl) {
-      enqueueTelegramJob(db, 'send', 'movie', movie.id, {
+      upsertActiveTelegramSendJob(db, 'movie', movie.id, {
         posterUrl: movie.posterUrl,
         caption: formatMovieCaption(movie)
       });

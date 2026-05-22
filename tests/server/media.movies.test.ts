@@ -482,6 +482,40 @@ describe('movie media API', () => {
     });
   });
 
+  it('removes pending Telegram send jobs when deleting an unposted movie before processing', async () => {
+    const response = await request(app())
+      .post('/api/movies')
+      .send({
+        title: 'Deleted Before Send',
+        year: 2026,
+        posterUrl: 'https://example.com/deleted.jpg',
+        quality: 'HD',
+        description: 'Queued but deleted',
+        links: [
+          {
+            providerName: 'Provider',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/deleted'
+          }
+        ]
+      })
+      .expect(201);
+
+    expect(getTelegramJobs()).toHaveLength(1);
+
+    db.prepare(
+      `UPDATE telegram_jobs
+       SET status = 'waiting_retry',
+           next_run_at = datetime('now', '+5 minutes')
+       WHERE entity_id = ?`
+    ).run(response.body.movie.id);
+
+    await request(app()).delete(`/api/movies/${response.body.movie.id}`).expect(204);
+
+    expect(getTelegramJobs()).toEqual([]);
+  });
+
   it('returns 400 JSON for invalid delete movie ids', async () => {
     const response = await request(app()).delete('/api/movies/not-a-number').expect(400);
 

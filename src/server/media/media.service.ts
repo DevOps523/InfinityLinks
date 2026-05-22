@@ -92,6 +92,8 @@ export function removeMovie(db: AppDatabase, id: number) {
   return db.transaction(() => {
     const movie = deleteMovie(db, id);
 
+    cancelPendingTelegramSendJobs(db, 'movie', id);
+
     if (movie?.telegramMessageId) {
       enqueueTelegramJob(db, 'delete', 'movie', movie.id, {
         messageId: movie.telegramMessageId

@@ -755,9 +755,11 @@ export function getSeasonPostData(db: AppDatabase, seasonId: number): SeasonPost
     description: row.description,
     rating: row.rating ?? undefined,
     quality: row.quality,
-    episodes: listEpisodes(db, seasonId).map((episode) => ({
-      ...episode,
-      links: listEpisodeLinks(db, episode.id)
-    }))
+    episodes: listEpisodes(db, seasonId)
+      .map((episode) => ({
+        ...episode,
+        links: listEpisodeLinks(db, episode.id)
+      }))
+      .filter((episode) => episode.links.length > 0)
   };
 }

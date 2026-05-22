@@ -37,6 +37,11 @@ function createMovieRow(db: AppDatabase, id: number, title = `Movie ${id}`) {
   db.prepare('INSERT OR IGNORE INTO movies (id, title, quality, description) VALUES (?, ?, ?, ?)').run(id, title, 'HD', 'Queued movie');
 }
 
+function createSeasonRow(db: AppDatabase, id: number) {
+  db.prepare('INSERT OR IGNORE INTO tv_shows (id, title, quality, description) VALUES (?, ?, ?, ?)').run(id, `Show ${id}`, 'HD', 'Queued show');
+  db.prepare('INSERT OR IGNORE INTO seasons (id, tv_show_id, season_number) VALUES (?, ?, ?)').run(id, id, 1);
+}
+
 function parseSqliteTimestamp(value: string) {
   return new Date(`${value.replace(' ', 'T')}Z`).getTime();
 }
@@ -368,6 +373,40 @@ describe('telegram queue', () => {
        WHERE id = ?`
     ).run(job.lastInsertRowid);
     db.prepare('DELETE FROM movies WHERE id = ?').run(movie.lastInsertRowid);
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(false);
+
+    expect(client.sendPhotoPost).not.toHaveBeenCalled();
+    expect(getJob(db)).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+      last_error: 'Entity no longer exists'
+    });
+
+    db.close();
+  });
+
+  it('does not recover or send stale running season send jobs when the season was deleted', async () => {
+    const db = setupDb();
+    const client = {
+      sendPhotoPost: vi.fn(async () => ({ messageId: 123 })),
+      editPhotoCaption: vi.fn(),
+      deleteMessage: vi.fn()
+    };
+
+    createSeasonRow(db, 8);
+    const job = enqueueTelegramJob(db, 'send', 'season', 8, {
+      posterUrl: 'https://example.com/season.jpg',
+      caption: 'Show 8 - Season 1'
+    });
+    db.prepare(
+      `UPDATE telegram_jobs
+       SET status = 'running',
+           attempts = 1,
+           updated_at = datetime('now', '-6 minutes')
+       WHERE id = ?`
+    ).run(job.lastInsertRowid);
+    db.prepare('DELETE FROM seasons WHERE id = ?').run(8);
 
     await expect(processNextTelegramJob(db, client)).resolves.toBe(false);
 

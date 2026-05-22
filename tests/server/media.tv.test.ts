@@ -22,12 +22,35 @@ function app() {
 
 function getTelegramJobs() {
   return db.prepare('SELECT * FROM telegram_jobs ORDER BY id ASC').all() as Array<{
+    id: number;
     job_type: string;
     entity_type: string;
     entity_id: number;
     payload: string;
     status: string;
   }>;
+}
+
+function createLinkedSeason(options: { posterUrl?: string | null; telegramMessageId?: number } = {}) {
+  const posterUrl = Object.hasOwn(options, 'posterUrl') ? options.posterUrl : 'https://example.com/chronos.jpg';
+  const show = db
+    .prepare(
+      `INSERT INTO tv_shows (title, year, poster_url, rating, quality, description)
+       VALUES ('Chronos', 2025, ?, 7.5, 'HD', 'Time loops')`
+    )
+    .run(posterUrl);
+  const season = db
+    .prepare('INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (?, 2, ?, ?)')
+    .run(show.lastInsertRowid, options.telegramMessageId ?? null, options.telegramMessageId ? 'posted' : 'pending');
+  const episode = db
+    .prepare('INSERT INTO episodes (season_id, episode_number) VALUES (?, 1)')
+    .run(season.lastInsertRowid);
+
+  return {
+    showId: Number(show.lastInsertRowid),
+    seasonId: Number(season.lastInsertRowid),
+    episodeId: Number(episode.lastInsertRowid)
+  };
 }
 
 beforeEach(() => {
@@ -122,14 +145,16 @@ describe('tv media API', () => {
 
     const response = await request(app())
       .post(`/api/episodes/${episode.lastInsertRowid}/links`)
-      .send([
-        {
-          providerName: 'Infinity Stream',
-          quality: 'HD',
-          status: 'active',
-          url: 'https://example.com/chronos/s2/e1'
-        }
-      ])
+      .send({
+        links: [
+          {
+            providerName: 'Infinity Stream',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/chronos/s2/e1'
+          }
+        ]
+      })
       .expect(201);
 
     expect(response.body.links).toEqual([
@@ -156,6 +181,188 @@ describe('tv media API', () => {
       caption: expect.stringContaining('Chronos (2025) - Season 2')
     });
     expect(JSON.parse(jobs[0].payload).caption).toContain('Episode 1');
+  });
+
+  it('does not queue a Telegram season send job when linked episodes have no show poster', async () => {
+    const { episodeId } = createLinkedSeason({ posterUrl: null });
+
+    await request(app())
+      .post(`/api/episodes/${episodeId}/links`)
+      .send({
+        links: [
+          {
+            providerName: 'Infinity Stream',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/chronos/s2/e1'
+          }
+        ]
+      })
+      .expect(201);
+
+    expect(getTelegramJobs()).toHaveLength(0);
+  });
+
+  it('updates an existing pending season send and filters unlinked episodes from the caption', async () => {
+    const { seasonId, episodeId } = createLinkedSeason();
+    db.prepare('INSERT INTO episodes (season_id, episode_number) VALUES (?, 2)').run(seasonId);
+
+    await request(app())
+      .post(`/api/episodes/${episodeId}/links`)
+      .send({
+        links: [
+          {
+            providerName: 'Infinity Stream',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/chronos/s2/e1'
+          }
+        ]
+      })
+      .expect(201);
+
+    await request(app())
+      .post(`/api/episodes/${episodeId}/links`)
+      .send({
+        links: [
+          {
+            providerName: 'Mirror',
+            quality: 'Full HD',
+            status: 'active',
+            url: 'https://example.com/chronos/s2/e1/mirror'
+          }
+        ]
+      })
+      .expect(201);
+
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      job_type: 'send',
+      entity_type: 'season',
+      entity_id: seasonId,
+      status: 'queued'
+    });
+    const payload = JSON.parse(jobs[0].payload) as { caption: string };
+    expect(payload.caption).toContain('Mirror');
+    expect(payload.caption).not.toContain('Episode 2');
+  });
+
+  it('queues a posted season edit when later episode links are added', async () => {
+    const { seasonId, episodeId } = createLinkedSeason({ telegramMessageId: 456 });
+
+    await request(app())
+      .post(`/api/episodes/${episodeId}/links`)
+      .send({
+        links: [
+          {
+            providerName: 'Infinity Stream',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/chronos/s2/e1'
+          }
+        ]
+      })
+      .expect(201);
+
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      job_type: 'edit',
+      entity_type: 'season',
+      entity_id: seasonId,
+      status: 'queued'
+    });
+    expect(JSON.parse(jobs[0].payload)).toMatchObject({
+      messageId: 456,
+      caption: expect.stringContaining('Infinity Stream')
+    });
+  });
+
+  it('queues a posted season delete when the last episode link is deleted', async () => {
+    const { seasonId, episodeId } = createLinkedSeason({ telegramMessageId: 456 });
+    const link = db
+      .prepare(
+        "INSERT INTO episode_links (episode_id, provider_name, quality, status, url) VALUES (?, 'Infinity Stream', 'HD', 'active', 'https://example.com/chronos/s2/e1')"
+      )
+      .run(episodeId);
+
+    await request(app()).delete(`/api/episode-links/${link.lastInsertRowid}`).expect(204);
+
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      job_type: 'delete',
+      entity_type: 'season',
+      entity_id: seasonId,
+      status: 'queued'
+    });
+    expect(JSON.parse(jobs[0].payload)).toEqual({ messageId: 456 });
+  });
+
+  it('cancels stale pending season deletes when content becomes publishable again', async () => {
+    const { seasonId, episodeId } = createLinkedSeason({ telegramMessageId: 456 });
+    db.prepare(
+      "INSERT INTO telegram_jobs (job_type, entity_type, entity_id, payload, status) VALUES ('delete', 'season', ?, '{\"messageId\":456}', 'queued')"
+    ).run(seasonId);
+
+    await request(app())
+      .post(`/api/episodes/${episodeId}/links`)
+      .send({
+        links: [
+          {
+            providerName: 'Infinity Stream',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/chronos/s2/e1'
+          }
+        ]
+      })
+      .expect(201);
+
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      job_type: 'edit',
+      entity_type: 'season',
+      entity_id: seasonId
+    });
+  });
+
+  it('cancels pending season sends and queues delete when a posted season is deleted', async () => {
+    const { seasonId } = createLinkedSeason({ telegramMessageId: 456 });
+    db.prepare(
+      "INSERT INTO telegram_jobs (job_type, entity_type, entity_id, payload, status) VALUES ('send', 'season', ?, '{\"posterUrl\":\"https://example.com/old.jpg\",\"caption\":\"Old\"}', 'queued')"
+    ).run(seasonId);
+
+    await request(app()).delete(`/api/seasons/${seasonId}`).expect(204);
+
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      job_type: 'delete',
+      entity_type: 'season',
+      entity_id: seasonId
+    });
+    expect(JSON.parse(jobs[0].payload)).toEqual({ messageId: 456 });
+  });
+
+  it('cancels pending season sends and queues deletes when a TV show is deleted', async () => {
+    const { showId, seasonId } = createLinkedSeason({ telegramMessageId: 456 });
+    db.prepare(
+      "INSERT INTO telegram_jobs (job_type, entity_type, entity_id, payload, status) VALUES ('send', 'season', ?, '{\"posterUrl\":\"https://example.com/old.jpg\",\"caption\":\"Old\"}', 'queued')"
+    ).run(seasonId);
+
+    await request(app()).delete(`/api/tv-shows/${showId}`).expect(204);
+
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      job_type: 'delete',
+      entity_type: 'season',
+      entity_id: seasonId
+    });
+    expect(JSON.parse(jobs[0].payload)).toEqual({ messageId: 456 });
   });
 
   it('returns 400 JSON for invalid TV show ids and bodies', async () => {

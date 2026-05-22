@@ -1,6 +1,11 @@
 import type { AppDatabase } from '../db/database.js';
 import { formatMovieCaption, formatSeasonCaption } from '../telegram/telegram.formatter.js';
-import { cancelPendingTelegramSendJobs, enqueueTelegramJob, upsertActiveTelegramSendJob } from '../telegram/telegram.queue.js';
+import {
+  cancelPendingTelegramDeleteJobs,
+  cancelPendingTelegramSendJobs,
+  enqueueTelegramJob,
+  upsertActiveTelegramSendJob
+} from '../telegram/telegram.queue.js';
 import {
   addEpisodeLinks,
   bulkCreateEpisodes,
@@ -50,13 +55,26 @@ const SearchQuerySchema = z
   })
   .strict();
 
+const EpisodeLinksBodySchema = z.union([
+  LinkInputSchema.array(),
+  z
+    .object({
+      links: LinkInputSchema.array()
+    })
+    .strict()
+]).transform((value) => (Array.isArray(value) ? value : value.links));
+
 function hasLinkedEpisode(postData: SeasonPostData) {
   return postData.episodes.some((episode) => episode.links.length > 0);
 }
 
 function buildSeasonPayload(postData: SeasonPostData) {
+  if (!postData.posterUrl) {
+    return undefined;
+  }
+
   return {
-    posterUrl: postData.posterUrl ?? '',
+    posterUrl: postData.posterUrl,
     caption: formatSeasonCaption(postData)
   };
 }
@@ -80,6 +98,8 @@ function syncSeasonPostAfterContentChange(db: AppDatabase, seasonId: number) {
     return;
   }
 
+  cancelPendingTelegramDeleteJobs(db, 'season', seasonId);
+
   if (postData.telegramMessageId) {
     enqueueTelegramJob(db, 'edit', 'season', seasonId, {
       messageId: postData.telegramMessageId,
@@ -88,7 +108,13 @@ function syncSeasonPostAfterContentChange(db: AppDatabase, seasonId: number) {
     return;
   }
 
-  upsertActiveTelegramSendJob(db, 'season', seasonId, buildSeasonPayload(postData));
+  const payload = buildSeasonPayload(postData);
+
+  if (payload) {
+    upsertActiveTelegramSendJob(db, 'season', seasonId, payload);
+  } else {
+    cancelPendingTelegramSendJobs(db, 'season', seasonId);
+  }
 }
 
 function queueSeasonDelete(db: AppDatabase, season: Season) {
@@ -244,7 +270,7 @@ export function removeEpisode(db: AppDatabase, id: number) {
 }
 
 export function createEpisodeLinks(db: AppDatabase, episodeId: number, body: unknown) {
-  const input = LinkInputSchema.array().parse(body);
+  const input = EpisodeLinksBodySchema.parse(body);
 
   return db.transaction(() => {
     const links = addEpisodeLinks(db, episodeId, input);

@@ -59,8 +59,8 @@ function getRetryAfter(error: unknown) {
   return typeof retryAfter === 'number' && Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined;
 }
 
-function failOrphanedMovieSendJobs(db: AppDatabase) {
-  return db
+function failOrphanedSendJobs(db: AppDatabase) {
+  const failOrphanedMovies = db
     .prepare(
       `UPDATE telegram_jobs
        SET status = 'failed',
@@ -76,10 +76,28 @@ function failOrphanedMovieSendJobs(db: AppDatabase) {
          )`
     )
     .run();
+  const failOrphanedSeasons = db
+    .prepare(
+      `UPDATE telegram_jobs
+       SET status = 'failed',
+           last_error = 'Entity no longer exists',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE job_type = 'send'
+         AND entity_type = 'season'
+         AND status IN ('queued', 'waiting_retry', 'running')
+         AND NOT EXISTS (
+           SELECT 1
+           FROM seasons
+           WHERE seasons.id = telegram_jobs.entity_id
+         )`
+    )
+    .run();
+
+  return failOrphanedMovies.changes + failOrphanedSeasons.changes;
 }
 
 export function recoverStaleRunningTelegramJobs(db: AppDatabase, leaseMs = TELEGRAM_JOB_LEASE_MS) {
-  failOrphanedMovieSendJobs(db);
+  failOrphanedSendJobs(db);
 
   const cutoff = formatSqliteTimestamp(new Date(Date.now() - leaseMs));
 
@@ -184,6 +202,18 @@ export function cancelPendingTelegramSendJobs(db: AppDatabase, entityType: Teleg
     .run(entityType, entityId);
 }
 
+export function cancelPendingTelegramDeleteJobs(db: AppDatabase, entityType: TelegramEntityType, entityId: number) {
+  return db
+    .prepare(
+      `DELETE FROM telegram_jobs
+       WHERE job_type = 'delete'
+         AND entity_type = ?
+         AND entity_id = ?
+         AND status IN ('queued', 'waiting_retry')`
+    )
+    .run(entityType, entityId);
+}
+
 async function runTelegramJob(client: TelegramClient, job: TelegramJobRow) {
   const payload = JSON.parse(job.payload) as TelegramJobPayload;
 
@@ -202,7 +232,7 @@ async function runTelegramJob(client: TelegramClient, job: TelegramJobRow) {
 
 export async function processNextTelegramJob(db: AppDatabase, client: TelegramClient): Promise<boolean> {
   const job = db.transaction(() => {
-    failOrphanedMovieSendJobs(db);
+    failOrphanedSendJobs(db);
     recoverStaleRunningTelegramJobs(db);
 
     const selected = db

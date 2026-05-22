@@ -1,5 +1,5 @@
 import { Plus, Save, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 
 export type MovieLinkInput = {
   providerName: string;
@@ -28,12 +28,28 @@ function emptyLink(): MovieLinkInput {
 
 export function LinkEditorModal({ open, links, onClose, onSave }: LinkEditorModalProps) {
   const [draftLinks, setDraftLinks] = useState<MovieLinkInput[]>(links.length > 0 ? links : [emptyLink()]);
+  const [error, setError] = useState('');
+  const addButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (open) {
       setDraftLinks(links.length > 0 ? links : [emptyLink()]);
+      setError('');
     }
   }, [links, open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    window.setTimeout(() => addButtonRef.current?.focus(), 0);
+
+    return () => {
+      previousFocus?.focus();
+    };
+  }, [open]);
 
   if (!open) {
     return null;
@@ -50,12 +66,41 @@ export function LinkEditorModal({ open, links, onClose, onSave }: LinkEditorModa
     });
   }
 
+  function handleSave() {
+    const nonEmptyLinks = draftLinks.filter((link) => link.providerName.trim() || link.url.trim());
+    const hasPartialLink = nonEmptyLinks.some((link) => !link.providerName.trim() || !link.url.trim());
+
+    if (hasPartialLink) {
+      setError('Each saved link needs both a provider and URL.');
+      return;
+    }
+
+    onSave(
+      nonEmptyLinks.map((link) => ({
+        ...link,
+        providerName: link.providerName.trim(),
+        url: link.url.trim()
+      }))
+    );
+  }
+
+  function handleKeyDown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      onClose();
+    }
+  }
+
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="links-title">
+      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="links-title" onKeyDown={handleKeyDown}>
         <div className="modal__header">
           <h2 id="links-title">Streaming links</h2>
-          <button className="button button--secondary" type="button" onClick={() => setDraftLinks((current) => [...current, emptyLink()])}>
+          <button
+            className="button button--secondary"
+            type="button"
+            ref={addButtonRef}
+            onClick={() => setDraftLinks((current) => [...current, emptyLink()])}
+          >
             <Plus aria-hidden="true" size={16} />
             Add link
           </button>
@@ -92,15 +137,12 @@ export function LinkEditorModal({ open, links, onClose, onSave }: LinkEditorModa
             </div>
           ))}
         </div>
+        {error ? <p className="field-error">{error}</p> : null}
         <div className="modal__actions">
           <button className="button button--secondary" type="button" onClick={onClose}>
             Cancel
           </button>
-          <button
-            className="button button--primary"
-            type="button"
-            onClick={() => onSave(draftLinks.filter((link) => link.providerName.trim() || link.url.trim()))}
-          >
+          <button className="button button--primary" type="button" onClick={handleSave}>
             <Save aria-hidden="true" size={16} />
             Save links
           </button>

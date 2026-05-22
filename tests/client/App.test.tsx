@@ -1,17 +1,23 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/client/App';
+import { TmdbSearch } from '../../src/client/components/TmdbSearch';
 
 const fetchMock = vi.fn();
 
 beforeEach(() => {
+  vi.useRealTimers();
   fetchMock.mockReset();
   fetchMock.mockResolvedValue({
     ok: true,
     json: async () => ({ movies: [] })
   });
   vi.stubGlobal('fetch', fetchMock);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('App', () => {
@@ -33,5 +39,90 @@ describe('App', () => {
     fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
 
     expect(screen.getByRole('heading', { name: /^add movie$/i })).toBeInTheDocument();
+  });
+
+  it('shows action menu edit state and cancels delete confirmation without deleting', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/movies' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => ({
+            movies: [
+              {
+                id: 7,
+                title: 'Arrival',
+                year: 2016,
+                description: 'First contact'
+              }
+            ]
+          })
+        };
+      }
+
+      return {
+        ok: true,
+        status: 204,
+        json: async () => ({})
+      };
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText('Arrival')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /open action menu/i }));
+
+    expect(screen.getByRole('menuitem', { name: /edit unavailable until movie editing is added/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole('menuitem', { name: /^delete$/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /delete movie/i });
+    expect(within(dialog).getByText(/delete "arrival" permanently/i)).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /cancel/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /delete movie/i })).not.toBeInTheDocument());
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/movies/7', expect.objectContaining({ method: 'DELETE' }));
+  });
+
+  it('does not reopen TMDB results immediately after selecting a result', async () => {
+    vi.useFakeTimers();
+    const onSelect = vi.fn();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            tmdbId: 27205,
+            title: 'Inception',
+            year: 2010,
+            description: 'Dream layers'
+          }
+        ]
+      })
+    });
+
+    render(<TmdbSearch onSelect={onSelect} />);
+
+    fireEvent.change(screen.getByRole('searchbox', { name: /tmdb search/i }), { target: { value: 'ince' } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(351);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /inception/i }));
+
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tmdbId: 27205,
+        title: 'Inception'
+      })
+    );
+    expect(screen.queryByLabelText(/tmdb movie results/i)).not.toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText(/tmdb movie results/i)).not.toBeInTheDocument();
   });
 });

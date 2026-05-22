@@ -1,5 +1,5 @@
 import { Plus, Search } from 'lucide-react';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { apiJson } from '../api/http';
 import { ActionMenu } from '../components/ActionMenu';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -26,6 +26,8 @@ export function MoviesPage({ onAddMovie }: MoviesPageProps) {
   const [error, setError] = useState('');
   const [movieToDelete, setMovieToDelete] = useState<Movie | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const requestIdRef = useRef(0);
+  const mountedRef = useRef(false);
 
   const listUrl = useMemo(() => {
     const params = new URLSearchParams();
@@ -40,23 +42,52 @@ export function MoviesPage({ onAddMovie }: MoviesPageProps) {
     return query ? `/api/movies?${query}` : '/api/movies';
   }, [appliedFilters]);
 
-  async function loadMovies() {
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      requestIdRef.current += 1;
+    };
+  }, []);
+
+  const loadMovies = useCallback(async (url = listUrl, signal?: AbortSignal) => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    if (!mountedRef.current || signal?.aborted) {
+      return;
+    }
+
     setIsLoading(true);
     setError('');
 
     try {
-      const payload = await apiJson<{ movies: Movie[] }>(listUrl);
+      const payload = await apiJson<{ movies: Movie[] }>(url, { signal });
+      if (!mountedRef.current || signal?.aborted || requestId !== requestIdRef.current) {
+        return;
+      }
       setMovies(payload?.movies ?? []);
     } catch (loadError) {
+      if ((loadError as { name?: string }).name === 'AbortError' || signal?.aborted || requestId !== requestIdRef.current || !mountedRef.current) {
+        return;
+      }
       setError(loadError instanceof Error ? loadError.message : 'Unable to load movies.');
     } finally {
+      if (!mountedRef.current || signal?.aborted || requestId !== requestIdRef.current) {
+        return;
+      }
       setIsLoading(false);
     }
-  }
+  }, [listUrl]);
 
   useEffect(() => {
-    void loadMovies();
-  }, [listUrl]);
+    const controller = new AbortController();
+    void loadMovies(listUrl, controller.signal);
+
+    return () => {
+      controller.abort();
+    };
+  }, [listUrl, loadMovies]);
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -71,13 +102,21 @@ export function MoviesPage({ onAddMovie }: MoviesPageProps) {
     setIsDeleting(true);
     try {
       await apiJson(`/api/movies/${movieToDelete.id}`, { method: 'DELETE' });
+      if (!mountedRef.current) {
+        return;
+      }
       setMovieToDelete(null);
       showToast('Movie deleted.');
       await loadMovies();
     } catch (deleteError) {
+      if (!mountedRef.current) {
+        return;
+      }
       showToast(deleteError instanceof Error ? deleteError.message : 'Delete failed.', 'error');
     } finally {
-      setIsDeleting(false);
+      if (mountedRef.current) {
+        setIsDeleting(false);
+      }
     }
   }
 

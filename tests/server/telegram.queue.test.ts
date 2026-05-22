@@ -204,6 +204,7 @@ describe('telegram queue', () => {
 
     createMovieRow(db, 7, 'Editable movie');
     createSeasonRow(db, 8);
+    db.prepare("UPDATE seasons SET telegram_message_id = 456, post_status = 'posted' WHERE id = ?").run(8);
     enqueueTelegramJob(db, 'edit', 'movie', 7, {
       messageId: 123,
       caption: 'Updated caption'

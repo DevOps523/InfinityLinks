@@ -45,7 +45,7 @@ type TelegramJobRow = {
 };
 
 type EntityPostStatusUpdate = {
-  messageId?: number;
+  messageId?: number | null;
   postStatus: string;
 };
 
@@ -74,7 +74,7 @@ export function updateEntityPostStatus(
 ) {
   const tableName = entityType === 'movie' ? 'movies' : 'seasons';
 
-  if (values.messageId !== undefined) {
+  if ('messageId' in values) {
     return db
       .prepare(
         `UPDATE ${tableName}
@@ -366,7 +366,8 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
     const result = await runTelegramJob(client, job);
     db.transaction(() => {
       updateEntityPostStatus(db, job.entity_type, job.entity_id, {
-        messageId: result?.messageId,
+        ...(job.job_type === 'delete' ? { messageId: null } : {}),
+        ...(result?.messageId !== undefined ? { messageId: result.messageId } : {}),
         postStatus: getPostStatusForJobType(job.job_type)
       });
       db.prepare(

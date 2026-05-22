@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AppConfig } from './config.js';
 import type { AppDatabase } from './db/database.js';
+import { createMediaRouter } from './media/media.routes.js';
 import { createTmdbRouter } from './tmdb/tmdb.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -22,6 +23,7 @@ export function createApp(options: CreateAppOptions = {}) {
   });
 
   if (options.db && options.config) {
+    app.use('/api', createMediaRouter(options.db));
     app.use('/api/tmdb', createTmdbRouter(options.db, options.config));
   }
 

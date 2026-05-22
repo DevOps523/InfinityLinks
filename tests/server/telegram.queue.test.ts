@@ -33,6 +33,20 @@ function getJobs(db: AppDatabase) {
   }>;
 }
 
+function getMoviePostState(db: AppDatabase, id: number) {
+  return db.prepare('SELECT telegram_message_id, post_status FROM movies WHERE id = ?').get(id) as {
+    telegram_message_id: number | null;
+    post_status: string;
+  };
+}
+
+function getSeasonPostState(db: AppDatabase, id: number) {
+  return db.prepare('SELECT telegram_message_id, post_status FROM seasons WHERE id = ?').get(id) as {
+    telegram_message_id: number | null;
+    post_status: string;
+  };
+}
+
 function createMovieRow(db: AppDatabase, id: number, title = `Movie ${id}`) {
   db.prepare('INSERT OR IGNORE INTO movies (id, title, quality, description) VALUES (?, ?, ?, ?)').run(id, title, 'HD', 'Queued movie');
 }
@@ -50,7 +64,7 @@ describe('telegram queue', () => {
   it('processes one queued send job successfully and marks it succeeded', async () => {
     const db = setupDb();
     const client = {
-      sendPhotoPost: vi.fn(async () => ({ messageId: 123 })),
+      sendPhotoPost: vi.fn(async () => ({ messageId: 777 })),
       editPhotoCaption: vi.fn(),
       deleteMessage: vi.fn()
     };
@@ -73,6 +87,10 @@ describe('telegram queue', () => {
       status: 'succeeded',
       attempts: 1,
       last_error: null
+    });
+    expect(getMoviePostState(db, 7)).toEqual({
+      telegram_message_id: 777,
+      post_status: 'posted'
     });
 
     db.close();
@@ -102,6 +120,10 @@ describe('telegram queue', () => {
     expect(job.attempts).toBe(1);
     expect(job.last_error).toContain('Too Many Requests');
     expect(parseSqliteTimestamp(job.next_run_at)).toBeGreaterThanOrEqual(before + 60_000 - 1_000);
+    expect(getMoviePostState(db, 7)).toEqual({
+      telegram_message_id: null,
+      post_status: 'pending'
+    });
 
     db.close();
   });
@@ -180,6 +202,8 @@ describe('telegram queue', () => {
       deleteMessage: vi.fn(async () => undefined)
     };
 
+    createMovieRow(db, 7, 'Editable movie');
+    createSeasonRow(db, 8);
     enqueueTelegramJob(db, 'edit', 'movie', 7, {
       messageId: 123,
       caption: 'Updated caption'
@@ -199,6 +223,14 @@ describe('telegram queue', () => {
       messageId: 456
     });
     expect(client.sendPhotoPost).not.toHaveBeenCalled();
+    expect(getMoviePostState(db, 7)).toEqual({
+      telegram_message_id: null,
+      post_status: 'posted'
+    });
+    expect(getSeasonPostState(db, 8)).toEqual({
+      telegram_message_id: null,
+      post_status: 'deleted'
+    });
 
     db.close();
   });
@@ -225,6 +257,10 @@ describe('telegram queue', () => {
       status: 'failed',
       attempts: 1,
       last_error: 'Telegram is unavailable'
+    });
+    expect(getMoviePostState(db, 7)).toEqual({
+      telegram_message_id: null,
+      post_status: 'failed'
     });
 
     db.close();

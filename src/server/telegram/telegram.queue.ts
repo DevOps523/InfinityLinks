@@ -39,7 +39,14 @@ export type TelegramJobPayload = TelegramJobInput['payload'];
 type TelegramJobRow = {
   id: number;
   job_type: TelegramJobType;
+  entity_type: TelegramEntityType;
+  entity_id: number;
   payload: string;
+};
+
+type EntityPostStatusUpdate = {
+  messageId?: number;
+  postStatus: string;
 };
 
 function formatSqliteTimestamp(date: Date) {
@@ -57,6 +64,44 @@ function getRetryAfter(error: unknown) {
 
   const retryAfter = (error as { retryAfter: unknown }).retryAfter;
   return typeof retryAfter === 'number' && Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined;
+}
+
+export function updateEntityPostStatus(
+  db: AppDatabase,
+  entityType: TelegramEntityType,
+  entityId: number,
+  values: EntityPostStatusUpdate
+) {
+  const tableName = entityType === 'movie' ? 'movies' : 'seasons';
+
+  if (values.messageId !== undefined) {
+    return db
+      .prepare(
+        `UPDATE ${tableName}
+         SET telegram_message_id = ?,
+             post_status = ?,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      )
+      .run(values.messageId, values.postStatus, entityId);
+  }
+
+  return db
+    .prepare(
+      `UPDATE ${tableName}
+       SET post_status = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    )
+    .run(values.postStatus, entityId);
+}
+
+function getPostStatusForJobType(jobType: TelegramJobType) {
+  if (jobType === 'delete') {
+    return 'deleted';
+  }
+
+  return 'posted';
 }
 
 function failOrphanedSendJobs(db: AppDatabase) {
@@ -270,8 +315,7 @@ async function runTelegramJob(client: TelegramClient, job: TelegramJobRow) {
   const payload = JSON.parse(job.payload) as TelegramJobPayload;
 
   if (job.job_type === 'send') {
-    await client.sendPhotoPost(payload as { posterUrl: string; caption: string });
-    return;
+    return client.sendPhotoPost(payload as { posterUrl: string; caption: string });
   }
 
   if (job.job_type === 'edit') {
@@ -289,7 +333,7 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
 
     const selected = db
       .prepare(
-        `SELECT id, job_type, payload
+        `SELECT id, job_type, entity_type, entity_id, payload
          FROM telegram_jobs
          WHERE status IN ('queued', 'waiting_retry')
            AND next_run_at <= CURRENT_TIMESTAMP
@@ -319,14 +363,20 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
   }
 
   try {
-    await runTelegramJob(client, job);
-    db.prepare(
-      `UPDATE telegram_jobs
-       SET status = 'succeeded',
-           last_error = NULL,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`
-    ).run(job.id);
+    const result = await runTelegramJob(client, job);
+    db.transaction(() => {
+      updateEntityPostStatus(db, job.entity_type, job.entity_id, {
+        messageId: result?.messageId,
+        postStatus: getPostStatusForJobType(job.job_type)
+      });
+      db.prepare(
+        `UPDATE telegram_jobs
+         SET status = 'succeeded',
+             last_error = NULL,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      ).run(job.id);
+    })();
     return true;
   } catch (error) {
     const message = getErrorMessage(error);
@@ -344,13 +394,18 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
       return false;
     }
 
-    db.prepare(
-      `UPDATE telegram_jobs
-       SET status = 'failed',
-           last_error = ?,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`
-    ).run(message, job.id);
+    db.transaction(() => {
+      updateEntityPostStatus(db, job.entity_type, job.entity_id, {
+        postStatus: 'failed'
+      });
+      db.prepare(
+        `UPDATE telegram_jobs
+         SET status = 'failed',
+             last_error = ?,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      ).run(message, job.id);
+    })();
     return false;
   }
 }

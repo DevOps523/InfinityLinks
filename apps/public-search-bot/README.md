@@ -40,6 +40,7 @@ PUBLIC_SEARCH_PORT=3001
 ```
 
 Keep `PUBLIC_SEARCH_HOST=127.0.0.1` for normal VPS deployments so the Node service is reachable only through the local reverse proxy.
+The `data/` folder is included as an empty placeholder; the SQLite database file is created there at runtime and is ignored by git.
 
 ## Sync From Local Admin
 

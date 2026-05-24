@@ -1,5 +1,7 @@
 .env
 .env.*
 dist/
-data/
+data/*
+!data/
+!data/.gitkeep
 node_modules/

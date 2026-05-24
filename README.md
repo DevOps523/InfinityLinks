@@ -39,7 +39,7 @@ InfinityLinks is a local admin app for saving movie and TV streaming links and p
 
 ## Public Search Bot / VPS Setup
 
-The InfinityLinks admin app should stay private on your local machine. Only the separate public search bot service needs to run online on a VPS.
+The InfinityLinks admin app should stay private on your local machine. For VPS deployment, use the standalone public search bot app in `apps/public-search-bot/`; the VPS does not need the full private admin app.
 
 Public Telegram users interact with the bot by sending `/start`, then `/search <Movie or TV Show>`. Before search results are shown, the bot checks whether the user joined [@infinitylinks65](https://t.me/infinitylinks65). If the user has not joined, the bot tells them to join the channel and come back before using `/search`. Add the public bot as an admin in [@infinitylinks65](https://t.me/infinitylinks65) so it can check membership.
 
@@ -49,43 +49,28 @@ Only active links and content that has already been posted to the Telegram chann
 
 Sync is triggered from the local admin app on the `Public Search` page. The `Sync Public Search` button exports the current public catalog from the private local database and posts it to the VPS sync endpoint. In the local admin app's `.env`, set `PUBLIC_SEARCH_SYNC_URL` to the VPS `/api/sync` URL and use the same `PUBLIC_SEARCH_SYNC_TOKEN` value that the VPS service uses.
 
-Create the VPS service environment from `.env.public-search.example`. The service loads `.env` by default, so copy the example to `.env` on the VPS, inject these variables through your process manager, or set `DOTENV_CONFIG_PATH=.env.public-search` if you keep a separate public-search env file.
-
-```env
-PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
-PUBLIC_SEARCH_SYNC_TOKEN=replace_with_secret_sync_token
-PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
-PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
-PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
-PUBLIC_SEARCH_PORT=3001
-```
-
-Run the VPS bot service in development:
+Copy or deploy only `apps/public-search-bot/` to the VPS, then run the standalone app's local commands from that directory. Use Node 22.x because the standalone package requires Node `>=22 <24`.
 
 ```sh
-npm run public-search:dev
+npm install
+npm run build
+npm start
 ```
 
-Build and start the VPS bot service for production:
+Create the VPS service environment from `apps/public-search-bot/.env.example`. The standalone service loads `.env` by default, so copy the example to `.env` on the VPS or inject these variables through your process manager.
 
-```sh
-npm run build:public-search
-npm run public-search:start
-```
-
-For deployment, put the public search service behind a local reverse proxy such as Nginx or Caddy. Configure the proxy to overwrite or sanitize `X-Forwarded-For`; the Express app trusts loopback proxy headers so sync rate limits use the forwarded client IP only when the request comes through that local proxy.
+Full VPS setup details, including reverse proxy and process manager notes, are in [`apps/public-search-bot/README.md`](apps/public-search-bot/README.md).
 
 ### Local-to-VPS Deployment Configuration
 
 Use this split when deploying from your private local admin app to the public VPS bot service.
 
-1. Prepare the VPS repo:
+1. Prepare the standalone VPS app:
 
    ```sh
-   git clone <your-repo-url> infinitylinks
-   cd infinitylinks
+   cd apps/public-search-bot
    npm install
-   cp .env.public-search.example .env
+   cp .env.example .env
    ```
 
 2. Configure the VPS `.env` for the public bot service:
@@ -104,8 +89,8 @@ Use this split when deploying from your private local admin app to the public VP
 3. Build and run the VPS service:
 
    ```sh
-   npm run build:public-search
-   npm run public-search:start
+   npm run build
+   npm start
    ```
 
    For a process manager such as systemd or PM2, run the same start command with the VPS `.env` variables loaded. Keep the service listening on `127.0.0.1:3001` behind your reverse proxy.
@@ -157,7 +142,10 @@ Use this split when deploying from your private local admin app to the public VP
 7. Quick checks:
 
    ```sh
-   npm run build:public-search
+   cd apps/public-search-bot
+   npm run build
+   npm test
+   cd ../..
    npm run build
    npm test
    ```

@@ -147,6 +147,37 @@ describe('public search bot formatter', () => {
     ]);
   });
 
+  it('splits movie result keyboards before Telegram limits are exceeded', () => {
+    const results: PublicSearchResult[] = [
+      {
+        type: 'movie',
+        id: 1,
+        title: 'Provider Limit',
+        year: 2026,
+        channelPostUrl: 'https://t.me/infinitylinks65/401',
+        providers: Array.from({ length: 39 }, (_, index) => ({
+          providerName: `Host${index + 1}`,
+          quality: 'HD',
+          url: `https://providers.example/provider-limit-${index + 1}`,
+          sortOrder: index + 1
+        }))
+      }
+    ];
+
+    const messages = formatSearchResults(results, handles);
+
+    expect(messages).toHaveLength(2);
+    for (const message of messages) {
+      const rows = message.replyMarkup?.inline_keyboard ?? [];
+
+      expect(message.text).toContain('Provider Limit (2026)');
+      expect(rows.length).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_ROWS);
+      expect(rows.reduce((total, row) => total + row.length, 0)).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_BUTTONS);
+      expect(rows[0]).toEqual([{ text: 'Original Post', url: 'https://t.me/infinitylinks65/401' }]);
+      expect(rows.at(-1)).toEqual(handleButtonRow);
+    }
+  });
+
   it('formats TV results with season callback buttons', () => {
     const results: PublicSearchResult[] = [
       {
@@ -218,6 +249,42 @@ describe('public search bot formatter', () => {
       ],
       [{ text: 'Season 7', callback_data: 'season:207' }],
       handleButtonRow
+    ]);
+  });
+
+  it('splits TV season keyboards before Telegram limits are exceeded', () => {
+    const results: PublicSearchResult[] = [
+      {
+        type: 'tv',
+        id: 10,
+        title: 'Season Limit',
+        year: 2026,
+        seasons: Array.from({ length: 40 }, (_, index) => ({
+          id: 300 + index,
+          seasonNumber: index + 1
+        }))
+      }
+    ];
+
+    const messages = formatSearchResults(results, handles);
+
+    expect(messages).toHaveLength(2);
+    for (const message of messages) {
+      const rows = message.replyMarkup?.inline_keyboard ?? [];
+
+      expect(message.text).toContain('Season Limit (2026)');
+      expect(rows.length).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_ROWS);
+      expect(rows.reduce((total, row) => total + row.length, 0)).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_BUTTONS);
+      expect(rows.at(-1)).toEqual(handleButtonRow);
+    }
+    expect(messages[0].replyMarkup?.inline_keyboard.at(-2)?.at(-1)).toEqual({
+      text: 'Season 36',
+      callback_data: 'season:335'
+    });
+    expect(messages[1].replyMarkup?.inline_keyboard[0]).toEqual([
+      { text: 'Season 37', callback_data: 'season:336' },
+      { text: 'Season 38', callback_data: 'season:337' },
+      { text: 'Season 39', callback_data: 'season:338' }
     ]);
   });
 

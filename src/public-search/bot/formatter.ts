@@ -67,7 +67,7 @@ export function formatUnavailableMessage(): PublicBotMessage {
 }
 
 export function formatSearchResults(results: PublicSearchResult[], handles: PublicBotHandles): PublicBotMessage[] {
-  return results.map((result) => {
+  return results.flatMap((result) => {
     if (result.type === 'movie') {
       return formatMovieResult(result, handles);
     }
@@ -142,46 +142,49 @@ export function formatSeasonDetails(details: PublicSeasonDetails, handles: Publi
 }
 
 function formatMovieResult(result: Extract<PublicSearchResult, { type: 'movie' }>, handles: PublicBotHandles) {
-  return {
-    text: [
-      'Movie',
-      formatTitle(result.title, result.year),
-      '',
-      'Providers:',
-      '',
-      formatHandles(handles)
-    ].join('\n'),
-    replyMarkup: toReplyMarkup([
-      ...originalPostButtonRows(result.channelPostUrl),
-      ...chunkButtons(providerButtons(result.providers), MOVIE_PROVIDER_BUTTONS_PER_ROW),
-      ...handleButtonRows(handles)
-    ])
-  };
+  const text = [
+    'Movie',
+    formatTitle(result.title, result.year),
+    '',
+    'Providers:',
+    '',
+    formatHandles(handles)
+  ].join('\n');
+  const prefixRows = originalPostButtonRows(result.channelPostUrl);
+  const suffixRows = handleButtonRows(handles);
+
+  return splitKeyboardRows(
+    chunkButtons(providerButtons(result.providers), MOVIE_PROVIDER_BUTTONS_PER_ROW),
+    prefixRows,
+    suffixRows
+  ).map((keyboardRows) => ({
+    text,
+    replyMarkup: toReplyMarkup(keyboardRows)
+  }));
 }
 
 function formatTvResult(result: Extract<PublicSearchResult, { type: 'tv' }>, handles: PublicBotHandles) {
-  return {
-    text: [
-      'TV Show',
-      formatTitle(result.title, result.year),
-      '',
-      'Choose a season:',
-      '',
-      formatHandles(handles)
-    ].join('\n'),
-    replyMarkup: toReplyMarkup(
-      [
-        ...chunkButtons(
-          result.seasons.map((season) => ({
-            text: `Season ${season.seasonNumber}`,
-            callback_data: encodeSeasonCallback(season.id)
-          })),
-          TV_SEASON_BUTTONS_PER_ROW
-        ),
-        ...handleButtonRows(handles)
-      ]
-    )
-  };
+  const text = [
+    'TV Show',
+    formatTitle(result.title, result.year),
+    '',
+    'Choose a season:',
+    '',
+    formatHandles(handles)
+  ].join('\n');
+  const suffixRows = handleButtonRows(handles);
+  const seasonRows = chunkButtons(
+    result.seasons.map((season) => ({
+      text: `Season ${season.seasonNumber}`,
+      callback_data: encodeSeasonCallback(season.id)
+    })),
+    TV_SEASON_BUTTONS_PER_ROW
+  );
+
+  return splitKeyboardRows(seasonRows, [], suffixRows).map((keyboardRows) => ({
+    text,
+    replyMarkup: toReplyMarkup(keyboardRows)
+  }));
 }
 
 function formatTitle(title: string, year?: number) {
@@ -214,6 +217,29 @@ function handleButtonRows(handles: PublicBotHandles): InlineKeyboardButton[][] {
 
 function handleUrl(handle: string): string {
   return `https://t.me/${handle.replace(/^@/, '')}`;
+}
+
+function splitKeyboardRows(
+  contentRows: InlineKeyboardButton[][],
+  prefixRows: InlineKeyboardButton[][],
+  suffixRows: InlineKeyboardButton[][]
+): InlineKeyboardButton[][][] {
+  const chunks: InlineKeyboardButton[][][] = [];
+  let currentRows: InlineKeyboardButton[][] = [];
+
+  for (const row of contentRows) {
+    const candidateRows = [...currentRows, row];
+
+    if (currentRows.length > 0 && exceedsMessageLimits('', [...prefixRows, ...candidateRows, ...suffixRows])) {
+      chunks.push([...prefixRows, ...currentRows, ...suffixRows]);
+      currentRows = [];
+    }
+
+    currentRows.push(row);
+  }
+
+  chunks.push([...prefixRows, ...currentRows, ...suffixRows]);
+  return chunks;
 }
 
 function chunkButtons<TButton extends InlineKeyboardButton>(buttons: TButton[], size: number): TButton[][] {

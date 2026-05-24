@@ -63,6 +63,7 @@ describe('App', () => {
 
     expect(screen.getByRole('heading', { name: /^public search$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^check bot status$/i })).toBeInTheDocument();
   });
 
   it('syncs the public search catalog and shows returned counts', async () => {
@@ -163,6 +164,152 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /^sync public search$/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Public search sync failed');
+  });
+
+  it('checks the public search bot status endpoint', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/status') {
+        return {
+          ok: true,
+          json: async () => ({
+            reachable: true,
+            lastSuccessfulCheckAt: '2026-05-24T10:00:00.000Z',
+            remote: {
+              state: 'ok',
+              checkedAt: '2026-05-24T09:59:58.000Z',
+              uptimeSeconds: 120,
+              consecutiveErrorCount: 0,
+              lastError: null
+            }
+          })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^check bot status$/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/public-search/status', expect.any(Object)));
+  });
+
+  it('shows reachable OK public search bot status', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/status') {
+        return {
+          ok: true,
+          json: async () => ({
+            reachable: true,
+            lastSuccessfulCheckAt: '2026-05-24T10:00:00.000Z',
+            remote: {
+              state: 'ok',
+              checkedAt: '2026-05-24T09:59:58.000Z',
+              uptimeSeconds: 120,
+              consecutiveErrorCount: 0,
+              lastError: null
+            }
+          })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^check bot status$/i }));
+
+    expect(await screen.findByText(/^reachable$/i)).toBeInTheDocument();
+    expect(screen.getByText(new Date('2026-05-24T10:00:00.000Z').toLocaleString())).toBeInTheDocument();
+    expect(screen.getByText(/^OK$/)).toBeInTheDocument();
+  });
+
+  it('shows reachable ERROR public search bot status details', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/status') {
+        return {
+          ok: true,
+          json: async () => ({
+            reachable: true,
+            lastSuccessfulCheckAt: '2026-05-24T10:00:00.000Z',
+            remote: {
+              state: 'error',
+              checkedAt: '2026-05-24T09:59:58.000Z',
+              uptimeSeconds: 120,
+              consecutiveErrorCount: 2,
+              lastError: {
+                source: 'telegram',
+                at: '2026-05-24T09:58:00.000Z',
+                message: 'Channel lookup failed'
+              }
+            }
+          })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^check bot status$/i }));
+
+    expect(await screen.findByText(/^ERROR$/)).toBeInTheDocument();
+    expect(screen.getByText('telegram')).toBeInTheDocument();
+    expect(screen.getByText(new Date('2026-05-24T09:58:00.000Z').toLocaleString())).toBeInTheDocument();
+    expect(screen.getByText('Channel lookup failed')).toBeInTheDocument();
+  });
+
+  it('shows a safe public search bot unreachable message', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/status') {
+        return {
+          ok: false,
+          status: 502,
+          statusText: 'Bad Gateway',
+          json: async () => ({
+            reachable: false,
+            lastSuccessfulCheckAt: null,
+            error: 'Public search status is unreachable',
+            token: 'secret-token',
+            rawLog: 'connection refused'
+          })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^check bot status$/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Public search status is unreachable');
+    expect(screen.queryByText('secret-token')).not.toBeInTheDocument();
+    expect(screen.queryByText('connection refused')).not.toBeInTheDocument();
   });
 
   it('opens season management from the TV show action menu', async () => {

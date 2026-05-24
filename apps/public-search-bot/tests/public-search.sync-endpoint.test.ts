@@ -15,6 +15,7 @@ function createConfig(overrides: Partial<PublicSearchConfig> = {}): PublicSearch
   return {
     publicBotToken: 'bot-token',
     publicSearchSyncToken: 'sync-token',
+    publicSearchStatusToken: 'status-token',
     publicSearchChannelHandle: '@infinitylinks65',
     publicSearchGroupHandle: '@infinitylinks69',
     publicSearchDatabasePath: ':memory:',

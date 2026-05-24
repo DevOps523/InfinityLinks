@@ -2,11 +2,16 @@ import express from 'express';
 import { ZodError } from 'zod';
 import type { PublicSearchConfig } from './config.js';
 import type { PublicSearchDatabase } from './db/database.js';
+import { createPublicSearchStatusRouter } from './status.routes.js';
+import { createPublicSearchStatusTracker } from './status-tracker.js';
 import { createPublicSearchSyncRouter } from './sync.routes.js';
+
+type PublicSearchStatusTracker = ReturnType<typeof createPublicSearchStatusTracker>;
 
 type CreatePublicSearchAppOptions = {
   db: PublicSearchDatabase;
   config: PublicSearchConfig;
+  statusTracker?: PublicSearchStatusTracker;
 };
 
 function formatZodPath(path: Array<number | string>) {
@@ -24,9 +29,11 @@ function getErrorStatus(error: unknown) {
 
 export function createPublicSearchApp(options: CreatePublicSearchAppOptions) {
   const app = express();
+  const statusTracker = options.statusTracker ?? createPublicSearchStatusTracker();
 
   app.set('trust proxy', 'loopback');
   app.use(express.json({ limit: '5mb' }));
+  app.use('/api', createPublicSearchStatusRouter(options.config, statusTracker));
   app.use('/api', createPublicSearchSyncRouter(options.db, options.config));
 
   app.use('/api', (_req, res) => {

@@ -394,6 +394,10 @@ describe('telegram queue', () => {
       status: 'failed',
       last_error: 'Telegram delete failed'
     });
+    expect(getSeasonPostState(db, 8)).toEqual({
+      telegram_message_id: 456,
+      post_status: 'posted'
+    });
 
     db.close();
   });

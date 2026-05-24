@@ -631,9 +631,13 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
 
     db.transaction(() => {
       const failedPayload = JSON.parse(job.payload) as TelegramJobPayload;
-      updateEntityPostStatus(db, job.entity_type, job.entity_id, {
-        postStatus: 'failed'
-      });
+      const isRetainedDelete = job.job_type === 'delete' && (failedPayload as TelegramDeleteJobPayload).retainEntityState;
+
+      if (!isRetainedDelete) {
+        updateEntityPostStatus(db, job.entity_type, job.entity_id, {
+          postStatus: 'failed'
+        });
+      }
       db.prepare(
         `UPDATE telegram_jobs
          SET status = 'failed',
@@ -642,7 +646,7 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
          WHERE id = ?`
       ).run(message, job.id);
 
-      if (job.job_type === 'delete' && (failedPayload as TelegramDeleteJobPayload).retainEntityState) {
+      if (isRetainedDelete) {
         failOtherActiveSendJobs(db, job, message);
       }
     })();

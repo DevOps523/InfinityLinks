@@ -39,6 +39,60 @@ type PublicSearchStatusResponse =
       error: string;
     };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isLastError(value: unknown): value is PublicSearchLastError | null {
+  if (value === null) {
+    return true;
+  }
+
+  return (
+    isRecord(value) &&
+    typeof value.source === 'string' &&
+    typeof value.at === 'string' &&
+    typeof value.message === 'string'
+  );
+}
+
+function isRemoteStatus(value: unknown): value is PublicSearchRemoteStatus {
+  return (
+    isRecord(value) &&
+    (value.state === 'ok' || value.state === 'error') &&
+    typeof value.checkedAt === 'string' &&
+    typeof value.uptimeSeconds === 'number' &&
+    typeof value.consecutiveErrorCount === 'number' &&
+    isLastError(value.lastError)
+  );
+}
+
+function isPublicSearchStatusResponse(value: unknown): value is PublicSearchStatusResponse {
+  if (!isRecord(value) || typeof value.reachable !== 'boolean') {
+    return false;
+  }
+
+  if (value.reachable) {
+    return typeof value.lastSuccessfulCheckAt === 'string' && isRemoteStatus(value.remote);
+  }
+
+  return (
+    (typeof value.lastSuccessfulCheckAt === 'string' || value.lastSuccessfulCheckAt === null) &&
+    typeof value.error === 'string'
+  );
+}
+
+async function fetchPublicSearchStatus(): Promise<PublicSearchStatusResponse> {
+  const response = await fetch('/api/public-search/status');
+  const payload = (await response.json()) as unknown;
+
+  if (isPublicSearchStatusResponse(payload)) {
+    return payload;
+  }
+
+  throw new Error(response.ok ? 'Public search status check failed' : 'Public search status is unreachable');
+}
+
 export function PublicSearchPage() {
   const { showToast } = useToast();
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
@@ -73,11 +127,8 @@ export function PublicSearchPage() {
     setStatusError('');
 
     try {
-      const payload = await apiJson<PublicSearchStatusResponse>('/api/public-search/status');
-
-      if (payload) {
-        setStatusResult(payload);
-      }
+      const payload = await fetchPublicSearchStatus();
+      setStatusResult(payload);
     } catch (statusCheckError) {
       const message =
         statusCheckError instanceof Error ? statusCheckError.message : 'Public search status is unreachable';
@@ -171,6 +222,12 @@ export function PublicSearchPage() {
                     <dd>{lastError.message}</dd>
                   </div>
                 </>
+              ) : null}
+              {!statusResult.reachable ? (
+                <div className="public-search-status__message">
+                  <dt>Message</dt>
+                  <dd>{statusResult.error}</dd>
+                </div>
               ) : null}
             </dl>
           ) : null}

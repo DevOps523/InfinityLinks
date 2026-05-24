@@ -197,7 +197,7 @@ describe('App', () => {
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
     fireEvent.click(screen.getByRole('button', { name: /^check bot status$/i }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/public-search/status', expect.any(Object)));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/public-search/status'));
   });
 
   it('shows reachable OK public search bot status', async () => {
@@ -306,10 +306,64 @@ describe('App', () => {
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
     fireEvent.click(screen.getByRole('button', { name: /^check bot status$/i }));
 
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Public search status is unreachable');
+    expect(await screen.findByText(/^unreachable$/i)).toBeInTheDocument();
+    expect(screen.getByText('Public search status is unreachable')).toBeInTheDocument();
     expect(screen.queryByText('secret-token')).not.toBeInTheDocument();
     expect(screen.queryByText('connection refused')).not.toBeInTheDocument();
+  });
+
+  it('renders retained public search bot check time from a structured unreachable response', async () => {
+    const lastSuccessfulCheckAt = '2026-05-24T10:00:00.000Z';
+
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ movies: [] })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          reachable: true,
+          lastSuccessfulCheckAt,
+          remote: {
+            state: 'ok',
+            checkedAt: '2026-05-24T09:59:58.000Z',
+            uptimeSeconds: 120,
+            consecutiveErrorCount: 0,
+            lastError: null
+          }
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        statusText: 'Bad Gateway',
+        json: async () => ({
+          reachable: false,
+          lastSuccessfulCheckAt,
+          error: 'Public search status check failed',
+          token: 'secret-token',
+          authorization: 'Bearer secret-token'
+        })
+      });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+
+    const checkButton = screen.getByRole('button', { name: /^check bot status$/i });
+    fireEvent.click(checkButton);
+
+    expect(await screen.findByText(/^OK$/)).toBeInTheDocument();
+
+    fireEvent.click(checkButton);
+
+    expect(await screen.findByText(/^unreachable$/i)).toBeInTheDocument();
+    expect(screen.getByText(new Date(lastSuccessfulCheckAt).toLocaleString())).toBeInTheDocument();
+    expect(screen.getByText('Public search status check failed')).toBeInTheDocument();
+    expect(screen.queryByText('secret-token')).not.toBeInTheDocument();
+    expect(screen.queryByText('Bearer secret-token')).not.toBeInTheDocument();
   });
 
   it('opens season management from the TV show action menu', async () => {

@@ -5,6 +5,7 @@ import { ZodError } from 'zod';
 import type { AppConfig } from './config.js';
 import type { AppDatabase } from './db/database.js';
 import { createMediaRouter } from './media/media.routes.js';
+import { createPublicSearchRouter } from './public-search/public-search.routes.js';
 import { createTmdbRouter } from './tmdb/tmdb.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -13,6 +14,7 @@ const __dirname = path.dirname(__filename);
 type CreateAppOptions = {
   db?: AppDatabase;
   config?: AppConfig;
+  fetcher?: typeof fetch;
 };
 
 function formatZodPath(path: Array<number | string>) {
@@ -30,6 +32,7 @@ export function createApp(options: CreateAppOptions = {}) {
   if (options.db && options.config) {
     app.use('/api', createMediaRouter(options.db));
     app.use('/api/tmdb', createTmdbRouter(options.db, options.config));
+    app.use('/api', createPublicSearchRouter(options.db, options.config, options.fetcher));
   }
 
   app.use('/api', (_req, res) => {

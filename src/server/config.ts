@@ -32,6 +32,8 @@ const EnvSchema = z.object({
   DATABASE_PATH: z.string().trim().min(1).default('./data/infinitylinks.sqlite'),
   PUBLIC_SEARCH_SYNC_URL: OptionalTrimmedString,
   PUBLIC_SEARCH_SYNC_TOKEN: OptionalTrimmedString,
+  PUBLIC_SEARCH_STATUS_URL: OptionalTrimmedString,
+  PUBLIC_SEARCH_STATUS_TOKEN: OptionalTrimmedString,
   PUBLIC_SEARCH_CHANNEL_HANDLE: trimmedStringWithDefault('@infinitylinks65'),
   PUBLIC_SEARCH_GROUP_HANDLE: trimmedStringWithDefault('@infinitylinks69')
 });
@@ -45,6 +47,8 @@ export type AppConfig = {
   databasePath: string;
   publicSearchSyncUrl?: string;
   publicSearchSyncToken?: string;
+  publicSearchStatusUrl?: string;
+  publicSearchStatusToken?: string;
   publicSearchChannelHandle: string;
   publicSearchGroupHandle: string;
 };
@@ -61,6 +65,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     databasePath: parsed.DATABASE_PATH,
     publicSearchSyncUrl: parsed.PUBLIC_SEARCH_SYNC_URL,
     publicSearchSyncToken: parsed.PUBLIC_SEARCH_SYNC_TOKEN,
+    publicSearchStatusUrl: parsed.PUBLIC_SEARCH_STATUS_URL,
+    publicSearchStatusToken: parsed.PUBLIC_SEARCH_STATUS_TOKEN,
     publicSearchChannelHandle: parsed.PUBLIC_SEARCH_CHANNEL_HANDLE,
     publicSearchGroupHandle: parsed.PUBLIC_SEARCH_GROUP_HANDLE
   };

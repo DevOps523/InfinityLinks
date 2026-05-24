@@ -21,6 +21,8 @@ describe('loadConfig', () => {
       databasePath: './data/test.sqlite',
       publicSearchSyncUrl: undefined,
       publicSearchSyncToken: undefined,
+      publicSearchStatusUrl: undefined,
+      publicSearchStatusToken: undefined,
       publicSearchChannelHandle: '@infinitylinks65',
       publicSearchGroupHandle: '@infinitylinks69'
     });
@@ -61,6 +63,36 @@ describe('loadConfig', () => {
       publicSearchSyncToken: undefined,
       publicSearchChannelHandle: '@infinitylinks65',
       publicSearchGroupHandle: '@infinitylinks69'
+    });
+  });
+
+  it('accepts optional public search status configuration', () => {
+    expect(
+      loadConfig({
+        TMDB_API_KEY: 'tmdb-key',
+        TELEGRAM_BOT_TOKEN: 'telegram-token',
+        TELEGRAM_CHANNEL_ID: '@channel',
+        PUBLIC_SEARCH_STATUS_URL: 'https://search.example.com/api/status',
+        PUBLIC_SEARCH_STATUS_TOKEN: 'status-token'
+      })
+    ).toMatchObject({
+      publicSearchStatusUrl: 'https://search.example.com/api/status',
+      publicSearchStatusToken: 'status-token'
+    });
+  });
+
+  it('treats empty optional public search status values as undefined', () => {
+    expect(
+      loadConfig({
+        TMDB_API_KEY: 'tmdb-key',
+        TELEGRAM_BOT_TOKEN: 'telegram-token',
+        TELEGRAM_CHANNEL_ID: '@channel',
+        PUBLIC_SEARCH_STATUS_URL: '   ',
+        PUBLIC_SEARCH_STATUS_TOKEN: ''
+      })
+    ).toMatchObject({
+      publicSearchStatusUrl: undefined,
+      publicSearchStatusToken: undefined
     });
   });
 

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { AppConfig } from '../config.js';
 import type { AppDatabase } from '../db/database.js';
+import { checkPublicSearchStatus, PublicSearchStatusError } from './status.service.js';
 import { syncPublicSearchCatalog } from './sync.service.js';
 
 export function createPublicSearchRouter(db: AppDatabase, config: AppConfig, fetcher: typeof fetch = fetch) {
@@ -11,6 +12,24 @@ export function createPublicSearchRouter(db: AppDatabase, config: AppConfig, fet
       const result = await syncPublicSearchCatalog(db, config, fetcher);
       res.json({ sync: result });
     } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/public-search/status', async (_req, res, next) => {
+    try {
+      const status = await checkPublicSearchStatus(config, fetcher);
+      res.json(status);
+    } catch (error) {
+      if (error instanceof PublicSearchStatusError) {
+        res.status(error.statusCode).json({
+          reachable: false,
+          lastSuccessfulCheckAt: error.lastSuccessfulCheckAt,
+          error: error.message
+        });
+        return;
+      }
+
       next(error);
     }
   });

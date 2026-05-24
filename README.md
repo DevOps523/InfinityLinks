@@ -75,6 +75,95 @@ npm run public-search:start
 
 For deployment, put the public search service behind a local reverse proxy such as Nginx or Caddy. Configure the proxy to overwrite or sanitize `X-Forwarded-For`; the Express app trusts loopback proxy headers so sync rate limits use the forwarded client IP only when the request comes through that local proxy.
 
+### Local-to-VPS Deployment Configuration
+
+Use this split when deploying from your private local admin app to the public VPS bot service.
+
+1. Prepare the VPS repo:
+
+   ```sh
+   git clone <your-repo-url> infinitylinks
+   cd infinitylinks
+   npm install
+   cp .env.public-search.example .env
+   ```
+
+2. Configure the VPS `.env` for the public bot service:
+
+   ```env
+   PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
+   PUBLIC_SEARCH_SYNC_TOKEN=use_the_same_long_random_secret_as_local
+   PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
+   PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
+   PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
+   PUBLIC_SEARCH_PORT=3001
+   ```
+
+   `PUBLIC_BOT_TOKEN` is the token for the public search bot. Add that bot as an admin in [@infinitylinks65](https://t.me/infinitylinks65) so it can check whether users joined the channel.
+
+3. Build and run the VPS service:
+
+   ```sh
+   npm run build:public-search
+   npm run public-search:start
+   ```
+
+   For a process manager such as systemd or PM2, run the same start command with the VPS `.env` variables loaded. Keep the service listening on `127.0.0.1:3001` behind your reverse proxy.
+
+4. Point the VPS domain to the service. Example Nginx site:
+
+   ```nginx
+   server {
+     server_name your-vps.example.com;
+
+     location / {
+       proxy_pass http://127.0.0.1:3001;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $remote_addr;
+       proxy_set_header X-Forwarded-Proto $scheme;
+     }
+   }
+   ```
+
+   The local admin app will sync to `https://your-vps.example.com/api/sync`. Configure the proxy to overwrite `X-Forwarded-For` as shown above so sync rate limits use the real client IP.
+
+5. Configure the private local admin app `.env`:
+
+   ```env
+   TMDB_API_KEY=replace_with_your_tmdb_api_key
+   TELEGRAM_BOT_TOKEN=replace_with_your_private_channel_posting_bot_token
+   TELEGRAM_CHANNEL_ID=-1003976784492
+   HOST=127.0.0.1
+   PORT=3000
+   DATABASE_PATH=./data/infinitylinks.sqlite
+
+   PUBLIC_SEARCH_SYNC_URL=https://your-vps.example.com/api/sync
+   PUBLIC_SEARCH_SYNC_TOKEN=use_the_same_long_random_secret_as_vps
+   PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
+   PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
+   ```
+
+   The local `PUBLIC_SEARCH_SYNC_TOKEN` must exactly match the VPS `PUBLIC_SEARCH_SYNC_TOKEN`. The local app does not need to be publicly reachable.
+
+6. Sync from local to VPS:
+
+   ```sh
+   npm run dev
+   ```
+
+   Open [http://127.0.0.1:3000](http://127.0.0.1:3000), go to `Public Search`, and click `Sync Public Search`. The local app exports only active links from content already posted to the Telegram channel, then sends that catalog to the VPS `/api/sync` endpoint.
+
+7. Quick checks:
+
+   ```sh
+   npm run build:public-search
+   npm run build
+   npm test
+   ```
+
+   After syncing, open Telegram and test the public bot with `/start` and `/search <Movie or TV Show>`.
+
 ## MVP Scope
 
 - Telegram channel posting only.

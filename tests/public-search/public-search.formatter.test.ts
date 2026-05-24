@@ -43,11 +43,14 @@ describe('public search bot formatter', () => {
       ].join('\n')
     );
 
-    expect(formatNoResultsMessage('wrong name', handles).text).toContain(
-      'No results found for "wrong name". Try checking the spelling or using fewer words.'
+    expect(formatNoResultsMessage(handles).text).toBe(
+      [
+        'No results found. Try checking the spelling or using fewer words.',
+        '',
+        'Channel: @infinitylinks65',
+        'Group: @infinitylinks69'
+      ].join('\n')
     );
-    expect(formatNoResultsMessage('wrong name', handles).text).toContain('Channel: @infinitylinks65');
-    expect(formatNoResultsMessage('wrong name', handles).text).toContain('Group: @infinitylinks69');
     expect(formatUnavailableMessage().text).toBe('Search is temporarily unavailable. Please try again later.');
   });
 

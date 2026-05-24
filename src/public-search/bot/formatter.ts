@@ -41,10 +41,10 @@ export function formatJoinRequiredMessage(handles: PublicBotHandles): PublicBotM
   };
 }
 
-export function formatNoResultsMessage(query: string, handles: PublicBotHandles): PublicBotMessage {
+export function formatNoResultsMessage(handles: PublicBotHandles): PublicBotMessage {
   return {
     text: [
-      `No results found for "${query}". Try checking the spelling or using fewer words.`,
+      'No results found. Try checking the spelling or using fewer words.',
       '',
       formatHandles(handles)
     ].join('\n')

@@ -13,6 +13,15 @@ function formatZodPath(path: Array<number | string>) {
   return path.map(String).join('.');
 }
 
+function getErrorStatus(error: unknown) {
+  if (typeof error !== 'object' || error === null) {
+    return undefined;
+  }
+
+  const status = 'status' in error ? error.status : 'statusCode' in error ? error.statusCode : undefined;
+  return typeof status === 'number' && status >= 400 && status < 600 ? status : undefined;
+}
+
 export function createPublicSearchApp(options: CreatePublicSearchAppOptions) {
   const app = express();
 
@@ -35,8 +44,13 @@ export function createPublicSearchApp(options: CreatePublicSearchAppOptions) {
       return;
     }
 
-    const message = error instanceof Error ? error.message : 'Unexpected server error';
-    res.status(500).json({ error: message });
+    const status = getErrorStatus(error);
+    if (status && status < 500) {
+      res.status(status).json({ error: status === 413 ? 'Request body too large' : 'Invalid request body' });
+      return;
+    }
+
+    res.status(500).json({ error: 'Unexpected server error' });
   });
 
   return app;

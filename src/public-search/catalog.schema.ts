@@ -20,14 +20,14 @@ export const PublicSearchMovieSchema = z
     year: OptionalPositiveIntegerSchema,
     telegramMessageId: OptionalPositiveIntegerSchema,
     channelPostUrl: z.string().url().optional(),
-    providers: PublicSearchProviderSchema.array()
+    providers: PublicSearchProviderSchema.array().nonempty()
   })
   .strict();
 
 export const PublicSearchEpisodeSchema = z
   .object({
     episodeNumber: PositiveIntegerSchema,
-    providers: PublicSearchProviderSchema.array()
+    providers: PublicSearchProviderSchema.array().nonempty()
   })
   .strict();
 
@@ -37,7 +37,7 @@ export const PublicSearchSeasonSchema = z
     seasonNumber: PositiveIntegerSchema,
     telegramMessageId: OptionalPositiveIntegerSchema,
     channelPostUrl: z.string().url().optional(),
-    episodes: PublicSearchEpisodeSchema.array()
+    episodes: PublicSearchEpisodeSchema.array().nonempty()
   })
   .strict();
 
@@ -46,7 +46,7 @@ export const PublicSearchTvShowSchema = z
     id: PositiveIntegerSchema,
     title: z.string().trim().min(1),
     year: OptionalPositiveIntegerSchema,
-    seasons: PublicSearchSeasonSchema.array()
+    seasons: PublicSearchSeasonSchema.array().nonempty()
   })
   .strict();
 
@@ -58,6 +58,65 @@ export const PublicSearchCatalogSchema = z
     movies: PublicSearchMovieSchema.array(),
     tvShows: PublicSearchTvShowSchema.array()
   })
-  .strict();
+  .strict()
+  .superRefine((catalog, ctx) => {
+    addDuplicateIdIssues(
+      ctx,
+      catalog.movies,
+      (movie) => movie.id,
+      (index) => ['movies', index, 'id'],
+      'Duplicate movie id'
+    );
+    addDuplicateIdIssues(
+      ctx,
+      catalog.tvShows,
+      (tvShow) => tvShow.id,
+      (index) => ['tvShows', index, 'id'],
+      'Duplicate TV show id'
+    );
+
+    const seenSeasonIds = new Set<number>();
+    for (const [tvShowIndex, tvShow] of catalog.tvShows.entries()) {
+      for (const [seasonIndex, season] of tvShow.seasons.entries()) {
+        if (seenSeasonIds.has(season.id)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['tvShows', tvShowIndex, 'seasons', seasonIndex, 'id'],
+            message: 'Duplicate season id'
+          });
+        }
+        seenSeasonIds.add(season.id);
+
+        addDuplicateIdIssues(
+          ctx,
+          season.episodes,
+          (episode) => episode.episodeNumber,
+          (episodeIndex) => ['tvShows', tvShowIndex, 'seasons', seasonIndex, 'episodes', episodeIndex, 'episodeNumber'],
+          'Duplicate episode number'
+        );
+      }
+    }
+  });
 
 export type PublicSearchCatalog = z.infer<typeof PublicSearchCatalogSchema>;
+
+function addDuplicateIdIssues<T>(
+  ctx: z.RefinementCtx,
+  items: T[],
+  getValue: (item: T) => number,
+  getPath: (index: number) => Array<number | string>,
+  message: string
+) {
+  const seen = new Set<number>();
+  for (const [index, item] of items.entries()) {
+    const value = getValue(item);
+    if (seen.has(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: getPath(index),
+        message
+      });
+    }
+    seen.add(value);
+  }
+}

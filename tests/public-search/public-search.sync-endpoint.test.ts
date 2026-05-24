@@ -112,6 +112,11 @@ function tableCount(db: PublicSearchDatabase, table: string) {
   return (db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count;
 }
 
+function expectOldCatalogPreserved(db: PublicSearchDatabase) {
+  expect(db.prepare('SELECT title FROM public_movies WHERE id = 1').get()).toEqual({ title: 'Old Movie' });
+  expect(tableCount(db, 'public_movie_providers')).toBe(1);
+}
+
 describe('public search sync endpoint', () => {
   it('returns 401 when the bearer token is missing', async () => {
     const db = createMigratedDatabase();
@@ -173,8 +178,172 @@ describe('public search sync endpoint', () => {
           })
         ])
       );
-      expect(db.prepare('SELECT title FROM public_movies WHERE id = 1').get()).toEqual({ title: 'Old Movie' });
-      expect(tableCount(db, 'public_movie_providers')).toBe(1);
+      expectOldCatalogPreserved(db);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('returns a generic client error for malformed JSON', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      const response = await request(app)
+        .post('/api/sync')
+        .set('Authorization', 'Bearer sync-token')
+        .set('Content-Type', 'application/json')
+        .send('{"generatedAt":');
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Invalid request body' });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('returns 400 for empty nested arrays and preserves old data', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedOldCatalog(db);
+      const catalog = validCatalog();
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      const response = await request(app)
+        .post('/api/sync')
+        .set('Authorization', 'Bearer sync-token')
+        .send({
+          ...catalog,
+          movies: [
+            {
+              ...catalog.movies[0],
+              providers: []
+            }
+          ],
+          tvShows: [
+            {
+              id: 21,
+              title: 'Empty Seasons',
+              seasons: []
+            },
+            {
+              id: 22,
+              title: 'Empty Episodes',
+              seasons: [
+                {
+                  id: 31,
+                  seasonNumber: 1,
+                  episodes: []
+                }
+              ]
+            },
+            {
+              id: 23,
+              title: 'Empty Episode Providers',
+              seasons: [
+                {
+                  id: 32,
+                  seasonNumber: 1,
+                  episodes: [
+                    {
+                      episodeNumber: 1,
+                      providers: []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Validation failed');
+      expect(response.body.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: 'movies.0.providers' }),
+          expect.objectContaining({ path: 'tvShows.0.seasons' }),
+          expect.objectContaining({ path: 'tvShows.1.seasons.0.episodes' }),
+          expect.objectContaining({ path: 'tvShows.2.seasons.0.episodes.0.providers' })
+        ])
+      );
+      expectOldCatalogPreserved(db);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('returns 400 for duplicate catalog IDs and episode numbers and preserves old data', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedOldCatalog(db);
+      const catalog = validCatalog();
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      const response = await request(app)
+        .post('/api/sync')
+        .set('Authorization', 'Bearer sync-token')
+        .send({
+          ...catalog,
+          movies: [
+            catalog.movies[0],
+            {
+              ...catalog.movies[0],
+              title: 'Duplicate Movie'
+            }
+          ],
+          tvShows: [
+            catalog.tvShows[0],
+            {
+              id: catalog.tvShows[0].id,
+              title: 'Duplicate Show',
+              seasons: [
+                {
+                  id: catalog.tvShows[0].seasons[0].id,
+                  seasonNumber: 2,
+                  episodes: [
+                    {
+                      episodeNumber: 1,
+                      providers: [
+                        {
+                          providerName: 'FileMoon',
+                          quality: 'HD',
+                          url: 'https://filemoon.example/duplicate-show',
+                          sortOrder: 1
+                        }
+                      ]
+                    },
+                    {
+                      episodeNumber: 1,
+                      providers: [
+                        {
+                          providerName: 'MixDrop',
+                          quality: 'HD',
+                          url: 'https://mixdrop.example/duplicate-episode',
+                          sortOrder: 1
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Validation failed');
+      expect(response.body.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: 'movies.1.id' }),
+          expect.objectContaining({ path: 'tvShows.1.id' }),
+          expect.objectContaining({ path: 'tvShows.1.seasons.0.id' }),
+          expect.objectContaining({ path: 'tvShows.1.seasons.0.episodes.1.episodeNumber' })
+        ])
+      );
+      expectOldCatalogPreserved(db);
     } finally {
       db.close();
     }

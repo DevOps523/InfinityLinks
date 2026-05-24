@@ -1,6 +1,24 @@
 import type { AppConfig } from '../config.js';
 import type { AppDatabase } from '../db/database.js';
-import { buildPublicSearchCatalog } from './catalog.js';
+import { buildPublicSearchCatalog, createPublicSearchCatalogFingerprint } from './catalog.js';
+import { getPublicSearchSyncState, upsertPublicSearchSyncState } from './sync-state.repository.js';
+
+export type PublicSearchSyncStatus = {
+  configured: boolean;
+  hasPublicSearchableContent: boolean;
+  hasPendingChanges: boolean;
+  current: {
+    catalogHash: string;
+    movies: number;
+    tvShows: number;
+  };
+  lastSuccessfulSync: {
+    syncedAt: string;
+    catalogHash: string;
+    movies: number;
+    tvShows: number;
+  } | null;
+};
 
 export class PublicSearchSyncError extends Error {
   constructor(
@@ -25,6 +43,7 @@ export async function syncPublicSearchCatalog(
     channelHandle: config.publicSearchChannelHandle,
     groupHandle: config.publicSearchGroupHandle
   });
+  const catalogHash = createPublicSearchCatalogFingerprint(catalog);
 
   const headers = new Headers({
     'content-type': 'application/json',
@@ -46,9 +65,46 @@ export async function syncPublicSearchCatalog(
     throw new PublicSearchSyncError(502, 'Public search sync failed');
   }
 
+  const syncedAt = new Date().toISOString();
+  upsertPublicSearchSyncState(db, {
+    syncedAt,
+    catalogHash,
+    movieCount: catalog.movies.length,
+    tvShowCount: catalog.tvShows.length
+  });
+
   return {
-    syncedAt: new Date().toISOString(),
+    syncedAt,
     movies: catalog.movies.length,
     tvShows: catalog.tvShows.length
+  };
+}
+
+export function getPublicSearchSyncStatus(db: AppDatabase, config: AppConfig): PublicSearchSyncStatus {
+  const catalog = buildPublicSearchCatalog(db, {
+    channelHandle: config.publicSearchChannelHandle,
+    groupHandle: config.publicSearchGroupHandle
+  });
+  const catalogHash = createPublicSearchCatalogFingerprint(catalog);
+  const lastSyncState = getPublicSearchSyncState(db);
+  const hasPublicSearchableContent = catalog.movies.length > 0 || catalog.tvShows.length > 0;
+
+  return {
+    configured: Boolean(config.publicSearchSyncUrl && config.publicSearchSyncToken),
+    hasPublicSearchableContent,
+    hasPendingChanges: hasPublicSearchableContent && catalogHash !== lastSyncState?.lastCatalogHash,
+    current: {
+      catalogHash,
+      movies: catalog.movies.length,
+      tvShows: catalog.tvShows.length
+    },
+    lastSuccessfulSync: lastSyncState
+      ? {
+          syncedAt: lastSyncState.lastSuccessfulSyncAt,
+          catalogHash: lastSyncState.lastCatalogHash,
+          movies: lastSyncState.lastMovieCount,
+          tvShows: lastSyncState.lastTvShowCount
+        }
+      : null
   };
 }

@@ -6,7 +6,7 @@ import {
   PublicSearchStatusError,
   type PublicSearchStatusServiceOptions
 } from './status.service.js';
-import { syncPublicSearchCatalog } from './sync.service.js';
+import { getPublicSearchSyncStatus, syncPublicSearchCatalog } from './sync.service.js';
 
 export function createPublicSearchRouter(
   db: AppDatabase,
@@ -20,7 +20,16 @@ export function createPublicSearchRouter(
   router.post('/public-search/sync', async (_req, res, next) => {
     try {
       const result = await syncPublicSearchCatalog(db, config, fetcher);
-      res.json({ sync: result });
+      const status = getPublicSearchSyncStatus(db, config);
+      res.json({ sync: result, status });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/public-search/sync-status', (_req, res, next) => {
+    try {
+      res.json(getPublicSearchSyncStatus(db, config));
     } catch (error) {
       next(error);
     }

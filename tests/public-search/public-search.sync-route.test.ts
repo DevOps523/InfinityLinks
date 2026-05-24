@@ -125,6 +125,111 @@ describe('public search sync route', () => {
     });
   });
 
+  it('returns configured true and pending changes before first sync when one posted movie exists', async () => {
+    insertPostedMovie();
+
+    const response = await request(
+      app({
+        ...baseConfig,
+        publicSearchSyncUrl: 'https://search.example.com/api/sync',
+        publicSearchSyncToken: 'secret-token'
+      })
+    )
+      .get('/api/public-search/sync-status')
+      .expect(200);
+
+    expect(response.body).toEqual({
+      configured: true,
+      hasPublicSearchableContent: true,
+      hasPendingChanges: true,
+      current: {
+        catalogHash: expect.any(String),
+        movies: 1,
+        tvShows: 0
+      },
+      lastSuccessfulSync: null
+    });
+  });
+
+  it('stores current hash after successful sync and reports no pending changes', async () => {
+    insertPostedMovie();
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
+    const config = {
+      ...baseConfig,
+      publicSearchSyncUrl: 'https://search.example.com/api/sync',
+      publicSearchSyncToken: 'secret-token'
+    };
+
+    const syncResponse = await request(app(config, fetchMock)).post('/api/public-search/sync').expect(200);
+
+    expect(syncResponse.body.sync).toMatchObject({
+      syncedAt: expect.any(String),
+      movies: 1,
+      tvShows: 0
+    });
+    expect(syncResponse.body.status).toMatchObject({
+      configured: true,
+      hasPublicSearchableContent: true,
+      hasPendingChanges: false,
+      current: {
+        catalogHash: expect.any(String),
+        movies: 1,
+        tvShows: 0
+      },
+      lastSuccessfulSync: {
+        syncedAt: syncResponse.body.sync.syncedAt,
+        movies: 1,
+        tvShows: 0
+      }
+    });
+    expect(syncResponse.body.status.lastSuccessfulSync.catalogHash).toBe(syncResponse.body.status.current.catalogHash);
+
+    const statusResponse = await request(app(config, fetchMock)).get('/api/public-search/sync-status').expect(200);
+
+    expect(statusResponse.body).toMatchObject({
+      configured: true,
+      hasPublicSearchableContent: true,
+      hasPendingChanges: false,
+      current: {
+        catalogHash: syncResponse.body.status.current.catalogHash,
+        movies: 1,
+        tvShows: 0
+      },
+      lastSuccessfulSync: {
+        syncedAt: syncResponse.body.sync.syncedAt,
+        catalogHash: syncResponse.body.status.current.catalogHash,
+        movies: 1,
+        tvShows: 0
+      }
+    });
+  });
+
+  it('does not store sync state after failed remote sync, so pending changes remain', async () => {
+    insertPostedMovie();
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response('nope', { status: 500 }));
+    const config = {
+      ...baseConfig,
+      publicSearchSyncUrl: 'https://search.example.com/api/sync',
+      publicSearchSyncToken: 'secret-token'
+    };
+
+    await request(app(config, fetchMock)).post('/api/public-search/sync').expect(502);
+
+    const statusResponse = await request(app(config, fetchMock)).get('/api/public-search/sync-status').expect(200);
+
+    expect(statusResponse.body).toMatchObject({
+      configured: true,
+      hasPublicSearchableContent: true,
+      hasPendingChanges: true,
+      current: {
+        catalogHash: expect.any(String),
+        movies: 1,
+        tvShows: 0
+      },
+      lastSuccessfulSync: null
+    });
+  });
+
   it('returns 502 when the configured public search sync endpoint fails', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response('nope', { status: 500 }));
 

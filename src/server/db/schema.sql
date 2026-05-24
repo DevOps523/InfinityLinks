@@ -109,6 +109,15 @@ CREATE TABLE IF NOT EXISTS telegram_jobs (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS public_search_sync_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  last_successful_sync_at TEXT,
+  last_catalog_hash TEXT,
+  last_movie_count INTEGER NOT NULL DEFAULT 0,
+  last_tv_show_count INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_movie_links_movie_id ON movie_links(movie_id);
 CREATE INDEX IF NOT EXISTS idx_seasons_tv_show_id ON seasons(tv_show_id);
 CREATE INDEX IF NOT EXISTS idx_episodes_season_id ON episodes(season_id);

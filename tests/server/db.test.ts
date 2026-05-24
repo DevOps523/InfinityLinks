@@ -18,10 +18,29 @@ describe('database migration', () => {
       'episodes',
       'movie_links',
       'movies',
+      'public_search_sync_state',
       'seasons',
       'telegram_jobs',
       'tmdb_cache',
       'tv_shows'
+    ]);
+
+    db.close();
+  });
+
+  it('creates public search sync state table with expected columns', () => {
+    const db = createDatabase(':memory:');
+    migrate(db);
+
+    const columns = db.prepare('PRAGMA table_info(public_search_sync_state)').all() as Array<{ name: string }>;
+
+    expect(columns.map((column) => column.name)).toEqual([
+      'id',
+      'last_successful_sync_at',
+      'last_catalog_hash',
+      'last_movie_count',
+      'last_tv_show_count',
+      'updated_at'
     ]);
 
     db.close();
@@ -35,8 +54,8 @@ describe('database migration', () => {
       .prepare("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
       .all() as Array<{ name: string; sql: string }>;
 
-    expect(tableSql).toHaveLength(9);
-    for (const table of tableSql) {
+    expect(tableSql).toHaveLength(10);
+    for (const table of tableSql.filter((table) => table.name !== 'public_search_sync_state')) {
       expect(table.sql).toContain('id INTEGER PRIMARY KEY AUTOINCREMENT');
     }
 

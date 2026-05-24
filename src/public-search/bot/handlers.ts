@@ -138,38 +138,38 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
   const membership = await checkMembership(deps, callbackQuery.from.id);
 
   if (membership === 'not-joined') {
-    if (chatId !== undefined) {
-      await sendBotMessage(deps, chatId, formatJoinRequiredMessage(getHandles(deps)));
-    }
     await deps.replies.enqueueAnswerCallbackQuery({
       callbackQueryId,
       text: 'Please join the channel first.'
     });
+    if (chatId !== undefined) {
+      await sendBotMessage(deps, chatId, formatJoinRequiredMessage(getHandles(deps)));
+    }
     return;
   }
 
   if (membership === 'unavailable') {
+    await deps.replies.enqueueAnswerCallbackQuery({
+      callbackQueryId,
+      text: 'Please try again later.'
+    });
     if (chatId !== undefined) {
       await deps.replies.enqueueSendMessage({
         chatId,
         text: 'We could not verify your channel membership right now. Please try again later.'
       });
     }
-    await deps.replies.enqueueAnswerCallbackQuery({
-      callbackQueryId,
-      text: 'Please try again later.'
-    });
     return;
   }
 
   if (!hasPublicCatalog(deps.db)) {
-    if (chatId !== undefined) {
-      await sendBotMessage(deps, chatId, formatUnavailableMessage());
-    }
     await deps.replies.enqueueAnswerCallbackQuery({
       callbackQueryId,
       text: 'Search is temporarily unavailable.'
     });
+    if (chatId !== undefined) {
+      await sendBotMessage(deps, chatId, formatUnavailableMessage());
+    }
     return;
   }
 
@@ -183,11 +183,11 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
     return;
   }
 
+  await deps.replies.enqueueAnswerCallbackQuery({ callbackQueryId });
+
   for (const message of formatSeasonDetails(details, getHandles(deps))) {
     await sendBotMessage(deps, chatId, message);
   }
-
-  await deps.replies.enqueueAnswerCallbackQuery({ callbackQueryId });
 }
 
 async function sendBotMessage(deps: HandlerDeps, chatId: number, message: PublicBotMessage) {

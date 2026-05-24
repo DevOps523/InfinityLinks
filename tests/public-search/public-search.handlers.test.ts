@@ -337,6 +337,33 @@ describe('public search bot handlers', () => {
     }
   });
 
+  it('does not leak provider links when membership verification fails during /search', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      const { deps, sentMessages } = createDeps(db, {
+        telegram: {
+          getChatMember: vi.fn(async () => {
+            throw new Error('Telegram unavailable');
+          })
+        }
+      });
+
+      await handleTelegramUpdate(deps, messageUpdate('/search inception'));
+
+      expect(sentMessages).toEqual([
+        {
+          chatId: 500,
+          text: 'We could not verify your channel membership right now. Please try again later.'
+        }
+      ]);
+      expect(JSON.stringify(sentMessages)).not.toContain('providers.example');
+    } finally {
+      db.close();
+    }
+  });
+
   it('answers invalid callback data without leaking provider links', async () => {
     const db = createMigratedDatabase();
 
@@ -371,6 +398,76 @@ describe('public search bot handlers', () => {
       expect(deps.telegram.getChatMember).not.toHaveBeenCalled();
       expect(sentMessages).toEqual([]);
       expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'Please wait 4 seconds before trying again.' }]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('answers season callbacks before queueing season detail messages', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      const { deps } = createDeps(db);
+
+      await handleTelegramUpdate(deps, callbackUpdate('season:30'));
+
+      const answerOrder = vi.mocked(deps.replies.enqueueAnswerCallbackQuery).mock.invocationCallOrder[0];
+      const sendOrder = vi.mocked(deps.replies.enqueueSendMessage).mock.invocationCallOrder[0];
+      expect(answerOrder).toBeLessThan(sendOrder);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('answers season callbacks even when sending season details fails', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      const callbackAnswers: CallbackAnswer[] = [];
+      const { deps } = createDeps(db, {
+        replies: {
+          enqueueSendMessage: vi.fn(async () => {
+            throw new Error('send failed');
+          }),
+          enqueueAnswerCallbackQuery: vi.fn(async (input: CallbackAnswer) => {
+            callbackAnswers.push(input);
+          })
+        }
+      });
+
+      await expect(handleTelegramUpdate(deps, callbackUpdate('season:30'))).rejects.toThrow('send failed');
+
+      expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1' }]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not leak provider links when membership verification fails during a season callback', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      const { deps, sentMessages, callbackAnswers } = createDeps(db, {
+        telegram: {
+          getChatMember: vi.fn(async () => {
+            throw new Error('Telegram unavailable');
+          })
+        }
+      });
+
+      await handleTelegramUpdate(deps, callbackUpdate('season:30'));
+
+      expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'Please try again later.' }]);
+      expect(sentMessages).toEqual([
+        {
+          chatId: 500,
+          text: 'We could not verify your channel membership right now. Please try again later.'
+        }
+      ]);
+      expect(JSON.stringify({ sentMessages, callbackAnswers })).not.toContain('providers.example');
     } finally {
       db.close();
     }

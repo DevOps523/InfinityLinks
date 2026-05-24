@@ -148,6 +148,25 @@ describe('public search sync endpoint', () => {
     }
   });
 
+  it('returns 429 when valid sync requests exceed the per-token IP limit', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      for (let index = 0; index < 5; index += 1) {
+        await request(app).post('/api/sync').set('Authorization', 'Bearer sync-token').send(validCatalog()).expect(200);
+      }
+
+      const response = await request(app).post('/api/sync').set('Authorization', 'Bearer sync-token').send(validCatalog());
+
+      expect(response.status).toBe(429);
+      expect(response.body).toEqual({ error: 'Too many sync attempts. Please wait and try again.' });
+    } finally {
+      db.close();
+    }
+  });
+
   it('returns 400 for invalid payloads and preserves old data', async () => {
     const db = createMigratedDatabase();
 

@@ -3,6 +3,7 @@ import type { PublicSearchConfig } from './config.js';
 import { replacePublicCatalog } from './catalog.repository.js';
 import { PublicSearchCatalogSchema } from './catalog.schema.js';
 import type { PublicSearchDatabase } from './db/database.js';
+import { createFixedWindowRateLimiter } from './rate-limit.js';
 
 function extractBearerToken(authorization: string | undefined) {
   const match = authorization?.match(/^Bearer\s+(.+)$/i);
@@ -11,11 +12,18 @@ function extractBearerToken(authorization: string | undefined) {
 
 export function createPublicSearchSyncRouter(db: PublicSearchDatabase, config: PublicSearchConfig) {
   const router = express.Router();
+  const syncRateLimiter = createFixedWindowRateLimiter({ limit: 5, windowMs: 60_000 });
 
   router.post('/sync', (req, res) => {
     const token = extractBearerToken(req.header('authorization'));
     if (token !== config.publicSearchSyncToken) {
       res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const rateLimit = syncRateLimiter.check(`${req.ip}:${token.slice(0, 8)}`);
+    if (!rateLimit.allowed) {
+      res.status(429).json({ error: 'Too many sync attempts. Please wait and try again.' });
       return;
     }
 

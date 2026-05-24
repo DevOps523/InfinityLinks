@@ -43,6 +43,33 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: /^add movie$/i })).toBeInTheDocument();
   });
 
+  it('renders movie action menus outside the scrollable table', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        movies: [
+          {
+            id: 1,
+            title: 'Tom Clancy Jack Ryan',
+            year: 2026,
+            description: 'A covert mission unravels a conspiracy.'
+          }
+        ]
+      })
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText(/tom clancy jack ryan/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^open action menu$/i }));
+
+    const menu = await screen.findByRole('menu');
+    expect(menu).toBeInTheDocument();
+    expect(menu.closest('.table-scroll')).toBeNull();
+    expect(within(menu).getByRole('menuitem', { name: /^edit$/i })).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: /^delete$/i })).toBeInTheDocument();
+  });
+
   it('renders the Add TV Show form after clicking Add TV Show', async () => {
     render(<App />);
 

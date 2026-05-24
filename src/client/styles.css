@@ -324,9 +324,7 @@ td {
 }
 
 .action-menu__panel {
-  position: absolute;
-  right: 0;
-  top: 44px;
+  position: fixed;
   z-index: 5;
   width: 164px;
   border: 1px solid #d8e0ea;

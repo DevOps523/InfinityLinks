@@ -161,7 +161,58 @@ describe('public search sync endpoint', () => {
       const response = await request(app).post('/api/sync').set('Authorization', 'Bearer sync-token').send(validCatalog());
 
       expect(response.status).toBe(429);
+      expect(Number(response.header['retry-after'])).toBeGreaterThan(0);
+      expect(Number(response.header['retry-after'])).toBeLessThanOrEqual(60);
       expect(response.body).toEqual({ error: 'Too many sync attempts. Please wait and try again.' });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('respects forwarded client IPs from a trusted local proxy for sync rate limiting', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      for (let index = 0; index < 5; index += 1) {
+        await request(app)
+          .post('/api/sync')
+          .set('Authorization', 'Bearer sync-token')
+          .set('X-Forwarded-For', '198.51.100.10')
+          .send(validCatalog())
+          .expect(200);
+      }
+
+      await request(app)
+        .post('/api/sync')
+        .set('Authorization', 'Bearer sync-token')
+        .set('X-Forwarded-For', '198.51.100.10')
+        .send(validCatalog())
+        .expect(429);
+
+      await request(app)
+        .post('/api/sync')
+        .set('Authorization', 'Bearer sync-token')
+        .set('X-Forwarded-For', '198.51.100.20')
+        .send(validCatalog())
+        .expect(200);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not count invalid-token sync attempts against the valid-token quota', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      for (let index = 0; index < 6; index += 1) {
+        await request(app).post('/api/sync').set('Authorization', 'Bearer wrong-token').send(validCatalog()).expect(401);
+      }
+
+      await request(app).post('/api/sync').set('Authorization', 'Bearer sync-token').send(validCatalog()).expect(200);
     } finally {
       db.close();
     }

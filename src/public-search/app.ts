@@ -25,6 +25,7 @@ function getErrorStatus(error: unknown) {
 export function createPublicSearchApp(options: CreatePublicSearchAppOptions) {
   const app = express();
 
+  app.set('trust proxy', 'loopback');
   app.use(express.json({ limit: '5mb' }));
   app.use('/api', createPublicSearchSyncRouter(options.db, options.config));
 

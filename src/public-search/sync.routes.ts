@@ -23,6 +23,7 @@ export function createPublicSearchSyncRouter(db: PublicSearchDatabase, config: P
 
     const rateLimit = syncRateLimiter.check(`${req.ip}:${token.slice(0, 8)}`);
     if (!rateLimit.allowed) {
+      res.set('Retry-After', String(Math.max(1, Math.ceil(rateLimit.retryAfterMs / 1000))));
       res.status(429).json({ error: 'Too many sync attempts. Please wait and try again.' });
       return;
     }

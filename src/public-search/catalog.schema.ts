@@ -77,6 +77,14 @@ export const PublicSearchCatalogSchema = z
 
     const seenSeasonIds = new Set<number>();
     for (const [tvShowIndex, tvShow] of catalog.tvShows.entries()) {
+      addDuplicateIdIssues(
+        ctx,
+        tvShow.seasons,
+        (season) => season.seasonNumber,
+        (seasonIndex) => ['tvShows', tvShowIndex, 'seasons', seasonIndex, 'seasonNumber'],
+        'Duplicate season number'
+      );
+
       for (const [seasonIndex, season] of tvShow.seasons.entries()) {
         if (seenSeasonIds.has(season.id)) {
           ctx.addIssue({

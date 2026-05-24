@@ -349,6 +349,59 @@ describe('public search sync endpoint', () => {
     }
   });
 
+  it('returns 400 for duplicate season numbers under the same TV show and preserves old data', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedOldCatalog(db);
+      const catalog = validCatalog();
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      const response = await request(app)
+        .post('/api/sync')
+        .set('Authorization', 'Bearer sync-token')
+        .send({
+          ...catalog,
+          tvShows: [
+            {
+              ...catalog.tvShows[0],
+              seasons: [
+                catalog.tvShows[0].seasons[0],
+                {
+                  id: 31,
+                  seasonNumber: catalog.tvShows[0].seasons[0].seasonNumber,
+                  telegramMessageId: 202,
+                  channelPostUrl: 'https://t.me/infinitylinks65/202',
+                  episodes: [
+                    {
+                      episodeNumber: 1,
+                      providers: [
+                        {
+                          providerName: 'FileMoon',
+                          quality: 'HD',
+                          url: 'https://filemoon.example/same-season-number',
+                          sortOrder: 1
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Validation failed');
+      expect(response.body.issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ path: 'tvShows.0.seasons.1.seasonNumber' })])
+      );
+      expectOldCatalogPreserved(db);
+    } finally {
+      db.close();
+    }
+  });
+
   it('replaces the old catalog transactionally for a valid payload', async () => {
     const db = createMigratedDatabase();
 

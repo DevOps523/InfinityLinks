@@ -80,33 +80,54 @@ export function formatSeasonDetails(details: PublicSeasonDetails, handles: Publi
   let blocks: string[] = [];
   let keyboardRows: InlineKeyboardButton[][] = [];
 
+  const flushMessage = () => {
+    if (blocks.length === 0 && keyboardRows.length === 0) {
+      return;
+    }
+
+    messages.push({
+      text: composeSeasonDetailsText(header, blocks, footer),
+      replyMarkup: toReplyMarkup(keyboardRows)
+    });
+    blocks = [];
+    keyboardRows = [];
+  };
+
   for (const episode of details.episodes) {
     const block = [`Episode ${episode.episodeNumber}`, 'Providers:'].join('\n');
     const episodeRows = chunkButtons(
       providerButtons(episode.providers, `E${episode.episodeNumber} `),
       SEASON_PROVIDER_BUTTONS_PER_ROW
     );
-    const candidateBlocks = [...blocks, block];
-    const candidateRows = [...keyboardRows, ...episodeRows];
-    const candidateText = composeSeasonDetailsText(header, candidateBlocks, footer);
+    let rowIndex = 0;
 
-    if (blocks.length > 0 && exceedsMessageLimits(candidateText, candidateRows)) {
-      messages.push({
-        text: composeSeasonDetailsText(header, blocks, footer),
-        replyMarkup: toReplyMarkup(keyboardRows)
+    while (rowIndex < episodeRows.length) {
+      const rowsToAdd = countFittingRows({
+        header,
+        footer,
+        existingBlocks: blocks,
+        existingRows: keyboardRows,
+        nextBlock: block,
+        candidateRows: episodeRows.slice(rowIndex)
       });
-      blocks = [];
-      keyboardRows = [];
-    }
 
-    blocks.push(block);
-    keyboardRows.push(...episodeRows);
+      if (rowsToAdd === 0 && blocks.length > 0) {
+        flushMessage();
+        continue;
+      }
+
+      const safeRowsToAdd = rowsToAdd === 0 ? 1 : rowsToAdd;
+      blocks.push(block);
+      keyboardRows.push(...episodeRows.slice(rowIndex, rowIndex + safeRowsToAdd));
+      rowIndex += safeRowsToAdd;
+
+      if (rowIndex < episodeRows.length) {
+        flushMessage();
+      }
+    }
   }
 
-  messages.push({
-    text: composeSeasonDetailsText(header, blocks, footer),
-    replyMarkup: toReplyMarkup(keyboardRows)
-  });
+  flushMessage();
 
   return messages;
 }
@@ -187,6 +208,37 @@ function exceedsMessageLimits(text: string, keyboardRows: InlineKeyboardButton[]
 
 function countKeyboardButtons(rows: InlineKeyboardButton[][]) {
   return rows.reduce((total, row) => total + row.length, 0);
+}
+
+function countFittingRows({
+  header,
+  footer,
+  existingBlocks,
+  existingRows,
+  nextBlock,
+  candidateRows
+}: {
+  header: string;
+  footer: string;
+  existingBlocks: string[];
+  existingRows: InlineKeyboardButton[][];
+  nextBlock: string;
+  candidateRows: InlineKeyboardButton[][];
+}) {
+  let fittingRows = 0;
+
+  for (let index = 0; index < candidateRows.length; index += 1) {
+    const rows = [...existingRows, ...candidateRows.slice(0, index + 1)];
+    const text = composeSeasonDetailsText(header, [...existingBlocks, nextBlock], footer);
+
+    if (exceedsMessageLimits(text, rows)) {
+      break;
+    }
+
+    fittingRows = index + 1;
+  }
+
+  return fittingRows;
 }
 
 function composeSeasonDetailsText(header: string, episodeBlocks: string[], footer: string) {

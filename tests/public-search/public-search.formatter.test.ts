@@ -7,6 +7,7 @@ import {
   formatSeasonDetails,
   formatStartMessage,
   formatUnavailableMessage,
+  MAX_INLINE_KEYBOARD_BUTTONS,
   MAX_INLINE_KEYBOARD_ROWS,
   MAX_FORMATTED_MESSAGE_LENGTH
 } from '../../src/public-search/bot/formatter.js';
@@ -378,6 +379,49 @@ describe('public search bot formatter', () => {
           url: `https://providers.example/keyboard-limit-s1e${MAX_INLINE_KEYBOARD_ROWS + 1}`
         }
       ]
+    ]);
+  });
+
+  it('splits one episode with too many provider buttons across safe messages', () => {
+    const details: PublicSeasonDetails = {
+      id: 101,
+      showTitle: 'Big Episode Show',
+      showYear: 2026,
+      seasonNumber: 1,
+      episodes: [
+        {
+          episodeNumber: 1,
+          providers: Array.from({ length: MAX_INLINE_KEYBOARD_BUTTONS + 1 }, (_, index) => ({
+            providerName: `Host${index + 1}`,
+            quality: 'HD',
+            url: `https://providers.example/big-episode-s1e1-${index + 1}`,
+            sortOrder: index + 1
+          }))
+        }
+      ]
+    };
+
+    const messages = formatSeasonDetails(details, handles);
+
+    expect(messages).toHaveLength(2);
+    for (const message of messages) {
+      const rows = message.replyMarkup?.inline_keyboard ?? [];
+
+      expect(message.text.length).toBeLessThanOrEqual(MAX_FORMATTED_MESSAGE_LENGTH);
+      expect(message.text).toContain('Episode 1');
+      expect(rows.length).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_ROWS);
+      expect(rows.reduce((total, row) => total + row.length, 0)).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_BUTTONS);
+      expect(rows.flat().every((button) => button.text.startsWith('E1 '))).toBe(true);
+    }
+    expect(messages[0].replyMarkup?.inline_keyboard.at(-1)?.at(-1)).toEqual({
+      text: `E1 Host${MAX_INLINE_KEYBOARD_BUTTONS} HD`,
+      url: `https://providers.example/big-episode-s1e1-${MAX_INLINE_KEYBOARD_BUTTONS}`
+    });
+    expect(messages[1].replyMarkup?.inline_keyboard[0]).toEqual([
+      {
+        text: `E1 Host${MAX_INLINE_KEYBOARD_BUTTONS + 1} HD`,
+        url: `https://providers.example/big-episode-s1e1-${MAX_INLINE_KEYBOARD_BUTTONS + 1}`
+      }
     ]);
   });
 });

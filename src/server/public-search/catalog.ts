@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { AppDatabase } from '../db/database.js';
 
 export type PublicSearchProvider = {
@@ -111,6 +113,11 @@ export function buildPublicSearchCatalog(
     movies: buildMovies(db, channelHandle),
     tvShows: buildTvShows(db, channelHandle)
   };
+}
+
+export function createPublicSearchCatalogFingerprint(catalog: PublicSearchCatalog): string {
+  const { generatedAt: _generatedAt, ...fingerprintCatalog } = catalog;
+  return createHash('sha256').update(JSON.stringify(fingerprintCatalog)).digest('hex');
 }
 
 function buildMovies(db: AppDatabase, channelHandle: string): PublicSearchMovie[] {

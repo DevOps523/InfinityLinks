@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDatabase } from '../../src/server/db/database.js';
 import { migrate } from '../../src/server/db/migrate.js';
-import { buildPublicSearchCatalog } from '../../src/server/public-search/catalog.js';
+import { buildPublicSearchCatalog, createPublicSearchCatalogFingerprint } from '../../src/server/public-search/catalog.js';
 
 function createMigratedDatabase() {
   const db = createDatabase(':memory:');
@@ -9,7 +9,44 @@ function createMigratedDatabase() {
   return db;
 }
 
+function insertPostedMovieWithActiveLink(db: ReturnType<typeof createMigratedDatabase>) {
+  const movie = db
+    .prepare(
+      "INSERT INTO movies (title, year, quality, telegram_message_id, post_status) VALUES ('Fingerprint Movie', 2026, 'HD', 901, 'posted')"
+    )
+    .run();
+
+  db.prepare(
+    `INSERT INTO movie_links (movie_id, provider_name, quality, status, url, sort_order)
+     VALUES (?, 'MixDrop', 'HD', 'active', 'https://mixdrop.example/fingerprint-movie', 1)`
+  ).run(movie.lastInsertRowid);
+}
+
 describe('public search catalog export', () => {
+  it('creates the same fingerprint when only generatedAt changes', () => {
+    const db = createMigratedDatabase();
+
+    try {
+      insertPostedMovieWithActiveLink(db);
+
+      const first = buildPublicSearchCatalog(db, {
+        channelHandle: '@infinitylinks65',
+        groupHandle: '@infinitylinks69',
+        now: () => new Date('2026-05-25T00:00:00.000Z')
+      });
+      const second = buildPublicSearchCatalog(db, {
+        channelHandle: '@infinitylinks65',
+        groupHandle: '@infinitylinks69',
+        now: () => new Date('2026-05-25T00:01:00.000Z')
+      });
+
+      expect(first.generatedAt).not.toBe(second.generatedAt);
+      expect(createPublicSearchCatalogFingerprint(first)).toBe(createPublicSearchCatalogFingerprint(second));
+    } finally {
+      db.close();
+    }
+  });
+
   it('exports active movie links and excludes inactive movie links', () => {
     const db = createMigratedDatabase();
 

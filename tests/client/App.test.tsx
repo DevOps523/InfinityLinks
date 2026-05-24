@@ -4,8 +4,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/client/App';
 import { LinkEditorModal } from '../../src/client/components/LinkEditorModal';
 import { TmdbSearch } from '../../src/client/components/TmdbSearch';
+import { ToastProvider, useToast } from '../../src/client/components/ToastProvider';
 
 const fetchMock = vi.fn();
+
+function ToastHarness() {
+  const { showToast } = useToast();
+
+  return (
+    <button type="button" onClick={() => showToast('Saved.')}>
+      Show toast
+    </button>
+  );
+}
 
 beforeEach(() => {
   vi.useRealTimers();
@@ -662,5 +673,57 @@ describe('App', () => {
         url: 'https://mixdrop.example/watch'
       }
     ]);
+  });
+
+  it('automatically dismisses notification toasts', async () => {
+    vi.useFakeTimers();
+    render(
+      <ToastProvider>
+        <ToastHarness />
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^show toast$/i }));
+
+    expect(screen.getByText('Saved.')).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_000);
+    });
+
+    expect(screen.queryByText('Saved.')).not.toBeInTheDocument();
+  });
+
+  it('dismisses notification toasts manually', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync') {
+        return {
+          ok: true,
+          json: async () => ({
+            sync: {
+              syncedAt: '2026-05-24T10:00:00.000Z',
+              movies: 1,
+              tvShows: 0
+            }
+          })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^sync public search$/i }));
+
+    expect(await screen.findByText('Public search synced.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^dismiss message$/i }));
+
+    expect(screen.queryByText('Public search synced.')).not.toBeInTheDocument();
   });
 });

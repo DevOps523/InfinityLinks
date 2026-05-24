@@ -41,11 +41,11 @@ InfinityLinks is a local admin app for saving movie and TV streaming links and p
 
 The InfinityLinks admin app should stay private on your local machine. Only the separate public search bot service needs to run online on a VPS.
 
-Public Telegram users interact with the bot by sending `/start`, then `/search <Movie or TV Show>`. Before search results are shown, the bot checks whether the user joined `@infinitylinks65`. If the user has not joined, the bot tells them to join the channel and come back before using `/search`. Add the public bot as an admin in `@infinitylinks65` so it can check membership.
+Public Telegram users interact with the bot by sending `/start`, then `/search <Movie or TV Show>`. Before search results are shown, the bot checks whether the user joined [@infinitylinks65](https://t.me/infinitylinks65). If the user has not joined, the bot tells them to join the channel and come back before using `/search`. Add the public bot as an admin in [@infinitylinks65](https://t.me/infinitylinks65) so it can check membership.
 
 Search results link back to the original Telegram channel posts without exposing poster information. Movies show active provider links as inline URL buttons. TV results first show season selection buttons; after a season is selected, the bot shows that season's episodes with provider buttons for each episode.
 
-Only active links and content that has already been posted to the Telegram channel are exported to the public search catalog. Bot replies also include active channel and group buttons for `@infinitylinks65` and `@infinitylinks69`.
+Only active links and content that has already been posted to the Telegram channel are exported to the public search catalog. Bot replies also include active channel and group buttons for [@infinitylinks65](https://t.me/infinitylinks65) and [@infinitylinks69](https://t.me/infinitylinks69).
 
 Sync is triggered from the local admin app on the `Public Search` page. The `Sync Public Search` button exports the current public catalog from the private local database and posts it to the VPS sync endpoint.
 

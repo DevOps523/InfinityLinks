@@ -4,8 +4,10 @@ import type { createTelegramReplyQueue } from '../telegram.reply-queue.js';
 import { getPublicSeasonDetails, hasPublicCatalog, searchPublicCatalog } from '../search.repository.js';
 import { decodeSeasonCallback } from './callback-data.js';
 import {
+  formatClearMessage,
   formatJoinRequiredMessage,
   formatNoResultsMessage,
+  formatSearchValidationMessage,
   formatSearchResults,
   formatSeasonDetails,
   formatStartMessage,
@@ -56,11 +58,16 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
     return;
   }
 
+  if (isCommand(text, 'clear')) {
+    await sendBotMessage(deps, message.chat.id, formatClearMessage());
+    return;
+  }
+
   if (isCommand(text, 'search')) {
     const query = getCommandArgument(text);
 
     if (!query) {
-      await sendBotMessage(deps, message.chat.id, formatStartMessage(getHandles(deps)));
+      await sendBotMessage(deps, message.chat.id, formatSearchValidationMessage());
       return;
     }
 
@@ -92,10 +99,7 @@ async function handleSearch(deps: HandlerDeps, chatId: number, userId: number | 
   }
 
   if (membership === 'unavailable') {
-    await deps.replies.enqueueSendMessage({
-      chatId,
-      text: 'We could not verify your channel membership right now. Please try again later.'
-    });
+    await sendBotMessage(deps, chatId, formatJoinRequiredMessage(getHandles(deps)));
     return;
   }
 
@@ -154,10 +158,7 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
       text: 'Please try again later.'
     });
     if (chatId !== undefined) {
-      await deps.replies.enqueueSendMessage({
-        chatId,
-        text: 'We could not verify your channel membership right now. Please try again later.'
-      });
+      await sendBotMessage(deps, chatId, formatJoinRequiredMessage(getHandles(deps)));
     }
     return;
   }

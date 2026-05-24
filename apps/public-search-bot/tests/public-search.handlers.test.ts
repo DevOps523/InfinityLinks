@@ -11,6 +11,13 @@ const handles = {
   groupHandle: '@infinitylinks69'
 };
 
+const membershipVerificationMessage = [
+  'We could not verify your channel membership right now. Please join the channel and try again.',
+  '',
+  '📢 Channel: @infinitylinks65',
+  '👥 Group: @infinitylinks69'
+].join('\n');
+
 type SentMessage = {
   chatId: number;
   text: string;
@@ -213,7 +220,7 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('replies to /search with no query with usage', async () => {
+  it('replies to /search with no query with validation without requiring membership', async () => {
     const db = createMigratedDatabase();
 
     try {
@@ -223,7 +230,26 @@ describe('public search bot handlers', () => {
 
       expect(deps.telegram.getChatMember).not.toHaveBeenCalled();
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toContain('/search movie or tv show name');
+      expect(sentMessages[0].text).toBe(
+        ['⚠️ Please provide a movie or TV show title.', '', 'Example: /search inception'].join('\n')
+      );
+      expect(sentMessages[0].replyMarkup).toBeUndefined();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('replies to /clear with a clear message without requiring membership', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const { deps, sentMessages } = createDeps(db);
+
+      await handleTelegramUpdate(deps, messageUpdate('/clear'));
+
+      expect(deps.telegram.getChatMember).not.toHaveBeenCalled();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0].text).toBe('🧹 Cleared. Search anytime with /search movie or tv show name.');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
     } finally {
       db.close();
@@ -248,7 +274,8 @@ describe('public search bot handlers', () => {
         userId: 42
       });
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toContain('Please join our channel first');
+      expect(sentMessages[0].text).toBe(membershipVerificationMessage);
+      expect(sentMessages[0].text).not.toContain('providers.example');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
     } finally {
       db.close();
@@ -365,7 +392,8 @@ describe('public search bot handlers', () => {
       expect(sentMessages).toEqual([
         {
           chatId: 500,
-          text: 'We could not verify your channel membership right now. Please try again later.'
+          text: membershipVerificationMessage,
+          replyMarkup: undefined
         }
       ]);
       expect(JSON.stringify(sentMessages)).not.toContain('providers.example');
@@ -474,7 +502,8 @@ describe('public search bot handlers', () => {
       expect(sentMessages).toEqual([
         {
           chatId: 500,
-          text: 'We could not verify your channel membership right now. Please try again later.'
+          text: membershipVerificationMessage,
+          replyMarkup: undefined
         }
       ]);
       expect(JSON.stringify({ sentMessages, callbackAnswers })).not.toContain('providers.example');
@@ -501,7 +530,8 @@ describe('public search bot handlers', () => {
         userId: 42
       });
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toContain('Please join our channel first');
+      expect(sentMessages[0].text).toBe(membershipVerificationMessage);
+      expect(sentMessages[0].text).not.toContain('providers.example');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
       expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'Please join the channel first.' }]);
     } finally {

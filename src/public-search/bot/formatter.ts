@@ -3,6 +3,12 @@ import type { InlineKeyboardButton, InlineKeyboardMarkup } from '../telegram.cli
 import { encodeSeasonCallback } from './callback-data.js';
 
 export const MAX_FORMATTED_MESSAGE_LENGTH = 3500;
+export const MAX_INLINE_KEYBOARD_ROWS = 20;
+export const MAX_INLINE_KEYBOARD_BUTTONS = 40;
+
+const MOVIE_PROVIDER_BUTTONS_PER_ROW = 2;
+const SEASON_PROVIDER_BUTTONS_PER_ROW = 2;
+const TV_SEASON_BUTTONS_PER_ROW = 3;
 
 export type PublicBotHandles = {
   channelHandle: string;
@@ -76,10 +82,15 @@ export function formatSeasonDetails(details: PublicSeasonDetails, handles: Publi
 
   for (const episode of details.episodes) {
     const block = [`Episode ${episode.episodeNumber}`, 'Providers:'].join('\n');
+    const episodeRows = chunkButtons(
+      providerButtons(episode.providers, `E${episode.episodeNumber} `),
+      SEASON_PROVIDER_BUTTONS_PER_ROW
+    );
     const candidateBlocks = [...blocks, block];
+    const candidateRows = [...keyboardRows, ...episodeRows];
     const candidateText = composeSeasonDetailsText(header, candidateBlocks, footer);
 
-    if (blocks.length > 0 && candidateText.length > MAX_FORMATTED_MESSAGE_LENGTH) {
+    if (blocks.length > 0 && exceedsMessageLimits(candidateText, candidateRows)) {
       messages.push({
         text: composeSeasonDetailsText(header, blocks, footer),
         replyMarkup: toReplyMarkup(keyboardRows)
@@ -89,7 +100,7 @@ export function formatSeasonDetails(details: PublicSeasonDetails, handles: Publi
     }
 
     blocks.push(block);
-    keyboardRows.push(providerButtons(episode.providers));
+    keyboardRows.push(...episodeRows);
   }
 
   messages.push({
@@ -110,7 +121,7 @@ function formatMovieResult(result: Extract<PublicSearchResult, { type: 'movie' }
       '',
       formatHandles(handles)
     ].join('\n'),
-    replyMarkup: toReplyMarkup([providerButtons(result.providers)])
+    replyMarkup: toReplyMarkup(chunkButtons(providerButtons(result.providers), MOVIE_PROVIDER_BUTTONS_PER_ROW))
   };
 }
 
@@ -124,10 +135,15 @@ function formatTvResult(result: Extract<PublicSearchResult, { type: 'tv' }>, han
       '',
       formatHandles(handles)
     ].join('\n'),
-    replyMarkup: toReplyMarkup([result.seasons.map((season) => ({
-      text: `Season ${season.seasonNumber}`,
-      callback_data: encodeSeasonCallback(season.id)
-    }))])
+    replyMarkup: toReplyMarkup(
+      chunkButtons(
+        result.seasons.map((season) => ({
+          text: `Season ${season.seasonNumber}`,
+          callback_data: encodeSeasonCallback(season.id)
+        })),
+        TV_SEASON_BUTTONS_PER_ROW
+      )
+    )
   };
 }
 
@@ -139,16 +155,38 @@ function formatHandles(handles: PublicBotHandles) {
   return [`Channel: ${handles.channelHandle}`, `Group: ${handles.groupHandle}`].join('\n');
 }
 
-function providerButtons(providers: PublicProvider[]) {
+function providerButtons(providers: PublicProvider[], labelPrefix = '') {
   return providers.map((provider) => ({
-    text: `${provider.providerName} ${provider.quality}`.trim(),
+    text: `${labelPrefix}${provider.providerName} ${provider.quality}`.trim(),
     url: provider.url
   }));
+}
+
+function chunkButtons<TButton extends InlineKeyboardButton>(buttons: TButton[], size: number): TButton[][] {
+  const rows: TButton[][] = [];
+
+  for (let index = 0; index < buttons.length; index += size) {
+    rows.push(buttons.slice(index, index + size));
+  }
+
+  return rows;
 }
 
 function toReplyMarkup(rows: InlineKeyboardButton[][]): InlineKeyboardMarkup | undefined {
   const inlineKeyboard = rows.filter((row) => row.length > 0);
   return inlineKeyboard.length > 0 ? { inline_keyboard: inlineKeyboard } : undefined;
+}
+
+function exceedsMessageLimits(text: string, keyboardRows: InlineKeyboardButton[][]) {
+  return (
+    text.length > MAX_FORMATTED_MESSAGE_LENGTH ||
+    keyboardRows.length > MAX_INLINE_KEYBOARD_ROWS ||
+    countKeyboardButtons(keyboardRows) > MAX_INLINE_KEYBOARD_BUTTONS
+  );
+}
+
+function countKeyboardButtons(rows: InlineKeyboardButton[][]) {
+  return rows.reduce((total, row) => total + row.length, 0);
 }
 
 function composeSeasonDetailsText(header: string, episodeBlocks: string[], footer: string) {

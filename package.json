@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server/index.ts",
-    "build": "tsc --noEmit && tsc -p tsconfig.server.json && vite build",
+    "public-search:dev": "tsx watch src/public-search/index.ts",
+    "build": "tsc --noEmit && tsc -p tsconfig.server.json && tsc -p tsconfig.public-search.json && vite build",
+    "build:public-search": "tsc -p tsconfig.public-search.json",
     "start": "node dist/server/index.js",
+    "public-search:start": "node dist/public-search/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "tsx src/server/db/migrate.ts"

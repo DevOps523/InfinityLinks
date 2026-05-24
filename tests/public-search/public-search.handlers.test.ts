@@ -255,7 +255,7 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('returns movie provider buttons for a channel member', async () => {
+  it('returns movie provider links as text for a channel member', async () => {
     const db = createMigratedDatabase();
 
     try {
@@ -265,17 +265,16 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(deps, messageUpdate('/search inception'));
 
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toContain('Movie');
+      expect(sentMessages[0].text).toContain('🎬 Movie');
       expect(sentMessages[0].text).toContain('Inception (2010)');
-      expect(sentMessages[0].replyMarkup).toEqual({
-        inline_keyboard: [
-          [{ text: 'Original Post', url: 'https://t.me/infinitylinks65/101' }],
-          [
-            { text: 'MixDrop HD', url: 'https://providers.example/inception-hd' },
-            { text: 'FileMoon 4K', url: 'https://providers.example/inception-4k' }
-          ]
-        ]
-      });
+      expect(sentMessages[0].text).toContain('🔗 Download Links:');
+      expect(sentMessages[0].text).toContain('📁 MixDrop HD - https://providers.example/inception-hd');
+      expect(sentMessages[0].text).toContain('📁 FileMoon 4K - https://providers.example/inception-4k');
+      expect(sentMessages[0].text).toContain('📌 Original Post:');
+      expect(sentMessages[0].text).toContain('https://t.me/infinitylinks65/101');
+      expect(sentMessages[0].text).toContain('📢 Channel: @infinitylinks65');
+      expect(sentMessages[0].text).toContain('👥 Group: @infinitylinks69');
+      expect(sentMessages[0].replyMarkup).toBeUndefined();
     } finally {
       db.close();
     }

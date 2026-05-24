@@ -3,6 +3,7 @@ import { replacePublicCatalog } from '../../src/public-search/catalog.repository
 import { createPublicSearchDatabase, type PublicSearchDatabase } from '../../src/public-search/db/database.js';
 import { migratePublicSearchDatabase } from '../../src/public-search/db/migrate.js';
 import { handleTelegramUpdate, type HandlerDeps } from '../../src/public-search/bot/handlers.js';
+import type { PublicSearchCatalog } from '../../src/public-search/catalog.schema.js';
 import type { InlineKeyboardMarkup, TelegramUpdate } from '../../src/public-search/telegram.client.js';
 
 const handles = {
@@ -20,6 +21,13 @@ type CallbackAnswer = {
   callbackQueryId: string;
   text?: string;
 };
+
+type Provider = PublicSearchCatalog['movies'][number]['providers'][number];
+type NonEmptyProviders = [Provider, ...Provider[]];
+
+function providers(...items: NonEmptyProviders): NonEmptyProviders {
+  return items;
+}
 
 function createMigratedDatabase() {
   const db = createPublicSearchDatabase(':memory:');
@@ -39,7 +47,7 @@ function seedCatalog(db: PublicSearchDatabase) {
         year: 2010,
         telegramMessageId: 101,
         channelPostUrl: 'https://t.me/infinitylinks65/101',
-        providers: [
+        providers: providers(
           {
             providerName: 'MixDrop',
             quality: 'HD',
@@ -52,7 +60,7 @@ function seedCatalog(db: PublicSearchDatabase) {
             url: 'https://providers.example/inception-4k',
             sortOrder: 2
           }
-        ]
+        )
       },
       ...Array.from({ length: 12 }, (_, index) => ({
         id: 100 + index,
@@ -60,14 +68,14 @@ function seedCatalog(db: PublicSearchDatabase) {
         year: 2010 + index,
         telegramMessageId: 200 + index,
         channelPostUrl: `https://t.me/infinitylinks65/${200 + index}`,
-        providers: [
+        providers: providers(
           {
             providerName: 'LimitHost',
             quality: 'HD',
             url: `https://providers.example/limit-${index + 1}`,
             sortOrder: 1
           }
-        ]
+        )
       }))
     ],
     tvShows: [
@@ -84,25 +92,25 @@ function seedCatalog(db: PublicSearchDatabase) {
             episodes: [
               {
                 episodeNumber: 1,
-                providers: [
+                providers: providers(
                   {
                     providerName: 'StreamTape',
                     quality: 'HD',
                     url: 'https://providers.example/breaking-s1e1',
                     sortOrder: 1
                   }
-                ]
+                )
               },
               {
                 episodeNumber: 2,
-                providers: [
+                providers: providers(
                   {
                     providerName: 'MixDrop',
                     quality: 'HD',
                     url: 'https://providers.example/breaking-s1e2',
                     sortOrder: 1
                   }
-                ]
+                )
               }
             ]
           },
@@ -114,14 +122,14 @@ function seedCatalog(db: PublicSearchDatabase) {
             episodes: [
               {
                 episodeNumber: 1,
-                providers: [
+                providers: providers(
                   {
                     providerName: 'FileMoon',
                     quality: '4K',
                     url: 'https://providers.example/breaking-s2e1',
                     sortOrder: 1
                   }
-                ]
+                )
               }
             ]
           }
@@ -177,7 +185,7 @@ function createDeps(db: PublicSearchDatabase, overrides: Partial<HandlerDeps> = 
       })
     },
     rateLimiter: {
-      check: vi.fn(() => ({ allowed: true }))
+      check: vi.fn(() => ({ allowed: true as const }))
     },
     ...handles,
     ...overrides

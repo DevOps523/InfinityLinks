@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { replacePublicCatalog } from '../../src/public-search/catalog.repository.js';
+import type { PublicSearchCatalog } from '../../src/public-search/catalog.schema.js';
 import { createPublicSearchDatabase, type PublicSearchDatabase } from '../../src/public-search/db/database.js';
 import { migratePublicSearchDatabase } from '../../src/public-search/db/migrate.js';
 import {
@@ -14,6 +15,13 @@ function createMigratedDatabase() {
   return db;
 }
 
+type Provider = PublicSearchCatalog['movies'][number]['providers'][number];
+type NonEmptyProviders = [Provider, ...Provider[]];
+
+function providers(...items: NonEmptyProviders): NonEmptyProviders {
+  return items;
+}
+
 function seedCatalog(db: PublicSearchDatabase) {
   replacePublicCatalog(db, {
     generatedAt: '2026-05-24T00:00:00.000Z',
@@ -26,7 +34,7 @@ function seedCatalog(db: PublicSearchDatabase) {
         year: 2000,
         telegramMessageId: 101,
         channelPostUrl: 'https://t.me/infinitylinks65/101',
-        providers: [
+        providers: providers(
           {
             providerName: 'LateHost',
             quality: '4K',
@@ -39,7 +47,7 @@ function seedCatalog(db: PublicSearchDatabase) {
             url: 'https://first.example/alpha',
             sortOrder: 1
           }
-        ]
+        )
       },
       {
         id: 2,
@@ -47,14 +55,14 @@ function seedCatalog(db: PublicSearchDatabase) {
         year: 2001,
         telegramMessageId: 102,
         channelPostUrl: 'https://t.me/infinitylinks65/102',
-        providers: [
+        providers: providers(
           {
             providerName: 'MovieHost',
             quality: 'HD',
             url: 'https://movie.example/alpha-force',
             sortOrder: 1
           }
-        ]
+        )
       },
       {
         id: 3,
@@ -62,14 +70,14 @@ function seedCatalog(db: PublicSearchDatabase) {
         year: 2002,
         telegramMessageId: 103,
         channelPostUrl: 'https://t.me/infinitylinks65/103',
-        providers: [
+        providers: providers(
           {
             providerName: 'CodeHost',
             quality: 'HD',
             url: 'https://code.example/the-alpha-code',
             sortOrder: 1
           }
-        ]
+        )
       },
       {
         id: 4,
@@ -77,14 +85,14 @@ function seedCatalog(db: PublicSearchDatabase) {
         year: 2020,
         telegramMessageId: 104,
         channelPostUrl: 'https://t.me/infinitylinks65/104',
-        providers: [
+        providers: providers(
           {
             providerName: 'CaseHost',
             quality: 'HD',
             url: 'https://case.example/file',
             sortOrder: 1
           }
-        ]
+        )
       },
       ...Array.from({ length: 12 }, (_, index) => ({
         id: 100 + index,
@@ -92,14 +100,14 @@ function seedCatalog(db: PublicSearchDatabase) {
         year: 2010 + index,
         telegramMessageId: 200 + index,
         channelPostUrl: `https://t.me/infinitylinks65/${200 + index}`,
-        providers: [
+        providers: providers(
           {
             providerName: 'LimitHost',
             quality: 'HD',
             url: `https://limit.example/${index + 1}`,
             sortOrder: 1
           }
-        ]
+        )
       }))
     ],
     tvShows: [
@@ -116,7 +124,7 @@ function seedCatalog(db: PublicSearchDatabase) {
             episodes: [
               {
                 episodeNumber: 2,
-                providers: [
+                providers: providers(
                   {
                     providerName: 'EpisodeLate',
                     quality: '4K',
@@ -129,18 +137,18 @@ function seedCatalog(db: PublicSearchDatabase) {
                     url: 'https://episode.example/s2e2-first',
                     sortOrder: 1
                   }
-                ]
+                )
               },
               {
                 episodeNumber: 1,
-                providers: [
+                providers: providers(
                   {
                     providerName: 'EpisodeOne',
                     quality: 'HD',
                     url: 'https://episode.example/s2e1',
                     sortOrder: 1
                   }
-                ]
+                )
               }
             ]
           },
@@ -152,14 +160,14 @@ function seedCatalog(db: PublicSearchDatabase) {
             episodes: [
               {
                 episodeNumber: 1,
-                providers: [
+                providers: providers(
                   {
                     providerName: 'SeasonOne',
                     quality: 'HD',
                     url: 'https://episode.example/s1e1',
                     sortOrder: 1
                   }
-                ]
+                )
               }
             ]
           }
@@ -178,14 +186,14 @@ function seedCatalog(db: PublicSearchDatabase) {
             episodes: [
               {
                 episodeNumber: 1,
-                providers: [
+                providers: providers(
                   {
                     providerName: 'PatrolHost',
                     quality: 'HD',
                     url: 'https://episode.example/patrol-s1e1',
                     sortOrder: 1
                   }
-                ]
+                )
               }
             ]
           }
@@ -204,14 +212,14 @@ function seedCatalog(db: PublicSearchDatabase) {
             episodes: [
               {
                 episodeNumber: 1,
-                providers: [
+                providers: providers(
                   {
                     providerName: 'FilesHost',
                     quality: 'HD',
                     url: 'https://episode.example/files-s1e1',
                     sortOrder: 1
                   }
-                ]
+                )
               }
             ]
           }
@@ -230,14 +238,14 @@ function seedCatalog(db: PublicSearchDatabase) {
             episodes: [
               {
                 episodeNumber: 1,
-                providers: [
+                providers: providers(
                   {
                     providerName: 'CaseTvHost',
                     quality: 'HD',
                     url: 'https://episode.example/mixed-case-s1e1',
                     sortOrder: 1
                   }
-                ]
+                )
               }
             ]
           }

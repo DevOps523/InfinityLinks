@@ -89,27 +89,24 @@ describe('public search bot formatter', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0].text).toBe(
       [
-        'Movie',
+        '🎬 Movie',
         'Inception (2010)',
         '',
-        'Providers:',
+        '🔗 Download Links:',
+        '📁 MixDrop HD - https://providers.example/inception-hd',
+        '📁 FileMoon 4K - https://providers.example/inception-4k',
+        '',
+        '📌 Original Post:',
+        'https://t.me/infinitylinks65/101',
         '',
         '📢 Channel: @infinitylinks65',
         '👥 Group: @infinitylinks69'
       ].join('\n')
     );
-    expect(messages[0].replyMarkup).toEqual({
-      inline_keyboard: [
-        [{ text: 'Original Post', url: 'https://t.me/infinitylinks65/101' }],
-        [
-          { text: 'MixDrop HD', url: 'https://providers.example/inception-hd' },
-          { text: 'FileMoon 4K', url: 'https://providers.example/inception-4k' }
-        ]
-      ]
-    });
+    expect(messages[0].replyMarkup).toBeUndefined();
   });
 
-  it('chunks many movie provider buttons into small rows', () => {
+  it('formats many movie providers as text download links', () => {
     const results: PublicSearchResult[] = [
       {
         type: 'movie',
@@ -127,20 +124,14 @@ describe('public search bot formatter', () => {
 
     const messages = formatSearchResults(results, handles);
 
-    expect(messages[0].replyMarkup?.inline_keyboard).toEqual([
-      [
-        { text: 'Host1 HD', url: 'https://providers.example/movie-1' },
-        { text: 'Host2 HD', url: 'https://providers.example/movie-2' }
-      ],
-      [
-        { text: 'Host3 HD', url: 'https://providers.example/movie-3' },
-        { text: 'Host4 HD', url: 'https://providers.example/movie-4' }
-      ],
-      [{ text: 'Host5 HD', url: 'https://providers.example/movie-5' }]
-    ]);
+    expect(messages).toHaveLength(1);
+    for (let index = 1; index <= 5; index += 1) {
+      expect(messages[0].text).toContain(`📁 Host${index} HD - https://providers.example/movie-${index}`);
+    }
+    expect(messages[0].replyMarkup).toBeUndefined();
   });
 
-  it('splits movie result keyboards before Telegram limits are exceeded', () => {
+  it('splits movie result text before Telegram message length is exceeded', () => {
     const results: PublicSearchResult[] = [
       {
         type: 'movie',
@@ -148,10 +139,10 @@ describe('public search bot formatter', () => {
         title: 'Provider Limit',
         year: 2026,
         channelPostUrl: 'https://t.me/infinitylinks65/401',
-        providers: Array.from({ length: 39 }, (_, index) => ({
+        providers: Array.from({ length: 80 }, (_, index) => ({
           providerName: `Host${index + 1}`,
           quality: 'HD',
-          url: `https://providers.example/provider-limit-${index + 1}`,
+          url: `https://providers.example/provider-limit-${index + 1}-${'x'.repeat(80)}`,
           sortOrder: index + 1
         }))
       }
@@ -159,15 +150,14 @@ describe('public search bot formatter', () => {
 
     const messages = formatSearchResults(results, handles);
 
-    expect(messages).toHaveLength(2);
+    expect(messages.length).toBeGreaterThan(1);
     for (const message of messages) {
-      const rows = message.replyMarkup?.inline_keyboard ?? [];
-
       expect(message.text).toContain('Provider Limit (2026)');
-      expect(rows.length).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_ROWS);
-      expect(rows.reduce((total, row) => total + row.length, 0)).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_BUTTONS);
-      expect(rows[0]).toEqual([{ text: 'Original Post', url: 'https://t.me/infinitylinks65/401' }]);
+      expect(message.text.length).toBeLessThanOrEqual(MAX_FORMATTED_MESSAGE_LENGTH);
+      expect(message.replyMarkup).toBeUndefined();
     }
+    expect(messages[0].text).toContain('🎬 Movie');
+    expect(messages[0].text).toContain('🔗 Download Links:');
   });
 
   it('formats TV results with season callback buttons', () => {

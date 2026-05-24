@@ -1,5 +1,5 @@
 import { Activity, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiJson } from '../api/http';
 import { useToast } from '../components/ToastProvider';
 
@@ -11,6 +11,19 @@ type SyncResult = {
 
 type SyncResponse = {
   sync: SyncResult;
+  status: PublicSearchSyncStatus;
+};
+
+type PublicSearchSyncStatus = {
+  configured: boolean;
+  hasPublicSearchableContent: boolean;
+  hasPendingChanges: boolean;
+  current: {
+    catalogHash: string;
+    movies: number;
+    tvShows: number;
+  };
+  lastSuccessfulSync: SyncResult | null;
 };
 
 type PublicSearchLastError = {
@@ -82,6 +95,60 @@ function isPublicSearchStatusResponse(value: unknown): value is PublicSearchStat
   );
 }
 
+function isSyncResult(value: unknown): value is SyncResult {
+  return (
+    isRecord(value) &&
+    typeof value.syncedAt === 'string' &&
+    typeof value.movies === 'number' &&
+    typeof value.tvShows === 'number'
+  );
+}
+
+function isPublicSearchSyncStatus(value: unknown): value is PublicSearchSyncStatus {
+  return (
+    isRecord(value) &&
+    typeof value.configured === 'boolean' &&
+    typeof value.hasPublicSearchableContent === 'boolean' &&
+    typeof value.hasPendingChanges === 'boolean' &&
+    isRecord(value.current) &&
+    typeof value.current.catalogHash === 'string' &&
+    typeof value.current.movies === 'number' &&
+    typeof value.current.tvShows === 'number' &&
+    (value.lastSuccessfulSync === null || isSyncResult(value.lastSuccessfulSync))
+  );
+}
+
+function createReadinessMessage(syncStatus: PublicSearchSyncStatus | null, isLoadingSyncStatus: boolean) {
+  if (isLoadingSyncStatus) {
+    return 'Checking sync readiness...';
+  }
+
+  if (!syncStatus) {
+    return 'Sync readiness unavailable';
+  }
+
+  if (!syncStatus.hasPublicSearchableContent && !syncStatus.hasPendingChanges) {
+    return 'No public-searchable content yet';
+  }
+
+  if (!syncStatus.hasPendingChanges) {
+    return 'Everything is synced';
+  }
+
+  if (!syncStatus.hasPublicSearchableContent) {
+    return 'Public search catalog is empty, sync to clear old results.';
+  }
+
+  const pendingItems = [
+    syncStatus.current.movies > 0 ? `${syncStatus.current.movies} ${syncStatus.current.movies === 1 ? 'movie' : 'movies'}` : '',
+    syncStatus.current.tvShows > 0
+      ? `${syncStatus.current.tvShows} ${syncStatus.current.tvShows === 1 ? 'TV show' : 'TV shows'}`
+      : ''
+  ].filter(Boolean);
+
+  return `${pendingItems.join(' and ')} ready to sync`;
+}
+
 async function fetchPublicSearchStatus(): Promise<PublicSearchStatusResponse> {
   const response = await fetch('/api/public-search/status');
   const payload = (await response.json()) as unknown;
@@ -93,14 +160,66 @@ async function fetchPublicSearchStatus(): Promise<PublicSearchStatusResponse> {
   throw new Error(response.ok ? 'Public search status check failed' : 'Public search status is unreachable');
 }
 
+async function fetchPublicSearchSyncStatus(): Promise<PublicSearchSyncStatus> {
+  const payload = await apiJson<unknown>('/api/public-search/sync-status');
+
+  if (isPublicSearchSyncStatus(payload)) {
+    return payload;
+  }
+
+  throw new Error('Public search sync readiness check failed');
+}
+
 export function PublicSearchPage() {
   const { showToast } = useToast();
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [syncStatus, setSyncStatus] = useState<PublicSearchSyncStatus | null>(null);
   const [statusResult, setStatusResult] = useState<PublicSearchStatusResponse | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isLoadingSyncStatus, setIsLoadingSyncStatus] = useState(true);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [error, setError] = useState('');
+  const [syncStatusError, setSyncStatusError] = useState('');
   const [statusError, setStatusError] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadSyncStatus() {
+      setIsLoadingSyncStatus(true);
+      setSyncStatusError('');
+
+      try {
+        const payload = await fetchPublicSearchSyncStatus();
+
+        if (isMounted) {
+          setSyncStatus(payload);
+          setSyncResult(payload.lastSuccessfulSync);
+        }
+      } catch (syncStatusCheckError) {
+        const message =
+          syncStatusCheckError instanceof Error
+            ? syncStatusCheckError.message
+            : 'Public search sync readiness check failed';
+
+        if (isMounted) {
+          setSyncStatus(null);
+          setSyncResult(null);
+          setSyncStatusError(message || 'Public search sync readiness check failed');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingSyncStatus(false);
+        }
+      }
+    }
+
+    void loadSyncStatus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   async function syncPublicSearch() {
     setIsSyncing(true);
@@ -112,6 +231,7 @@ export function PublicSearchPage() {
 
       if (nextResult) {
         setSyncResult(nextResult);
+        setSyncStatus(payload.status);
         showToast('Public search synced.');
       }
     } catch (syncError) {
@@ -142,6 +262,9 @@ export function PublicSearchPage() {
   const lastSuccessfulCheckAt = statusResult?.lastSuccessfulCheckAt;
   const remoteStatus = statusResult?.reachable ? statusResult.remote : null;
   const lastError = remoteStatus?.lastError;
+  const readinessMessage = createReadinessMessage(syncStatus, isLoadingSyncStatus);
+  const isSyncDisabled =
+    isLoadingSyncStatus || isSyncing || Boolean(syncStatusError) || !syncStatus?.configured || !syncStatus.hasPendingChanges;
 
   return (
     <section className="page-section">
@@ -149,7 +272,7 @@ export function PublicSearchPage() {
         <div>
           <h1>Public Search</h1>
         </div>
-        <button className="button button--primary" type="button" disabled={isSyncing} onClick={syncPublicSearch}>
+        <button className="button button--primary" type="button" disabled={isSyncDisabled} onClick={syncPublicSearch}>
           <RefreshCw aria-hidden="true" size={18} />
           {isSyncing ? 'Syncing...' : 'Sync Public Search'}
         </button>
@@ -161,6 +284,16 @@ export function PublicSearchPage() {
             {error}
           </div>
         ) : null}
+        {syncStatusError ? (
+          <div className="state-panel state-panel--error" role="alert">
+            {syncStatusError}
+          </div>
+        ) : null}
+        {!error && !syncStatusError ? (
+          <div className="state-panel" aria-live="polite">
+            {readinessMessage}
+          </div>
+        ) : null}
         {!error && syncResult ? (
           <div className="sync-panel__result" aria-live="polite">
             <strong>Last sync</strong>
@@ -169,7 +302,6 @@ export function PublicSearchPage() {
             <span>{syncResult.tvShows} TV shows</span>
           </div>
         ) : null}
-        {!error && !syncResult ? <div className="state-panel">No sync has run in this session.</div> : null}
       </div>
 
       <div className="sync-panel public-search-status">

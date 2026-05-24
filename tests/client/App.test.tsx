@@ -8,6 +8,44 @@ import { ToastProvider, useToast } from '../../src/client/components/ToastProvid
 
 const fetchMock = vi.fn();
 
+type PublicSearchSyncStatusFixture = {
+  configured: boolean;
+  hasPublicSearchableContent: boolean;
+  hasPendingChanges: boolean;
+  current: {
+    catalogHash: string;
+    movies: number;
+    tvShows: number;
+  };
+  lastSuccessfulSync: null | {
+    syncedAt: string;
+    movies: number;
+    tvShows: number;
+  };
+};
+
+function createPublicSearchSyncStatus(
+  overrides: Partial<Omit<PublicSearchSyncStatusFixture, 'current'>> & {
+    current?: Partial<PublicSearchSyncStatusFixture['current']>;
+  } = {}
+): PublicSearchSyncStatusFixture {
+  const { current, ...statusOverrides } = overrides;
+
+  return {
+    configured: true,
+    hasPublicSearchableContent: true,
+    hasPendingChanges: true,
+    lastSuccessfulSync: null,
+    ...statusOverrides,
+    current: {
+      catalogHash: 'hash-1',
+      movies: 1,
+      tvShows: 0,
+      ...current
+    }
+  };
+}
+
 function ToastHarness() {
   const { showToast } = useToast();
 
@@ -56,6 +94,19 @@ describe('App', () => {
   });
 
   it('keeps the selected top-level page after reload through the URL hash', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync-status') {
+        return {
+          ok: true,
+          json: async () => createPublicSearchSyncStatus()
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
     window.history.replaceState(null, '', '/#/public-search');
 
     render(<App />);
@@ -63,6 +114,7 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: /^public search$/i })).toBeInTheDocument();
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     expect(within(navigation).getByRole('button', { name: /^public search$/i })).toHaveAttribute('aria-current', 'page');
+    expect(await screen.findByText('1 movie ready to sync')).toBeInTheDocument();
   });
 
   it('updates the URL hash when navigating between top-level pages', async () => {
@@ -140,7 +192,21 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: /^filter$/i })).not.toBeInTheDocument();
   });
 
-  it('renders the Public Search sync page after clicking Public Search', () => {
+  it('renders the Public Search sync page after clicking Public Search', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync-status') {
+        return {
+          ok: true,
+          json: async () => createPublicSearchSyncStatus()
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
     render(<App />);
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
@@ -149,10 +215,127 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: /^public search$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^check bot status$/i })).toBeInTheDocument();
+    expect(await screen.findByText('1 movie ready to sync')).toBeInTheDocument();
   });
 
-  it('syncs the public search catalog and shows returned counts', async () => {
+  it('shows loading public search readiness and enables sync when changes are pending', async () => {
+    let resolveSyncStatus: (response: unknown) => void = () => undefined;
+    const syncStatusPromise = new Promise((resolve) => {
+      resolveSyncStatus = resolve;
+    });
+
     fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync-status') {
+        return syncStatusPromise;
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+
+    expect(screen.getByText('Checking sync readiness...')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeDisabled();
+
+    resolveSyncStatus({
+      ok: true,
+      json: async () =>
+        createPublicSearchSyncStatus({
+          current: {
+            movies: 1,
+            tvShows: 2
+          }
+        })
+    });
+
+    expect(await screen.findByText('1 movie and 2 TV shows ready to sync')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeEnabled();
+  });
+
+  it('disables the public search sync button when everything is synced', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync-status') {
+        return {
+          ok: true,
+          json: async () =>
+            createPublicSearchSyncStatus({
+              hasPendingChanges: false,
+              lastSuccessfulSync: {
+                syncedAt: '2026-05-24T10:00:00.000Z',
+                movies: 1,
+                tvShows: 0
+              }
+            })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+
+    expect(await screen.findByText('Everything is synced')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeDisabled();
+  });
+
+  it('enables the public search sync button when pending changes clear old results', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync-status') {
+        return {
+          ok: true,
+          json: async () =>
+            createPublicSearchSyncStatus({
+              hasPublicSearchableContent: false,
+              hasPendingChanges: true,
+              current: {
+                movies: 0,
+                tvShows: 0
+              },
+              lastSuccessfulSync: {
+                syncedAt: '2026-05-24T10:00:00.000Z',
+                movies: 1,
+                tvShows: 0
+              }
+            })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+
+    expect(await screen.findByText('Public search catalog is empty, sync to clear old results.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeEnabled();
+  });
+
+  it('syncs the public search catalog and updates readiness', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync-status') {
+        return {
+          ok: true,
+          json: async () => createPublicSearchSyncStatus()
+        };
+      }
+
       if (url === '/api/public-search/sync') {
         return {
           ok: true,
@@ -161,7 +344,20 @@ describe('App', () => {
               syncedAt: '2026-05-24T10:00:00.000Z',
               movies: 12,
               tvShows: 4
-            }
+            },
+            status: createPublicSearchSyncStatus({
+              hasPendingChanges: false,
+              current: {
+                catalogHash: 'hash-2',
+                movies: 12,
+                tvShows: 4
+              },
+              lastSuccessfulSync: {
+                syncedAt: '2026-05-24T10:00:00.000Z',
+                movies: 12,
+                tvShows: 4
+              }
+            })
           })
         };
       }
@@ -176,6 +372,7 @@ describe('App', () => {
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+    expect(await screen.findByText('1 movie ready to sync')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^sync public search$/i }));
 
     await waitFor(() =>
@@ -183,6 +380,8 @@ describe('App', () => {
     );
     expect(await screen.findByText(/12 movies/i)).toBeInTheDocument();
     expect(screen.getByText(/4 tv shows/i)).toBeInTheDocument();
+    expect(screen.getByText('Everything is synced')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeDisabled();
   });
 
   it('disables the public search sync button while syncing', async () => {
@@ -192,6 +391,13 @@ describe('App', () => {
     });
 
     fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync-status') {
+        return {
+          ok: true,
+          json: async () => createPublicSearchSyncStatus()
+        };
+      }
+
       if (url === '/api/public-search/sync') {
         return syncPromise;
       }
@@ -206,6 +412,7 @@ describe('App', () => {
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+    expect(await screen.findByText('1 movie ready to sync')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^sync public search$/i }));
 
     const syncingButton = await screen.findByRole('button', { name: /^syncing\.\.\.$/i });
@@ -218,15 +425,35 @@ describe('App', () => {
           syncedAt: '2026-05-24T10:00:00.000Z',
           movies: 2,
           tvShows: 1
-        }
+        },
+        status: createPublicSearchSyncStatus({
+          hasPendingChanges: false,
+          current: {
+            catalogHash: 'hash-2',
+            movies: 2,
+            tvShows: 1
+          },
+          lastSuccessfulSync: {
+            syncedAt: '2026-05-24T10:00:00.000Z',
+            movies: 2,
+            tvShows: 1
+          }
+        })
       })
     });
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeDisabled());
   });
 
   it('shows the public search sync error message', async () => {
     fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync-status') {
+        return {
+          ok: true,
+          json: async () => createPublicSearchSyncStatus()
+        };
+      }
+
       if (url === '/api/public-search/sync') {
         return {
           ok: false,
@@ -246,6 +473,7 @@ describe('App', () => {
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+    expect(await screen.findByText('1 movie ready to sync')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^sync public search$/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Public search sync failed');
@@ -399,38 +627,55 @@ describe('App', () => {
 
   it('renders retained public search bot check time from a structured unreachable response', async () => {
     const lastSuccessfulCheckAt = '2026-05-24T10:00:00.000Z';
+    let statusChecks = 0;
 
-    fetchMock
-      .mockResolvedValueOnce({
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync-status') {
+        return {
+          ok: true,
+          json: async () => createPublicSearchSyncStatus()
+        };
+      }
+
+      if (url === '/api/public-search/status') {
+        statusChecks += 1;
+
+        if (statusChecks === 1) {
+          return {
+            ok: true,
+            json: async () => ({
+              reachable: true,
+              lastSuccessfulCheckAt,
+              remote: {
+                state: 'ok',
+                checkedAt: '2026-05-24T09:59:58.000Z',
+                uptimeSeconds: 120,
+                consecutiveErrorCount: 0,
+                lastError: null
+              }
+            })
+          };
+        }
+
+        return {
+          ok: false,
+          status: 502,
+          statusText: 'Bad Gateway',
+          json: async () => ({
+            reachable: false,
+            lastSuccessfulCheckAt,
+            error: 'Public search status check failed',
+            token: 'secret-token',
+            authorization: 'Bearer secret-token'
+          })
+        };
+      }
+
+      return {
         ok: true,
         json: async () => ({ movies: [] })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          reachable: true,
-          lastSuccessfulCheckAt,
-          remote: {
-            state: 'ok',
-            checkedAt: '2026-05-24T09:59:58.000Z',
-            uptimeSeconds: 120,
-            consecutiveErrorCount: 0,
-            lastError: null
-          }
-        })
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 502,
-        statusText: 'Bad Gateway',
-        json: async () => ({
-          reachable: false,
-          lastSuccessfulCheckAt,
-          error: 'Public search status check failed',
-          token: 'secret-token',
-          authorization: 'Bearer secret-token'
-        })
-      });
+      };
+    });
 
     render(<App />);
 
@@ -827,6 +1072,13 @@ describe('App', () => {
 
   it('dismisses notification toasts manually', async () => {
     fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync-status') {
+        return {
+          ok: true,
+          json: async () => createPublicSearchSyncStatus()
+        };
+      }
+
       if (url === '/api/public-search/sync') {
         return {
           ok: true,
@@ -835,7 +1087,15 @@ describe('App', () => {
               syncedAt: '2026-05-24T10:00:00.000Z',
               movies: 1,
               tvShows: 0
-            }
+            },
+            status: createPublicSearchSyncStatus({
+              hasPendingChanges: false,
+              lastSuccessfulSync: {
+                syncedAt: '2026-05-24T10:00:00.000Z',
+                movies: 1,
+                tvShows: 0
+              }
+            })
           })
         };
       }
@@ -850,6 +1110,7 @@ describe('App', () => {
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+    expect(await screen.findByText('1 movie ready to sync')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^sync public search$/i }));
 
     expect(await screen.findByText('Public search synced.')).toBeInTheDocument();

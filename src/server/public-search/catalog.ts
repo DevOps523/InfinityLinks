@@ -88,12 +88,12 @@ function buildChannelPostUrl(channelHandle: string, messageId: number | null): s
   return `https://t.me/${publicHandle}/${messageId}`;
 }
 
-function mapProvider(row: Pick<MovieCatalogRow | TvCatalogRow, 'provider_name' | 'quality' | 'url' | 'sort_order'>) {
+function mapProvider(row: Pick<MovieCatalogRow | TvCatalogRow, 'provider_name' | 'quality' | 'url'>, sortOrder: number) {
   return {
     providerName: row.provider_name,
     quality: row.quality,
     url: row.url,
-    sortOrder: row.sort_order
+    sortOrder
   };
 }
 
@@ -158,7 +158,7 @@ function buildMovies(db: AppDatabase, channelHandle: string): PublicSearchMovie[
       moviesById.set(row.movie_id, movie);
     }
 
-    movie.providers.push(mapProvider(row));
+    movie.providers.push(mapProvider(row, movie.providers.length + 1));
   }
 
   return Array.from(moviesById.values());
@@ -249,7 +249,7 @@ function buildTvShows(db: AppDatabase, channelHandle: string): PublicSearchTvSho
       seasonAccumulator.season.episodes.push(episode);
     }
 
-    episode.providers.push(mapProvider(row));
+    episode.providers.push(mapProvider(row, episode.providers.length + 1));
   }
 
   return Array.from(tvShowsById.values()).map((accumulator) => accumulator.tvShow);

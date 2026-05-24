@@ -60,6 +60,37 @@ describe('public search catalog export', () => {
     }
   });
 
+  it('exports provider sort order as positive display order when stored sort order is zero', () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const movie = db
+        .prepare(
+          "INSERT INTO movies (title, year, quality, telegram_message_id, post_status) VALUES ('Zero Sort', 2026, 'HD', 777, 'posted')"
+        )
+        .run();
+
+      db.prepare(
+        `INSERT INTO movie_links (movie_id, provider_name, quality, status, url)
+         VALUES (?, 'FirstHost', 'HD', 'active', 'https://first.example/movie')`
+      ).run(movie.lastInsertRowid);
+      db.prepare(
+        `INSERT INTO movie_links (movie_id, provider_name, quality, status, url)
+         VALUES (?, 'SecondHost', 'HD', 'active', 'https://second.example/movie')`
+      ).run(movie.lastInsertRowid);
+
+      const catalog = buildPublicSearchCatalog(db, {
+        channelHandle: '@infinitylinks65',
+        groupHandle: '@infinitylinks69',
+        now: () => new Date('2026-05-24T00:00:00.000Z')
+      });
+
+      expect(catalog.movies[0].providers.map((provider) => provider.sortOrder)).toEqual([1, 2]);
+    } finally {
+      db.close();
+    }
+  });
+
   it('exports active episode links under the correct show, season, and episode', () => {
     const db = createMigratedDatabase();
 

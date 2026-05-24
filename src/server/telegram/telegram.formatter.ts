@@ -85,11 +85,7 @@ function formatMovieLinks(links: TelegramLinkInput[]): CaptionBlock[] {
     return [formatFooter()];
   }
 
-  return [
-    ['📥 Download Links:', linkLines[0]],
-    ...linkLines.slice(1).map((line) => ['', line]),
-    ['', ...formatFooter()]
-  ];
+  return [['📥 Download Links:', linkLines[0]], ...linkLines.slice(1).map((line) => [line]), ['', ...formatFooter()]];
 }
 
 function formatEpisodes(episodes: TelegramSeasonEpisodeInput[]): CaptionBlock[] {
@@ -106,7 +102,7 @@ function formatEpisodes(episodes: TelegramSeasonEpisodeInput[]): CaptionBlock[] 
 
     return [
       [...headingPrefix, `🎞️ Episode ${episode.episodeNumber}`, '📥 Download Links:', linkLines[0]],
-      ...linkLines.slice(1).map((line) => ['', line])
+      ...linkLines.slice(1).map((line) => [line])
     ];
   });
 

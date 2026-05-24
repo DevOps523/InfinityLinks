@@ -34,7 +34,6 @@ describe('telegram caption formatter', () => {
         '',
         '📥 Download Links:',
         '🔗 StreamHub - https://example.com/inception',
-        '',
         '🔗 Mirror - https://mirror.example.com/inception',
         '',
         '👥 Group Channel Link: @infinitylinks69',
@@ -61,6 +60,12 @@ describe('telegram caption formatter', () => {
               quality: 'HD',
               status: 'Active',
               url: 'https://example.com/chronos/s02e01'
+            },
+            {
+              providerName: 'Mirror',
+              quality: 'HD',
+              status: 'Active',
+              url: 'https://mirror.example.com/chronos/s02e01'
             }
           ]
         },
@@ -93,6 +98,7 @@ describe('telegram caption formatter', () => {
         '🎞️ Episode 1',
         '📥 Download Links:',
         '🔗 StreamHub - https://example.com/chronos/s02e01',
+        '🔗 Mirror - https://mirror.example.com/chronos/s02e01',
         '',
         '🎞️ Episode 3',
         '📥 Download Links:',

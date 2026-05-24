@@ -184,17 +184,24 @@ git commit -m "feat: copy public search bot runtime"
 ### Task 3: Copy And Adapt Standalone Tests
 
 **Files:**
-- Copy from: `tests/public-search/*.test.ts`
+- Copy/adapt from: `tests/public-search/*.test.ts`
 - Create under: `apps/public-search-bot/tests/*.test.ts`
-- Modify copied tests only.
+- Modify copied standalone tests only.
 
-**Step 1: Copy tests**
+**Step 1: Copy standalone-relevant tests**
 
-Copy all existing public-search tests into:
+Copy existing public-search tests that exercise the VPS/public bot runtime into:
 
 ```text
 apps/public-search-bot/tests/
 ```
+
+Do not copy root tests that exercise local-admin-only behavior:
+
+- `public-search.sync-route.test.ts` covers the private local admin sync route.
+- `public-search.catalog.test.ts` covers the private local admin catalog exporter.
+
+The standalone suite should instead include catalog payload validation coverage against `PublicSearchCatalogSchema`, because the standalone bot receives already-exported catalogs through `/api/sync`.
 
 **Step 2: Update test import paths**
 
@@ -212,7 +219,7 @@ from '../src/...'
 
 The copied tests should not import anything from the repo root.
 
-**Step 3: Remove local-admin-only test from standalone suite**
+**Step 3: Remove local-admin-only tests from standalone suite**
 
 Do not include `public-search.sync-route.test.ts` in the standalone test suite unless it is rewritten. That test covers the root local admin route at `src/server/public-search/public-search.routes.ts`, not the standalone VPS bot.
 
@@ -221,6 +228,8 @@ If copied initially, delete:
 ```text
 apps/public-search-bot/tests/public-search.sync-route.test.ts
 ```
+
+Do not include the root `public-search.catalog.test.ts` as-is. If a standalone file uses that name, it must test standalone catalog schema/validation behavior and import only from `apps/public-search-bot/src`.
 
 **Step 4: Run standalone tests**
 

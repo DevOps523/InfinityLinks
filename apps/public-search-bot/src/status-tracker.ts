@@ -30,6 +30,7 @@ const ERROR_SOURCES = new Set<PublicSearchErrorSource>([
 ]);
 
 const MAX_MESSAGE_LENGTH = 240;
+const REDACTED = '[redacted]';
 
 function normalizeSource(source: PublicSearchErrorSource): PublicSearchErrorSource {
   return ERROR_SOURCES.has(source) ? source : 'unknown';
@@ -42,7 +43,13 @@ function toIsoString(value: Date): string {
 function sanitizeErrorMessage(error: unknown): string {
   const rawMessage = error instanceof Error && error.message ? error.message : String(error);
   const firstLine = rawMessage.split(/\r?\n/)[0] ?? '';
-  const normalized = firstLine.replace(/\s+/g, ' ').trim();
+  const normalized = firstLine
+    .replace(/\s+/g, ' ')
+    .replace(/Authorization:\s*Bearer\s+\S+/gi, `Authorization: Bearer ${REDACTED}`)
+    .replace(/\b(token\s*[=:]\s*)(\S+)/gi, `$1${REDACTED}`)
+    .replace(/\/bot\d+:[^/\s]+/gi, `/bot${REDACTED}`)
+    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, REDACTED)
+    .trim();
 
   if (normalized.length <= MAX_MESSAGE_LENGTH) {
     return normalized;
@@ -58,35 +65,39 @@ export function createPublicSearchStatusTracker(options: PublicSearchStatusTrack
   let consecutiveErrorCount = 0;
   let lastError: PublicSearchStatusError | null = null;
 
-  return {
-    recordError(source: PublicSearchErrorSource, error: unknown): PublicSearchStatusSnapshot {
-      consecutiveErrorCount += 1;
-      lastError = {
-        source: normalizeSource(source),
-        at: toIsoString(now()),
-        message: sanitizeErrorMessage(error)
-      };
+  function snapshot(): PublicSearchStatusSnapshot {
+    return {
+      state: lastError ? 'error' : 'ok',
+      checkedAt: toIsoString(now()),
+      uptimeSeconds: uptimeSeconds(),
+      consecutiveErrorCount,
+      lastError
+    };
+  }
 
-      return this.snapshot();
-    },
+  function recordError(source: PublicSearchErrorSource, error: unknown): PublicSearchStatusSnapshot {
+    consecutiveErrorCount += 1;
+    lastError = {
+      source: normalizeSource(source),
+      at: toIsoString(now()),
+      message: sanitizeErrorMessage(error)
+    };
 
-    clearError(source: PublicSearchErrorSource): PublicSearchStatusSnapshot {
-      if (lastError?.source === normalizeSource(source)) {
-        consecutiveErrorCount = 0;
-        lastError = null;
-      }
+    return snapshot();
+  }
 
-      return this.snapshot();
-    },
-
-    snapshot(): PublicSearchStatusSnapshot {
-      return {
-        state: lastError ? 'error' : 'ok',
-        checkedAt: toIsoString(now()),
-        uptimeSeconds: uptimeSeconds(),
-        consecutiveErrorCount,
-        lastError
-      };
+  function clearError(source: PublicSearchErrorSource): PublicSearchStatusSnapshot {
+    if (lastError?.source === normalizeSource(source)) {
+      consecutiveErrorCount = 0;
+      lastError = null;
     }
+
+    return snapshot();
+  }
+
+  return {
+    recordError,
+    clearError,
+    snapshot
   };
 }

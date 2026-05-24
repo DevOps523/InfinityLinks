@@ -86,4 +86,53 @@ describe('public search status tracker', () => {
     expect(snapshot.lastError?.message).not.toContain('\n');
     expect(snapshot.lastError?.message).not.toContain('status.ts:10:5');
   });
+
+  it('redacts common secrets from public status messages', () => {
+    const tracker = createPublicSearchStatusTracker({
+      now: () => new Date('2026-05-24T08:05:00.000Z'),
+      uptimeSeconds: () => 60
+    });
+    const bearerSecret = 'abc123SECRET456';
+    const tokenSecret = 'secret-token-value';
+    const colonTokenSecret = 'another-secret-token';
+    const botTokenSecret = '123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const longSecret = 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6';
+
+    tracker.recordError(
+      'startup',
+      new Error(
+        `Request failed Authorization: Bearer ${bearerSecret} token=${tokenSecret} token: ${colonTokenSecret} https://api.telegram.org/bot${botTokenSecret}/sendMessage secret ${longSecret}`
+      )
+    );
+
+    const message = tracker.snapshot().lastError?.message ?? '';
+
+    expect(message).toContain('[redacted]');
+    expect(message).not.toContain(bearerSecret);
+    expect(message).not.toContain(tokenSecret);
+    expect(message).not.toContain(colonTokenSecret);
+    expect(message).not.toContain(botTokenSecret);
+    expect(message).not.toContain(longSecret);
+  });
+
+  it('allows tracker methods to be destructured', () => {
+    const tracker = createPublicSearchStatusTracker({
+      now: () => new Date('2026-05-24T08:06:00.000Z'),
+      uptimeSeconds: () => 70
+    });
+    const { recordError, clearError } = tracker;
+
+    expect(recordError('sync', new Error('failed'))).toMatchObject({
+      state: 'error',
+      consecutiveErrorCount: 1
+    });
+
+    expect(clearError('sync')).toEqual({
+      state: 'ok',
+      checkedAt: '2026-05-24T08:06:00.000Z',
+      uptimeSeconds: 70,
+      consecutiveErrorCount: 0,
+      lastError: null
+    });
+  });
 });

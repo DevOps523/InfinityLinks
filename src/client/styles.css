@@ -335,7 +335,7 @@ td {
 .action-menu__panel {
   position: fixed;
   z-index: 5;
-  width: 164px;
+  width: 190px;
   border: 1px solid #d8e0ea;
   border-radius: 8px;
   background: #ffffff;
@@ -348,6 +348,7 @@ td {
   justify-content: flex-start;
   background: #ffffff;
   padding: 8px;
+  white-space: nowrap;
 }
 
 .action-menu__item--danger {

@@ -33,7 +33,7 @@ export function ActionMenu({ extraActions = [], onEdit, onDelete }: ActionMenuPr
       }
 
       const rect = root.getBoundingClientRect();
-      const panelWidth = panelRef.current?.offsetWidth ?? 164;
+      const panelWidth = panelRef.current?.offsetWidth ?? 190;
       const panelHeight = panelRef.current?.offsetHeight ?? (extraActions.length + 2) * 40 + 12;
       const viewportPadding = 8;
       const gap = 6;

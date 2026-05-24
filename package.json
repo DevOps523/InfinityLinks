@@ -10,6 +10,10 @@
     "build:public-search": "tsc -p tsconfig.public-search.json",
     "start": "node dist/server/index.js",
     "public-search:start": "node dist/public-search/index.js",
+    "standalone-public-search:install": "npm --prefix apps/public-search-bot install",
+    "standalone-public-search:test": "npm --prefix apps/public-search-bot test",
+    "standalone-public-search:build": "npm --prefix apps/public-search-bot run build",
+    "standalone-public-search:start": "npm --prefix apps/public-search-bot start",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "tsx src/server/db/migrate.ts"

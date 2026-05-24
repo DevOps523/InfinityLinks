@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createPublicSearchApp } from '../../src/public-search/app.js';
+import type { PublicSearchCatalog } from '../../src/public-search/catalog.schema.js';
 import type { PublicSearchConfig } from '../../src/public-search/config.js';
 import { createPublicSearchDatabase, type PublicSearchDatabase } from '../../src/public-search/db/database.js';
 import { migratePublicSearchDatabase } from '../../src/public-search/db/migrate.js';
@@ -23,7 +24,7 @@ function createConfig(overrides: Partial<PublicSearchConfig> = {}): PublicSearch
   };
 }
 
-function validCatalog() {
+function validCatalog(): PublicSearchCatalog {
   return {
     generatedAt: '2026-05-24T00:00:00.000Z',
     channelHandle: '@infinitylinks65',

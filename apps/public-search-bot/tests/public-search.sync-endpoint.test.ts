@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createPublicSearchApp } from '../src/app.js';
+import type { PublicSearchCatalog } from '../src/catalog.schema.js';
 import type { PublicSearchConfig } from '../src/config.js';
 import { createPublicSearchDatabase, type PublicSearchDatabase } from '../src/db/database.js';
 import { migratePublicSearchDatabase } from '../src/db/migrate.js';
@@ -33,7 +34,7 @@ function createTracker() {
   });
 }
 
-function validCatalog() {
+function validCatalog(): PublicSearchCatalog {
   return {
     generatedAt: '2026-05-24T00:00:00.000Z',
     channelHandle: '@infinitylinks65',

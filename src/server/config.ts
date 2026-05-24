@@ -4,10 +4,18 @@ function requiredSecret(name: string) {
   return z.string({ required_error: `${name} is required` }).trim().min(1, `${name} is required`);
 }
 
+function emptyStringToUndefined(value: unknown) {
+  return typeof value === 'string' && value.trim().length === 0 ? undefined : value;
+}
+
 const OptionalTrimmedString = z.preprocess(
-  (value) => (typeof value === 'string' && value.trim().length === 0 ? undefined : value),
+  emptyStringToUndefined,
   z.string().trim().min(1).optional()
 );
+
+function trimmedStringWithDefault(defaultValue: string) {
+  return z.preprocess(emptyStringToUndefined, z.string().trim().min(1).default(defaultValue));
+}
 
 const EnvSchema = z.object({
   TMDB_API_KEY: requiredSecret('TMDB_API_KEY'),
@@ -24,8 +32,8 @@ const EnvSchema = z.object({
   DATABASE_PATH: z.string().trim().min(1).default('./data/infinitylinks.sqlite'),
   PUBLIC_SEARCH_SYNC_URL: OptionalTrimmedString,
   PUBLIC_SEARCH_SYNC_TOKEN: OptionalTrimmedString,
-  PUBLIC_SEARCH_CHANNEL_HANDLE: OptionalTrimmedString.default('@infinitylinks65'),
-  PUBLIC_SEARCH_GROUP_HANDLE: OptionalTrimmedString.default('@infinitylinks69')
+  PUBLIC_SEARCH_CHANNEL_HANDLE: trimmedStringWithDefault('@infinitylinks65'),
+  PUBLIC_SEARCH_GROUP_HANDLE: trimmedStringWithDefault('@infinitylinks69')
 });
 
 export type AppConfig = {

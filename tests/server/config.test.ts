@@ -52,11 +52,15 @@ describe('loadConfig', () => {
         TELEGRAM_BOT_TOKEN: 'telegram-token',
         TELEGRAM_CHANNEL_ID: '@channel',
         PUBLIC_SEARCH_SYNC_URL: '   ',
-        PUBLIC_SEARCH_SYNC_TOKEN: ''
+        PUBLIC_SEARCH_SYNC_TOKEN: '',
+        PUBLIC_SEARCH_CHANNEL_HANDLE: '   ',
+        PUBLIC_SEARCH_GROUP_HANDLE: ''
       })
     ).toMatchObject({
       publicSearchSyncUrl: undefined,
-      publicSearchSyncToken: undefined
+      publicSearchSyncToken: undefined,
+      publicSearchChannelHandle: '@infinitylinks65',
+      publicSearchGroupHandle: '@infinitylinks69'
     });
   });
 

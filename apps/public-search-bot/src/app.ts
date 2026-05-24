@@ -1,0 +1,58 @@
+import express from 'express';
+import { ZodError } from 'zod';
+import type { PublicSearchConfig } from './config.js';
+import type { PublicSearchDatabase } from './db/database.js';
+import { createPublicSearchSyncRouter } from './sync.routes.js';
+
+type CreatePublicSearchAppOptions = {
+  db: PublicSearchDatabase;
+  config: PublicSearchConfig;
+};
+
+function formatZodPath(path: Array<number | string>) {
+  return path.map(String).join('.');
+}
+
+function getErrorStatus(error: unknown) {
+  if (typeof error !== 'object' || error === null) {
+    return undefined;
+  }
+
+  const status = 'status' in error ? error.status : 'statusCode' in error ? error.statusCode : undefined;
+  return typeof status === 'number' && status >= 400 && status < 600 ? status : undefined;
+}
+
+export function createPublicSearchApp(options: CreatePublicSearchAppOptions) {
+  const app = express();
+
+  app.set('trust proxy', 'loopback');
+  app.use(express.json({ limit: '5mb' }));
+  app.use('/api', createPublicSearchSyncRouter(options.db, options.config));
+
+  app.use('/api', (_req, res) => {
+    res.status(404).json({ error: 'API route not found' });
+  });
+
+  app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (error instanceof ZodError) {
+      res.status(400).json({
+        error: 'Validation failed',
+        issues: error.issues.map((issue) => ({
+          path: formatZodPath(issue.path),
+          message: issue.message
+        }))
+      });
+      return;
+    }
+
+    const status = getErrorStatus(error);
+    if (status && status < 500) {
+      res.status(status).json({ error: status === 413 ? 'Request body too large' : 'Invalid request body' });
+      return;
+    }
+
+    res.status(500).json({ error: 'Unexpected server error' });
+  });
+
+  return app;
+}

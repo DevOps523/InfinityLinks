@@ -55,4 +55,40 @@ describe('public search fixed-window rate limiter', () => {
     expect(limiter.check('user-1')).toEqual({ allowed: false, retryAfterMs: 1000 });
     expect(limiter.check('user-2')).toEqual({ allowed: true });
   });
+
+  it('prunes expired buckets during checks', () => {
+    let currentTime = 100;
+    const limiter = createFixedWindowRateLimiter({
+      limit: 1,
+      windowMs: 1000,
+      now: () => currentTime
+    });
+
+    expect(limiter.check('user-1')).toEqual({ allowed: true });
+    expect(limiter.check('user-2')).toEqual({ allowed: true });
+    expect(limiter.debugBucketCount()).toBe(2);
+
+    currentTime = 1100;
+    expect(limiter.check('user-3')).toEqual({ allowed: true });
+
+    expect(limiter.debugBucketCount()).toBe(1);
+    expect(limiter.check('user-1')).toEqual({ allowed: true });
+    expect(limiter.debugBucketCount()).toBe(2);
+  });
+
+  it('requires integer limit and window size values', () => {
+    expect(() =>
+      createFixedWindowRateLimiter({
+        limit: 1.5,
+        windowMs: 1000
+      })
+    ).toThrow('Rate limit must be a positive integer');
+
+    expect(() =>
+      createFixedWindowRateLimiter({
+        limit: 1,
+        windowMs: 1000.5
+      })
+    ).toThrow('Rate limit windowMs must be a positive integer');
+  });
 });

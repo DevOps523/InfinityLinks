@@ -30,6 +30,28 @@ describe('public search Telegram reply queue', () => {
     expect(sent).toEqual(['first', 'second', 'third']);
   });
 
+  it('preserves mixed send and callback answer order', async () => {
+    const actions: string[] = [];
+    const client = {
+      sendMessage: vi.fn(async (input: { text: string }) => {
+        actions.push(`send:${input.text}`);
+      }),
+      answerCallbackQuery: vi.fn(async (input: { callbackQueryId: string }) => {
+        actions.push(`callback:${input.callbackQueryId}`);
+      })
+    };
+    const queue = createTelegramReplyQueue(client);
+
+    const first = queue.enqueueSendMessage({ chatId: 1, text: 'first' });
+    const second = queue.enqueueAnswerCallbackQuery({ callbackQueryId: 'callback-1', text: 'Loaded' });
+    const third = queue.enqueueSendMessage({ chatId: 1, text: 'second' });
+
+    await queue.idle();
+
+    await expect(Promise.all([first, second, third])).resolves.toEqual([undefined, undefined, undefined]);
+    expect(actions).toEqual(['send:first', 'callback:callback-1', 'send:second']);
+  });
+
   it('pauses the queue and retries the same item after a Telegram 429', async () => {
     const sendMessage = vi
       .fn()

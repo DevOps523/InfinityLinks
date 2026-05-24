@@ -139,13 +139,10 @@ Use this split when deploying from your private local admin app to the public VP
 
    Open [http://127.0.0.1:3000](http://127.0.0.1:3000), go to `Public Search`, and click `Sync Public Search`. The local app exports only active links from content already posted to the Telegram channel, then sends that catalog to the VPS `/api/sync` endpoint.
 
-7. Quick checks:
+7. Quick checks for the standalone VPS app:
 
    ```sh
    cd apps/public-search-bot
-   npm run build
-   npm test
-   cd ../..
    npm run build
    npm test
    ```

@@ -118,6 +118,10 @@ function isPublicSearchSyncStatus(value: unknown): value is PublicSearchSyncStat
   );
 }
 
+function isSyncResponse(value: unknown): value is SyncResponse {
+  return isRecord(value) && isSyncResult(value.sync) && isPublicSearchSyncStatus(value.status);
+}
+
 function createReadinessMessage(syncStatus: PublicSearchSyncStatus | null, isLoadingSyncStatus: boolean) {
   if (isLoadingSyncStatus) {
     return 'Checking sync readiness...';
@@ -125,6 +129,10 @@ function createReadinessMessage(syncStatus: PublicSearchSyncStatus | null, isLoa
 
   if (!syncStatus) {
     return 'Sync readiness unavailable';
+  }
+
+  if (!syncStatus.configured) {
+    return 'Public search sync is not configured.';
   }
 
   if (!syncStatus.hasPublicSearchableContent && !syncStatus.hasPendingChanges) {
@@ -226,14 +234,15 @@ export function PublicSearchPage() {
     setError('');
 
     try {
-      const payload = await apiJson<SyncResponse>('/api/public-search/sync', { method: 'POST' });
-      const nextResult = payload?.sync;
+      const payload = await apiJson<unknown>('/api/public-search/sync', { method: 'POST' });
 
-      if (nextResult) {
-        setSyncResult(nextResult);
-        setSyncStatus(payload.status);
-        showToast('Public search synced.');
+      if (!isSyncResponse(payload)) {
+        throw new Error('Public search sync response was invalid');
       }
+
+      setSyncResult(payload.sync);
+      setSyncStatus(payload.status);
+      showToast('Public search synced.');
     } catch (syncError) {
       const message = syncError instanceof Error ? syncError.message : 'Public search sync failed.';
       setError(message);

@@ -290,6 +290,39 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeDisabled();
   });
 
+  it('shows an unconfigured public search sync readiness message', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync-status') {
+        return {
+          ok: true,
+          json: async () =>
+            createPublicSearchSyncStatus({
+              configured: false,
+              hasPendingChanges: true,
+              current: {
+                movies: 1,
+                tvShows: 0
+              }
+            })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+
+    expect(await screen.findByText('Public search sync is not configured.')).toBeInTheDocument();
+    expect(screen.queryByText('1 movie ready to sync')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeDisabled();
+  });
+
   it('enables the public search sync button when pending changes clear old results', async () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (url === '/api/public-search/sync-status') {
@@ -382,6 +415,48 @@ describe('App', () => {
     expect(screen.getByText(/4 tv shows/i)).toBeInTheDocument();
     expect(screen.getByText('Everything is synced')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeDisabled();
+  });
+
+  it('shows a sync error when the successful public search response is invalid', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync-status') {
+        return {
+          ok: true,
+          json: async () => createPublicSearchSyncStatus()
+        };
+      }
+
+      if (url === '/api/public-search/sync') {
+        return {
+          ok: true,
+          json: async () => ({
+            sync: {
+              syncedAt: '2026-05-24T10:00:00.000Z',
+              movies: 12,
+              tvShows: 4
+            }
+          })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+    expect(await screen.findByText('1 movie ready to sync')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^sync public search$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Public search sync response was invalid');
+    expect(screen.queryByText('Public search synced.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/12 movies/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Everything is synced')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeEnabled();
   });
 
   it('disables the public search sync button while syncing', async () => {

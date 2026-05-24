@@ -102,6 +102,18 @@ describe('App', () => {
     expect(within(menu).getByRole('menuitem', { name: /^delete$/i })).toBeInTheDocument();
   });
 
+  it('filters movies by title automatically while typing', async () => {
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: /^movies$/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/filter by title/i), { target: { value: 'arrival' } });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/movies?title=arrival', expect.any(Object)));
+    expect(screen.queryByPlaceholderText('2026')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^filter$/i })).not.toBeInTheDocument();
+  });
+
   it('renders the Add TV Show form after clicking Add TV Show', async () => {
     render(<App />);
 
@@ -112,6 +124,20 @@ describe('App', () => {
     expect(screen.getByLabelText(/tmdb search/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^quality$/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^save tv show$/i })).toBeInTheDocument();
+  });
+
+  it('filters TV shows by title automatically while typing', async () => {
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
+    expect(await screen.findByRole('heading', { name: /^tv shows$/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/filter by title/i), { target: { value: 'dark' } });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/tv-shows?title=dark', expect.any(Object)));
+    expect(screen.queryByPlaceholderText('2026')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^filter$/i })).not.toBeInTheDocument();
   });
 
   it('renders the Public Search sync page after clicking Public Search', () => {

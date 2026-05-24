@@ -229,6 +229,15 @@ td {
   padding: 14px;
 }
 
+.filter-bar--title-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.filter-bar__search {
+  display: grid;
+  gap: 6px;
+}
+
 .table-scroll {
   overflow-x: auto;
 }
@@ -629,6 +638,10 @@ td {
   .filter-bar {
     grid-template-columns: minmax(180px, 1fr) 140px auto;
     align-items: end;
+  }
+
+  .filter-bar--title-only {
+    grid-template-columns: minmax(180px, 1fr);
   }
 
   .field-grid {

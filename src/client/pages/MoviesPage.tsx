@@ -1,5 +1,5 @@
 import { Plus, Search } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiJson } from '../api/http';
 import { ActionMenu } from '../components/ActionMenu';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -21,8 +21,7 @@ export function MoviesPage({ onAddMovie, onEditMovie }: MoviesPageProps) {
   const { showToast } = useToast();
   const [movies, setMovies] = useState<Movie[]>([]);
   const [title, setTitle] = useState('');
-  const [year, setYear] = useState('');
-  const [appliedFilters, setAppliedFilters] = useState({ title: '', year: '' });
+  const [debouncedTitle, setDebouncedTitle] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [movieToDelete, setMovieToDelete] = useState<Movie | null>(null);
@@ -32,16 +31,13 @@ export function MoviesPage({ onAddMovie, onEditMovie }: MoviesPageProps) {
 
   const listUrl = useMemo(() => {
     const params = new URLSearchParams();
-    if (appliedFilters.title.trim()) {
-      params.set('title', appliedFilters.title.trim());
-    }
-    if (appliedFilters.year.trim()) {
-      params.set('year', appliedFilters.year.trim());
+    if (debouncedTitle.trim()) {
+      params.set('title', debouncedTitle.trim());
     }
 
     const query = params.toString();
     return query ? `/api/movies?${query}` : '/api/movies';
-  }, [appliedFilters]);
+  }, [debouncedTitle]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -51,6 +47,16 @@ export function MoviesPage({ onAddMovie, onEditMovie }: MoviesPageProps) {
       requestIdRef.current += 1;
     };
   }, []);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedTitle(title);
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [title]);
 
   const loadMovies = useCallback(async (url = listUrl, signal?: AbortSignal) => {
     const requestId = requestIdRef.current + 1;
@@ -89,11 +95,6 @@ export function MoviesPage({ onAddMovie, onEditMovie }: MoviesPageProps) {
       controller.abort();
     };
   }, [listUrl, loadMovies]);
-
-  function applyFilters(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setAppliedFilters({ title, year });
-  }
 
   async function confirmDelete() {
     if (!movieToDelete) {
@@ -136,20 +137,15 @@ export function MoviesPage({ onAddMovie, onEditMovie }: MoviesPageProps) {
         </button>
       </div>
 
-      <form className="filter-bar" onSubmit={applyFilters}>
-        <label>
+      <div className="filter-bar filter-bar--title-only">
+        <label className="filter-bar__search">
           Title
-          <input value={title} placeholder="Filter by title" onChange={(event) => setTitle(event.target.value)} />
+          <span className="input-with-icon">
+            <Search aria-hidden="true" size={18} />
+            <input value={title} placeholder="Filter by title" onChange={(event) => setTitle(event.target.value)} />
+          </span>
         </label>
-        <label>
-          Year
-          <input inputMode="numeric" pattern="[0-9]*" value={year} placeholder="2026" onChange={(event) => setYear(event.target.value)} />
-        </label>
-        <button className="button button--secondary" type="submit">
-          <Search aria-hidden="true" size={18} />
-          Filter
-        </button>
-      </form>
+      </div>
 
       <div className="table-card">
         {isLoading ? <div className="state-panel">Loading movies...</div> : null}

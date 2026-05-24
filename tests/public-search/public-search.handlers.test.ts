@@ -354,6 +354,28 @@ describe('public search bot handlers', () => {
     }
   });
 
+  it('rate limits invalid callback data before the invalid-callback response path', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      const { deps, sentMessages, callbackAnswers } = createDeps(db, {
+        rateLimiter: {
+          check: vi.fn(() => ({ allowed: false, retryAfterMs: 3200 }))
+        }
+      });
+
+      await handleTelegramUpdate(deps, callbackUpdate('movie:1'));
+
+      expect(deps.rateLimiter.check).toHaveBeenCalledWith('callback:42');
+      expect(deps.telegram.getChatMember).not.toHaveBeenCalled();
+      expect(sentMessages).toEqual([]);
+      expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'Please wait 4 seconds before trying again.' }]);
+    } finally {
+      db.close();
+    }
+  });
+
   it('checks membership again before showing season callback results', async () => {
     const db = createMigratedDatabase();
 

@@ -115,21 +115,21 @@ async function handleSearch(deps: HandlerDeps, chatId: number, userId: number | 
 
 async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable<TelegramUpdate['callback_query']>) {
   const callbackQueryId = callbackQuery.id;
+  const rateLimit = checkRateLimit(deps, callbackQuery.from.id, 'callback');
+  if (!rateLimit.allowed) {
+    await deps.replies.enqueueAnswerCallbackQuery({
+      callbackQueryId,
+      text: formatWaitMessage(rateLimit.retryAfterMs)
+    });
+    return;
+  }
+
   const seasonId = callbackQuery.data ? decodeSeasonCallback(callbackQuery.data) : undefined;
 
   if (!seasonId) {
     await deps.replies.enqueueAnswerCallbackQuery({
       callbackQueryId,
       text: 'That button is no longer available.'
-    });
-    return;
-  }
-
-  const rateLimit = checkRateLimit(deps, callbackQuery.from.id, 'callback');
-  if (!rateLimit.allowed) {
-    await deps.replies.enqueueAnswerCallbackQuery({
-      callbackQueryId,
-      text: formatWaitMessage(rateLimit.retryAfterMs)
     });
     return;
   }

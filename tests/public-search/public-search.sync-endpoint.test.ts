@@ -1,0 +1,280 @@
+import request from 'supertest';
+import { describe, expect, it } from 'vitest';
+import { createPublicSearchApp } from '../../src/public-search/app.js';
+import type { PublicSearchConfig } from '../../src/public-search/config.js';
+import { createPublicSearchDatabase, type PublicSearchDatabase } from '../../src/public-search/db/database.js';
+import { migratePublicSearchDatabase } from '../../src/public-search/db/migrate.js';
+
+function createMigratedDatabase() {
+  const db = createPublicSearchDatabase(':memory:');
+  migratePublicSearchDatabase(db);
+  return db;
+}
+
+function createConfig(overrides: Partial<PublicSearchConfig> = {}): PublicSearchConfig {
+  return {
+    publicBotToken: 'bot-token',
+    publicSearchSyncToken: 'sync-token',
+    publicSearchChannelHandle: '@infinitylinks65',
+    publicSearchGroupHandle: '@infinitylinks69',
+    publicSearchDatabasePath: ':memory:',
+    publicSearchPort: 3001,
+    ...overrides
+  };
+}
+
+function validCatalog() {
+  return {
+    generatedAt: '2026-05-24T00:00:00.000Z',
+    channelHandle: '@infinitylinks65',
+    groupHandle: '@infinitylinks69',
+    movies: [
+      {
+        id: 10,
+        title: 'Inception',
+        year: 2010,
+        telegramMessageId: 123,
+        channelPostUrl: 'https://t.me/infinitylinks65/123',
+        providers: [
+          {
+            providerName: 'MixDrop',
+            quality: 'HD',
+            url: 'https://mixdrop.example/movie',
+            sortOrder: 1
+          },
+          {
+            providerName: 'FileMoon',
+            quality: '4K',
+            url: 'https://filemoon.example/movie',
+            sortOrder: 2
+          }
+        ]
+      }
+    ],
+    tvShows: [
+      {
+        id: 20,
+        title: 'Breaking Bad',
+        year: 2008,
+        seasons: [
+          {
+            id: 30,
+            seasonNumber: 1,
+            telegramMessageId: 201,
+            channelPostUrl: 'https://t.me/infinitylinks65/201',
+            episodes: [
+              {
+                episodeNumber: 1,
+                providers: [
+                  {
+                    providerName: 'StreamTape',
+                    quality: 'HD',
+                    url: 'https://streamtape.example/s1e1',
+                    sortOrder: 1
+                  }
+                ]
+              },
+              {
+                episodeNumber: 2,
+                providers: [
+                  {
+                    providerName: 'MixDrop',
+                    quality: 'HD',
+                    url: 'https://mixdrop.example/s1e2',
+                    sortOrder: 1
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+}
+
+function seedOldCatalog(db: PublicSearchDatabase) {
+  db.prepare(
+    `INSERT INTO public_movies (id, title, year, telegram_message_id, channel_post_url)
+     VALUES (1, 'Old Movie', 1999, 999, 'https://t.me/infinitylinks65/999')`
+  ).run();
+  db.prepare(
+    `INSERT INTO public_movie_providers (movie_id, provider_name, quality, url, sort_order)
+     VALUES (1, 'OldHost', 'SD', 'https://old.example/movie', 1)`
+  ).run();
+  db.prepare(
+    `INSERT INTO public_sync_state (id, last_successful_sync_at, generated_at)
+     VALUES (1, '2026-05-23T00:00:00.000Z', '2026-05-23T00:00:00.000Z')`
+  ).run();
+}
+
+function tableCount(db: PublicSearchDatabase, table: string) {
+  return (db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count;
+}
+
+describe('public search sync endpoint', () => {
+  it('returns 401 when the bearer token is missing', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      const response = await request(app).post('/api/sync').send(validCatalog());
+
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: 'Unauthorized' });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('returns 401 when the bearer token is wrong', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      const response = await request(app).post('/api/sync').set('Authorization', 'Bearer wrong-token').send(validCatalog());
+
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: 'Unauthorized' });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('returns 400 for invalid payloads and preserves old data', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedOldCatalog(db);
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      const response = await request(app)
+        .post('/api/sync')
+        .set('Authorization', 'Bearer sync-token')
+        .send({
+          ...validCatalog(),
+          movies: [
+            {
+              ...validCatalog().movies[0],
+              providers: [{ providerName: 'BadHost', quality: 'HD', url: 'not-a-url', sortOrder: 1 }]
+            }
+          ]
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Validation failed');
+      expect(response.body.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: 'movies.0.providers.0.url',
+            message: expect.any(String)
+          })
+        ])
+      );
+      expect(db.prepare('SELECT title FROM public_movies WHERE id = 1').get()).toEqual({ title: 'Old Movie' });
+      expect(tableCount(db, 'public_movie_providers')).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('replaces the old catalog transactionally for a valid payload', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedOldCatalog(db);
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      const response = await request(app).post('/api/sync').set('Authorization', 'Bearer sync-token').send(validCatalog());
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        sync: {
+          movies: 1,
+          movieProviders: 2,
+          tvShows: 1,
+          seasons: 1,
+          episodes: 2,
+          episodeProviders: 2
+        }
+      });
+
+      expect(db.prepare('SELECT id, title, year, telegram_message_id, channel_post_url FROM public_movies').all()).toEqual([
+        {
+          id: 10,
+          title: 'Inception',
+          year: 2010,
+          telegram_message_id: 123,
+          channel_post_url: 'https://t.me/infinitylinks65/123'
+        }
+      ]);
+      expect(db.prepare('SELECT provider_name, quality, url, sort_order FROM public_movie_providers ORDER BY id').all()).toEqual([
+        {
+          provider_name: 'MixDrop',
+          quality: 'HD',
+          url: 'https://mixdrop.example/movie',
+          sort_order: 1
+        },
+        {
+          provider_name: 'FileMoon',
+          quality: '4K',
+          url: 'https://filemoon.example/movie',
+          sort_order: 2
+        }
+      ]);
+      expect(db.prepare('SELECT id, title, year FROM public_tv_shows').all()).toEqual([
+        {
+          id: 20,
+          title: 'Breaking Bad',
+          year: 2008
+        }
+      ]);
+      expect(
+        db.prepare('SELECT id, tv_show_id, season_number, telegram_message_id, channel_post_url FROM public_seasons').all()
+      ).toEqual([
+        {
+          id: 30,
+          tv_show_id: 20,
+          season_number: 1,
+          telegram_message_id: 201,
+          channel_post_url: 'https://t.me/infinitylinks65/201'
+        }
+      ]);
+      expect(db.prepare('SELECT season_id, episode_number FROM public_episodes ORDER BY episode_number').all()).toEqual([
+        {
+          season_id: 30,
+          episode_number: 1
+        },
+        {
+          season_id: 30,
+          episode_number: 2
+        }
+      ]);
+      expect(db.prepare("SELECT COUNT(*) AS count FROM public_movies WHERE title = 'Old Movie'").get()).toEqual({ count: 0 });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('records last_successful_sync_at after a valid sync', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      const response = await request(app).post('/api/sync').set('Authorization', 'Bearer sync-token').send(validCatalog());
+
+      expect(response.status).toBe(200);
+      const syncState = db
+        .prepare('SELECT last_successful_sync_at, generated_at FROM public_sync_state WHERE id = 1')
+        .get() as { last_successful_sync_at: string; generated_at: string };
+
+      expect(syncState.generated_at).toBe('2026-05-24T00:00:00.000Z');
+      expect(new Date(syncState.last_successful_sync_at).toISOString()).toBe(syncState.last_successful_sync_at);
+    } finally {
+      db.close();
+    }
+  });
+});

@@ -1,0 +1,58 @@
+# Public Search Bot
+
+Standalone VPS app for the public InfinityLinks Telegram search bot. This app serves the public search bot only; it does not run the private InfinityLinks admin UI.
+
+## Requirements
+
+- Node >=22 <24
+- npm
+- A VPS behind a reverse proxy
+- The public bot must be an admin in `@infinitylinks65`
+
+IMPORTANT: deploy with Node 22.x, not Node 24. The standalone package engines require Node >=22 <24, and `better-sqlite3` is native; Node 24 caused local install failure.
+
+## Setup
+
+```bash
+npm install
+cp .env.example .env
+npm run build
+npm start
+```
+
+## Environment
+
+```env
+PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
+PUBLIC_SEARCH_SYNC_TOKEN=replace_with_secret_sync_token
+PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
+PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
+PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
+PUBLIC_SEARCH_PORT=3001
+```
+
+## Sync From Local Admin
+
+The local admin app remains private. Configure it with:
+
+```env
+PUBLIC_SEARCH_SYNC_URL=https://your-vps.example.com/api/sync
+PUBLIC_SEARCH_SYNC_TOKEN=replace_with_secret_sync_token
+```
+
+Use the same `PUBLIC_SEARCH_SYNC_TOKEN` value on both the local admin app and this VPS app, then click Sync Public Search in the local admin app.
+
+## Commands
+
+```bash
+npm run dev
+npm run build
+npm start
+npm test
+```
+
+## Deployment Notes
+
+Run this VPS app behind a reverse proxy such as nginx. The proxy must overwrite or sanitize `X-Forwarded-For` so clients cannot spoof the originating IP chain.
+
+Example nginx and systemd unit files are available in `deploy/`.

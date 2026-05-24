@@ -1,0 +1,15 @@
+[Unit]
+Description=InfinityLinks Public Search Bot
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/infinitylinks-public-search-bot
+EnvironmentFile=/opt/infinitylinks-public-search-bot/.env
+ExecStart=/usr/bin/npm start
+Restart=always
+User=www-data
+Group=www-data
+
+[Install]
+WantedBy=multi-user.target

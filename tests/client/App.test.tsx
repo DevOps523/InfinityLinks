@@ -623,6 +623,34 @@ describe('App', () => {
     expect(screen.queryByLabelText(/tmdb movie results/i)).not.toBeInTheDocument();
   });
 
+  it('renders TMDB results as an overlay list', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            tmdbId: 27205,
+            title: 'Inception',
+            year: 2010,
+            description: 'Dream layers'
+          }
+        ]
+      })
+    });
+
+    render(<TmdbSearch onSelect={vi.fn()} />);
+
+    fireEvent.change(screen.getByRole('searchbox', { name: /tmdb search/i }), { target: { value: 'ince' } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(351);
+    });
+
+    const results = screen.getByLabelText(/tmdb movie results/i);
+    expect(results).toHaveClass('tmdb-search__results');
+  });
+
   it('disables link saves while a link request is already saving', () => {
     const onSave = vi.fn();
 

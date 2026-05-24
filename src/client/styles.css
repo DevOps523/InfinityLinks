@@ -414,6 +414,7 @@ td {
   position: relative;
   display: grid;
   gap: 8px;
+  z-index: 4;
 }
 
 .field-hint {
@@ -423,12 +424,20 @@ td {
 }
 
 .tmdb-search__results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 10;
   display: grid;
   gap: 6px;
+  max-height: min(320px, 48vh);
+  overflow-y: auto;
   border: 1px solid #d8e0ea;
   border-radius: 8px;
   padding: 6px;
   background: #f8fafc;
+  box-shadow: 0 14px 30px rgb(15 23 42 / 14%);
 }
 
 .tmdb-search__result {

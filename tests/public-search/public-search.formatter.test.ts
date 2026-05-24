@@ -358,6 +358,42 @@ describe('public search bot formatter', () => {
     });
   });
 
+  it('formats season details without an Original Post button when channel post url is missing', () => {
+    const details: PublicSeasonDetails = {
+      id: 301,
+      showTitle: 'Repost Show',
+      showYear: 2026,
+      seasonNumber: 1,
+      episodes: [
+        {
+          episodeNumber: 1,
+          providers: [
+            {
+              providerName: 'Filekeeper',
+              quality: 'HD',
+              url: 'https://filekeeper.example/repost-show-s1e1',
+              sortOrder: 1
+            }
+          ]
+        }
+      ]
+    };
+
+    const messages = formatSeasonDetails(details, handles);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].text).toContain('Repost Show (2026)');
+    expect(messages[0].text).toContain('Season 1');
+    expect(messages[0].text).toContain('Episode 1');
+    expect(messages[0].replyMarkup?.inline_keyboard).toEqual([
+      [{ text: 'E1 Filekeeper HD', url: 'https://filekeeper.example/repost-show-s1e1' }],
+      handleButtonRow
+    ]);
+    expect(messages[0].replyMarkup?.inline_keyboard.flat()).not.toContainEqual(
+      expect.objectContaining({ text: 'Original Post' })
+    );
+  });
+
   it('labels repeated season provider buttons with episode numbers', () => {
     const details: PublicSeasonDetails = {
       id: 101,

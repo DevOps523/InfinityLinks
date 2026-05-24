@@ -550,6 +550,33 @@ describe('public search sync endpoint', () => {
     }
   });
 
+  it('accepts and stores TV seasons without channel post fields during repost windows', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const catalog = validCatalog();
+      const season = catalog.tvShows[0].seasons[0];
+      catalog.tvShows[0].seasons[0] = {
+        id: 30,
+        seasonNumber: 1,
+        episodes: season.episodes
+      };
+
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      await request(app).post('/api/sync').set('Authorization', 'Bearer sync-token').send(catalog).expect(200);
+
+      expect(
+        db.prepare('SELECT telegram_message_id, channel_post_url FROM public_seasons WHERE id = 30').get()
+      ).toEqual({
+        telegram_message_id: null,
+        channel_post_url: null
+      });
+    } finally {
+      db.close();
+    }
+  });
+
   it('records last_successful_sync_at after a valid sync', async () => {
     const db = createMigratedDatabase();
 

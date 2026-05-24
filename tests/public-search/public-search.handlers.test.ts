@@ -11,11 +11,6 @@ const handles = {
   groupHandle: '@infinitylinks69'
 };
 
-const handleButtonRow = [
-  { text: '@infinitylinks65', url: 'https://t.me/infinitylinks65' },
-  { text: '@infinitylinks69', url: 'https://t.me/infinitylinks69' }
-];
-
 type SentMessage = {
   chatId: number;
   text: string;
@@ -212,6 +207,7 @@ describe('public search bot handlers', () => {
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0].text).toContain('Welcome to InfinityLinks Search.');
       expect(sentMessages[0].text).toContain('/search movie or tv show name');
+      expect(sentMessages[0].replyMarkup).toBeUndefined();
     } finally {
       db.close();
     }
@@ -228,6 +224,7 @@ describe('public search bot handlers', () => {
       expect(deps.telegram.getChatMember).not.toHaveBeenCalled();
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0].text).toContain('/search movie or tv show name');
+      expect(sentMessages[0].replyMarkup).toBeUndefined();
     } finally {
       db.close();
     }
@@ -252,7 +249,7 @@ describe('public search bot handlers', () => {
       });
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0].text).toContain('Please join our channel first');
-      expect(sentMessages[0].replyMarkup).toEqual({ inline_keyboard: [handleButtonRow] });
+      expect(sentMessages[0].replyMarkup).toBeUndefined();
     } finally {
       db.close();
     }
@@ -276,8 +273,7 @@ describe('public search bot handlers', () => {
           [
             { text: 'MixDrop HD', url: 'https://providers.example/inception-hd' },
             { text: 'FileMoon 4K', url: 'https://providers.example/inception-4k' }
-          ],
-          handleButtonRow
+          ]
         ]
       });
     } finally {
@@ -302,8 +298,7 @@ describe('public search bot handlers', () => {
           [
             { text: 'Season 1', callback_data: 'season:30' },
             { text: 'Season 2', callback_data: 'season:31' }
-          ],
-          handleButtonRow
+          ]
         ]
       });
     } finally {
@@ -508,6 +503,7 @@ describe('public search bot handlers', () => {
       });
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0].text).toContain('Please join our channel first');
+      expect(sentMessages[0].replyMarkup).toBeUndefined();
       expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'Please join the channel first.' }]);
     } finally {
       db.close();
@@ -532,8 +528,7 @@ describe('public search bot handlers', () => {
         inline_keyboard: [
           [{ text: 'Original Post', url: 'https://t.me/infinitylinks65/301' }],
           [{ text: 'E1 StreamTape HD', url: 'https://providers.example/breaking-s1e1' }],
-          [{ text: 'E2 MixDrop HD', url: 'https://providers.example/breaking-s1e2' }],
-          handleButtonRow
+          [{ text: 'E2 MixDrop HD', url: 'https://providers.example/breaking-s1e2' }]
         ]
       });
       expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1' }]);

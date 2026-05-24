@@ -47,9 +47,9 @@ Search results link back to the original Telegram channel posts without exposing
 
 Only active links and content that has already been posted to the Telegram channel are exported to the public search catalog. Bot replies also include active channel and group buttons for [@infinitylinks65](https://t.me/infinitylinks65) and [@infinitylinks69](https://t.me/infinitylinks69).
 
-Sync is triggered from the local admin app on the `Public Search` page. The `Sync Public Search` button exports the current public catalog from the private local database and posts it to the VPS sync endpoint.
+Sync is triggered from the local admin app on the `Public Search` page. The `Sync Public Search` button exports the current public catalog from the private local database and posts it to the VPS sync endpoint. In the local admin app's `.env`, set `PUBLIC_SEARCH_SYNC_URL` to the VPS `/api/sync` URL and use the same `PUBLIC_SEARCH_SYNC_TOKEN` value that the VPS service uses.
 
-Create the VPS service environment from `.env.public-search.example`:
+Create the VPS service environment from `.env.public-search.example`. The service loads `.env` by default, so copy the example to `.env` on the VPS, inject these variables through your process manager, or set `DOTENV_CONFIG_PATH=.env.public-search` if you keep a separate public-search env file.
 
 ```env
 PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
@@ -63,14 +63,14 @@ PUBLIC_SEARCH_PORT=3001
 Run the VPS bot service in development:
 
 ```sh
-npm.cmd run public-search:dev
+npm run public-search:dev
 ```
 
 Build and start the VPS bot service for production:
 
 ```sh
-npm.cmd run build:public-search
-npm.cmd run public-search:start
+npm run build:public-search
+npm run public-search:start
 ```
 
 For deployment, put the public search service behind a local reverse proxy such as Nginx or Caddy. Configure the proxy to overwrite or sanitize `X-Forwarded-For`; the Express app trusts loopback proxy headers so sync rate limits use the forwarded client IP only when the request comes through that local proxy.
@@ -81,7 +81,7 @@ For deployment, put the public search service behind a local reverse proxy such 
 - No login, roles, or user management.
 - Movies post to Telegram after saving with at least one link.
 - TV shows post one Telegram message per season after the first linked episode in that season is saved.
-- Telegram buttons are not used.
+- Telegram buttons are not used by the local channel-posting MVP.
 
 ## Verification
 

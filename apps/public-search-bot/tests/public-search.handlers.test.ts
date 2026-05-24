@@ -509,7 +509,7 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('returns episode-specific provider buttons for a season callback', async () => {
+  it('returns episode-specific provider links as text for a season callback', async () => {
     const db = createMigratedDatabase();
 
     try {
@@ -519,17 +519,18 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(deps, callbackUpdate('season:30'));
 
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toContain('Breaking Bad (2008)');
-      expect(sentMessages[0].text).toContain('Season 1');
-      expect(sentMessages[0].text).toContain('Episode 1');
-      expect(sentMessages[0].text).toContain('Episode 2');
-      expect(sentMessages[0].replyMarkup).toEqual({
-        inline_keyboard: [
-          [{ text: 'Original Post', url: 'https://t.me/infinitylinks65/301' }],
-          [{ text: 'E1 StreamTape HD', url: 'https://providers.example/breaking-s1e1' }],
-          [{ text: 'E2 MixDrop HD', url: 'https://providers.example/breaking-s1e2' }]
-        ]
-      });
+      expect(sentMessages[0].text).toContain('📺 Breaking Bad (2008)');
+      expect(sentMessages[0].text).toContain('📂 Season 1');
+      expect(sentMessages[0].text).toContain('🎞 Episode 1');
+      expect(sentMessages[0].text).toContain('🔗 Download Links:');
+      expect(sentMessages[0].text).toContain('📁 StreamTape HD - https://providers.example/breaking-s1e1');
+      expect(sentMessages[0].text).toContain('🎞 Episode 2');
+      expect(sentMessages[0].text).toContain('📁 MixDrop HD - https://providers.example/breaking-s1e2');
+      expect(sentMessages[0].text).toContain('📌 Original Post:');
+      expect(sentMessages[0].text).toContain('https://t.me/infinitylinks65/301');
+      expect(sentMessages[0].text).toContain('📢 Channel: @infinitylinks65');
+      expect(sentMessages[0].text).toContain('👥 Group: @infinitylinks69');
+      expect(sentMessages[0].replyMarkup).toBeUndefined();
       expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1' }]);
     } finally {
       db.close();

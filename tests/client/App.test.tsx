@@ -99,6 +99,46 @@ describe('App', () => {
     expect(screen.getByText(/4 tv shows/i)).toBeInTheDocument();
   });
 
+  it('disables the public search sync button while syncing', async () => {
+    let resolveSync: (response: unknown) => void = () => undefined;
+    const syncPromise = new Promise((resolve) => {
+      resolveSync = resolve;
+    });
+
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync') {
+        return syncPromise;
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^sync public search$/i }));
+
+    const syncingButton = await screen.findByRole('button', { name: /^syncing\.\.\.$/i });
+    expect(syncingButton).toBeDisabled();
+
+    resolveSync({
+      ok: true,
+      json: async () => ({
+        sync: {
+          syncedAt: '2026-05-24T10:00:00.000Z',
+          movies: 2,
+          tvShows: 1
+        }
+      })
+    });
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeEnabled());
+  });
+
   it('shows the public search sync error message', async () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (url === '/api/public-search/sync') {
@@ -122,7 +162,7 @@ describe('App', () => {
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
     fireEvent.click(screen.getByRole('button', { name: /^sync public search$/i }));
 
-    expect(await screen.findByText('Public search sync failed')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Public search sync failed');
   });
 
   it('opens season management from the TV show action menu', async () => {

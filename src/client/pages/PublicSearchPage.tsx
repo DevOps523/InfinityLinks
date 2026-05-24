@@ -52,7 +52,11 @@ export function PublicSearchPage() {
       </div>
 
       <div className="sync-panel">
-        {error ? <div className="state-panel state-panel--error">{error}</div> : null}
+        {error ? (
+          <div className="state-panel state-panel--error" role="alert">
+            {error}
+          </div>
+        ) : null}
         {!error && syncResult ? (
           <div className="sync-panel__result" aria-live="polite">
             <strong>Last sync</strong>

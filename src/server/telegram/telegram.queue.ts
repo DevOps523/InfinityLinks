@@ -184,11 +184,11 @@ function getLatestActiveSendPayload(db: AppDatabase, job: TelegramJobRow) {
   return (row ? JSON.parse(row.payload) : JSON.parse(job.payload)) as TelegramSendJobPayload;
 }
 
-function hasBlockingRetainedDelete(db: AppDatabase, job: TelegramJobRow) {
-  if (job.job_type !== 'send') {
-    return false;
-  }
-
+export function hasPendingRetainedTelegramDeleteJob(
+  db: AppDatabase,
+  entityType: TelegramEntityType,
+  entityId: number
+) {
   const rows = db
     .prepare(
       `SELECT payload
@@ -198,12 +198,16 @@ function hasBlockingRetainedDelete(db: AppDatabase, job: TelegramJobRow) {
          AND entity_id = ?
          AND status IN ('queued', 'waiting_retry', 'running')`
     )
-    .all(job.entity_type, job.entity_id) as Array<{ payload: string }>;
+    .all(entityType, entityId) as Array<{ payload: string }>;
 
   return rows.some((row) => {
     const payload = JSON.parse(row.payload) as TelegramDeleteJobPayload;
     return payload.retainEntityState === true;
   });
+}
+
+function hasBlockingRetainedDelete(db: AppDatabase, job: TelegramJobRow) {
+  return job.job_type === 'send' && hasPendingRetainedTelegramDeleteJob(db, job.entity_type, job.entity_id);
 }
 
 function cancelOtherActiveSendJobs(db: AppDatabase, job: TelegramJobRow) {

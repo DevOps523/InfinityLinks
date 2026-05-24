@@ -541,6 +541,54 @@ describe('tv media API', () => {
     });
   });
 
+  it('updates pending repost send instead of editing old post when links change during repost', async () => {
+    const { seasonId, episodeId } = createLinkedSeason({ telegramMessageId: 456 });
+
+    await request(app())
+      .post(`/api/episodes/${episodeId}/links`)
+      .send({
+        links: [
+          {
+            providerName: 'First Host',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/first'
+          }
+        ]
+      })
+      .expect(201);
+
+    await request(app()).post(`/api/seasons/${seasonId}/repost`).expect(200);
+
+    await request(app())
+      .post(`/api/episodes/${episodeId}/links`)
+      .send({
+        links: [
+          {
+            providerName: 'Second Host',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/second'
+          }
+        ]
+      })
+      .expect(201);
+
+    const jobs = getTelegramJobs();
+    expect(jobs.filter((job) => job.job_type === 'delete')).toHaveLength(1);
+    expect(jobs.filter((job) => job.job_type === 'edit')).toHaveLength(0);
+
+    const [deleteJob] = jobs.filter((job) => job.job_type === 'delete');
+    expect(JSON.parse(deleteJob.payload)).toEqual({
+      messageId: 456,
+      retainEntityState: true
+    });
+
+    const [sendJob] = jobs.filter((job) => job.job_type === 'send');
+    expect(sendJob).toBeDefined();
+    expect(JSON.parse(sendJob.payload).caption).toContain('Second Host');
+  });
+
   it('queues a posted season delete when the last episode link is deleted', async () => {
     const { seasonId, episodeId } = createLinkedSeason({ telegramMessageId: 456 });
     const link = db

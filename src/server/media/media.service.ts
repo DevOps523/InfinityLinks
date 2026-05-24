@@ -5,6 +5,7 @@ import {
   cancelPendingTelegramEditJobs,
   cancelPendingTelegramSendJobs,
   enqueueTelegramJob,
+  hasPendingRetainedTelegramDeleteJob,
   upsertPendingTelegramDeleteJob,
   upsertActiveTelegramSendJob
 } from '../telegram/telegram.queue.js';
@@ -160,6 +161,18 @@ function syncSeasonPostAfterContentChange(db: AppDatabase, seasonId: number) {
       upsertPendingTelegramDeleteJob(db, 'season', seasonId, {
         messageId: postData.telegramMessageId
       });
+    }
+
+    return;
+  }
+
+  if (hasPendingRetainedTelegramDeleteJob(db, 'season', seasonId)) {
+    cancelPendingTelegramEditJobs(db, 'season', seasonId);
+
+    const payload = buildSeasonPayload(postData);
+
+    if (payload) {
+      upsertActiveTelegramSendJob(db, 'season', seasonId, payload);
     }
 
     return;

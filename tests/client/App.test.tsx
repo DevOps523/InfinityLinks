@@ -639,4 +639,28 @@ describe('App', () => {
 
     expect(onSave).not.toHaveBeenCalled();
   });
+
+  it('uses a fixed provider dropdown for streaming links', () => {
+    const onSave = vi.fn();
+
+    render(<LinkEditorModal open links={[]} onClose={vi.fn()} onSave={onSave} />);
+
+    const providerSelect = screen.getByLabelText(/^provider$/i);
+    expect(providerSelect).toHaveDisplayValue('Filekeeper');
+    expect(within(providerSelect).getByRole('option', { name: 'Filekeeper' })).toBeInTheDocument();
+    expect(within(providerSelect).getByRole('option', { name: 'Mixdrop' })).toBeInTheDocument();
+
+    fireEvent.change(providerSelect, { target: { value: 'Mixdrop' } });
+    fireEvent.change(screen.getByLabelText(/^url$/i), { target: { value: 'https://mixdrop.example/watch' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save links$/i }));
+
+    expect(onSave).toHaveBeenCalledWith([
+      {
+        providerName: 'Mixdrop',
+        quality: 'HD',
+        status: 'active',
+        url: 'https://mixdrop.example/watch'
+      }
+    ]);
+  });
 });

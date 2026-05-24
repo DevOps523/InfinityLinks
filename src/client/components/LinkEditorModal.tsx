@@ -18,10 +18,11 @@ type LinkEditorModalProps = {
 };
 
 const qualities = ['SD', 'HD', 'Full HD', '2K', '4K'];
+const providers = ['Filekeeper', 'Mixdrop'];
 
 function emptyLink(): MovieLinkInput {
   return {
-    providerName: '',
+    providerName: providers[0],
     quality: 'HD',
     status: 'active',
     url: ''
@@ -106,7 +107,11 @@ export function LinkEditorModal({ open, links, isSaving = false, onClose, onSave
             <div className="link-editor__row" key={index}>
               <label>
                 Provider
-                <input value={link.providerName} onChange={(event) => updateLink(index, 'providerName', event.target.value)} />
+                <select value={link.providerName} onChange={(event) => updateLink(index, 'providerName', event.target.value)}>
+                  {providers.map((provider) => (
+                    <option key={provider}>{provider}</option>
+                  ))}
+                </select>
               </label>
               <label>
                 Quality

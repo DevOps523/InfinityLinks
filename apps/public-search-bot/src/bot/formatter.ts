@@ -33,8 +33,7 @@ export function formatStartMessage(handles: PublicBotHandles): PublicBotMessage 
       '/search breaking bad',
       '',
       formatHandles(handles)
-    ].join('\n'),
-    replyMarkup: toReplyMarkup(handleButtonRows(handles))
+    ].join('\n')
   };
 }
 
@@ -44,8 +43,7 @@ export function formatJoinRequiredMessage(handles: PublicBotHandles): PublicBotM
       'Please join our channel first, then come back and use /search again.',
       '',
       formatHandles(handles)
-    ].join('\n'),
-    replyMarkup: toReplyMarkup(handleButtonRows(handles))
+    ].join('\n')
   };
 }
 
@@ -55,8 +53,7 @@ export function formatNoResultsMessage(handles: PublicBotHandles): PublicBotMess
       'No results found. Try checking the spelling or using fewer words.',
       '',
       formatHandles(handles)
-    ].join('\n'),
-    replyMarkup: toReplyMarkup(handleButtonRows(handles))
+    ].join('\n')
   };
 }
 
@@ -79,7 +76,7 @@ export function formatSearchResults(results: PublicSearchResult[], handles: Publ
 export function formatSeasonDetails(details: PublicSeasonDetails, handles: PublicBotHandles): PublicBotMessage[] {
   const header = [formatTitle(details.showTitle, details.showYear), `Season ${details.seasonNumber}`].join('\n');
   const footer = formatHandles(handles);
-  const fixedRows = [...originalPostButtonRows(details.channelPostUrl), ...handleButtonRows(handles)];
+  const fixedRows = originalPostButtonRows(details.channelPostUrl);
   const messages: PublicBotMessage[] = [];
   let blocks: string[] = [];
   let keyboardRows: InlineKeyboardButton[][] = [];
@@ -91,11 +88,7 @@ export function formatSeasonDetails(details: PublicSeasonDetails, handles: Publi
 
     messages.push({
       text: composeSeasonDetailsText(header, blocks, footer),
-      replyMarkup: toReplyMarkup([
-        ...originalPostButtonRows(details.channelPostUrl),
-        ...keyboardRows,
-        ...handleButtonRows(handles)
-      ])
+      replyMarkup: toReplyMarkup([...originalPostButtonRows(details.channelPostUrl), ...keyboardRows])
     });
     blocks = [];
     keyboardRows = [];
@@ -151,12 +144,11 @@ function formatMovieResult(result: Extract<PublicSearchResult, { type: 'movie' }
     formatHandles(handles)
   ].join('\n');
   const prefixRows = originalPostButtonRows(result.channelPostUrl);
-  const suffixRows = handleButtonRows(handles);
 
   return splitKeyboardRows(
     chunkButtons(providerButtons(result.providers), MOVIE_PROVIDER_BUTTONS_PER_ROW),
     prefixRows,
-    suffixRows
+    []
   ).map((keyboardRows) => ({
     text,
     replyMarkup: toReplyMarkup(keyboardRows)
@@ -165,14 +157,13 @@ function formatMovieResult(result: Extract<PublicSearchResult, { type: 'movie' }
 
 function formatTvResult(result: Extract<PublicSearchResult, { type: 'tv' }>, handles: PublicBotHandles) {
   const text = [
-    'TV Show',
+    '📺 TV Show',
     formatTitle(result.title, result.year),
     '',
-    'Choose a season:',
+    '📂 Choose a season:',
     '',
     formatHandles(handles)
   ].join('\n');
-  const suffixRows = handleButtonRows(handles);
   const seasonRows = chunkButtons(
     result.seasons.map((season) => ({
       text: `Season ${season.seasonNumber}`,
@@ -181,7 +172,7 @@ function formatTvResult(result: Extract<PublicSearchResult, { type: 'tv' }>, han
     TV_SEASON_BUTTONS_PER_ROW
   );
 
-  return splitKeyboardRows(seasonRows, [], suffixRows).map((keyboardRows) => ({
+  return splitKeyboardRows(seasonRows, [], []).map((keyboardRows) => ({
     text,
     replyMarkup: toReplyMarkup(keyboardRows)
   }));
@@ -192,7 +183,7 @@ function formatTitle(title: string, year?: number) {
 }
 
 function formatHandles(handles: PublicBotHandles) {
-  return [`Channel: ${handles.channelHandle}`, `Group: ${handles.groupHandle}`].join('\n');
+  return [`📢 Channel: ${handles.channelHandle}`, `👥 Group: ${handles.groupHandle}`].join('\n');
 }
 
 function providerButtons(providers: PublicProvider[], labelPrefix = '') {
@@ -204,19 +195,6 @@ function providerButtons(providers: PublicProvider[], labelPrefix = '') {
 
 function originalPostButtonRows(channelPostUrl?: string): InlineKeyboardButton[][] {
   return channelPostUrl ? [[{ text: 'Original Post', url: channelPostUrl }]] : [];
-}
-
-function handleButtonRows(handles: PublicBotHandles): InlineKeyboardButton[][] {
-  return [
-    [
-      { text: handles.channelHandle, url: handleUrl(handles.channelHandle) },
-      { text: handles.groupHandle, url: handleUrl(handles.groupHandle) }
-    ]
-  ];
-}
-
-function handleUrl(handle: string): string {
-  return `https://t.me/${handle.replace(/^@/, '')}`;
 }
 
 function splitKeyboardRows(

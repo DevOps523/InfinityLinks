@@ -18,11 +18,6 @@ const handles = {
   groupHandle: '@infinitylinks69'
 };
 
-const handleButtonRow = [
-  { text: '@infinitylinks65', url: 'https://t.me/infinitylinks65' },
-  { text: '@infinitylinks69', url: 'https://t.me/infinitylinks69' }
-];
-
 describe('public search bot formatter', () => {
   it('formats /start, join-required, no-result, and unavailable messages', () => {
     expect(formatStartMessage(handles).text).toBe(
@@ -36,31 +31,31 @@ describe('public search bot formatter', () => {
         '/search inception',
         '/search breaking bad',
         '',
-        'Channel: @infinitylinks65',
-        'Group: @infinitylinks69'
+        '📢 Channel: @infinitylinks65',
+        '👥 Group: @infinitylinks69'
       ].join('\n')
     );
-    expect(formatStartMessage(handles).replyMarkup).toEqual({ inline_keyboard: [handleButtonRow] });
+    expect(formatStartMessage(handles).replyMarkup).toBeUndefined();
 
     expect(formatJoinRequiredMessage(handles).text).toBe(
       [
         'Please join our channel first, then come back and use /search again.',
         '',
-        'Channel: @infinitylinks65',
-        'Group: @infinitylinks69'
+        '📢 Channel: @infinitylinks65',
+        '👥 Group: @infinitylinks69'
       ].join('\n')
     );
-    expect(formatJoinRequiredMessage(handles).replyMarkup).toEqual({ inline_keyboard: [handleButtonRow] });
+    expect(formatJoinRequiredMessage(handles).replyMarkup).toBeUndefined();
 
     expect(formatNoResultsMessage(handles).text).toBe(
       [
         'No results found. Try checking the spelling or using fewer words.',
         '',
-        'Channel: @infinitylinks65',
-        'Group: @infinitylinks69'
+        '📢 Channel: @infinitylinks65',
+        '👥 Group: @infinitylinks69'
       ].join('\n')
     );
-    expect(formatNoResultsMessage(handles).replyMarkup).toEqual({ inline_keyboard: [handleButtonRow] });
+    expect(formatNoResultsMessage(handles).replyMarkup).toBeUndefined();
     expect(formatUnavailableMessage().text).toBe('Search is temporarily unavailable. Please try again later.');
   });
 
@@ -99,8 +94,8 @@ describe('public search bot formatter', () => {
         '',
         'Providers:',
         '',
-        'Channel: @infinitylinks65',
-        'Group: @infinitylinks69'
+        '📢 Channel: @infinitylinks65',
+        '👥 Group: @infinitylinks69'
       ].join('\n')
     );
     expect(messages[0].replyMarkup).toEqual({
@@ -109,8 +104,7 @@ describe('public search bot formatter', () => {
         [
           { text: 'MixDrop HD', url: 'https://providers.example/inception-hd' },
           { text: 'FileMoon 4K', url: 'https://providers.example/inception-4k' }
-        ],
-        handleButtonRow
+        ]
       ]
     });
   });
@@ -142,8 +136,7 @@ describe('public search bot formatter', () => {
         { text: 'Host3 HD', url: 'https://providers.example/movie-3' },
         { text: 'Host4 HD', url: 'https://providers.example/movie-4' }
       ],
-      [{ text: 'Host5 HD', url: 'https://providers.example/movie-5' }],
-      handleButtonRow
+      [{ text: 'Host5 HD', url: 'https://providers.example/movie-5' }]
     ]);
   });
 
@@ -174,7 +167,6 @@ describe('public search bot formatter', () => {
       expect(rows.length).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_ROWS);
       expect(rows.reduce((total, row) => total + row.length, 0)).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_BUTTONS);
       expect(rows[0]).toEqual([{ text: 'Original Post', url: 'https://t.me/infinitylinks65/401' }]);
-      expect(rows.at(-1)).toEqual(handleButtonRow);
     }
   });
 
@@ -200,13 +192,13 @@ describe('public search bot formatter', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0].text).toBe(
       [
-        'TV Show',
+        '📺 TV Show',
         'Breaking Bad (2008)',
         '',
-        'Choose a season:',
+        '📂 Choose a season:',
         '',
-        'Channel: @infinitylinks65',
-        'Group: @infinitylinks69'
+        '📢 Channel: @infinitylinks65',
+        '👥 Group: @infinitylinks69'
       ].join('\n')
     );
     expect(messages[0].replyMarkup).toEqual({
@@ -214,8 +206,7 @@ describe('public search bot formatter', () => {
         [
           { text: 'Season 1', callback_data: 'season:101' },
           { text: 'Season 2', callback_data: 'season:102' }
-        ],
-        handleButtonRow
+        ]
       ]
     });
   });
@@ -247,8 +238,7 @@ describe('public search bot formatter', () => {
         { text: 'Season 5', callback_data: 'season:205' },
         { text: 'Season 6', callback_data: 'season:206' }
       ],
-      [{ text: 'Season 7', callback_data: 'season:207' }],
-      handleButtonRow
+      [{ text: 'Season 7', callback_data: 'season:207' }]
     ]);
   });
 
@@ -268,24 +258,15 @@ describe('public search bot formatter', () => {
 
     const messages = formatSearchResults(results, handles);
 
-    expect(messages).toHaveLength(2);
+    expect(messages).toHaveLength(1);
     for (const message of messages) {
       const rows = message.replyMarkup?.inline_keyboard ?? [];
 
       expect(message.text).toContain('Season Limit (2026)');
       expect(rows.length).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_ROWS);
       expect(rows.reduce((total, row) => total + row.length, 0)).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_BUTTONS);
-      expect(rows.at(-1)).toEqual(handleButtonRow);
     }
-    expect(messages[0].replyMarkup?.inline_keyboard.at(-2)?.at(-1)).toEqual({
-      text: 'Season 36',
-      callback_data: 'season:335'
-    });
-    expect(messages[1].replyMarkup?.inline_keyboard[0]).toEqual([
-      { text: 'Season 37', callback_data: 'season:336' },
-      { text: 'Season 38', callback_data: 'season:337' },
-      { text: 'Season 39', callback_data: 'season:338' }
-    ]);
+    expect(messages[0].replyMarkup?.inline_keyboard.at(-1)).toEqual([{ text: 'Season 40', callback_data: 'season:339' }]);
   });
 
   it('formats season details with provider buttons grouped by episode', () => {
@@ -341,8 +322,8 @@ describe('public search bot formatter', () => {
         'Episode 2',
         'Providers:',
         '',
-        'Channel: @infinitylinks65',
-        'Group: @infinitylinks69'
+        '📢 Channel: @infinitylinks65',
+        '👥 Group: @infinitylinks69'
       ].join('\n')
     );
     expect(messages[0].replyMarkup).toEqual({
@@ -352,8 +333,7 @@ describe('public search bot formatter', () => {
           { text: 'E1 MixDrop HD', url: 'https://providers.example/breaking-bad-s1e1-hd' },
           { text: 'E1 FileMoon 4K', url: 'https://providers.example/breaking-bad-s1e1-4k' }
         ],
-        [{ text: 'E2 StreamTape HD', url: 'https://providers.example/breaking-bad-s1e2-hd' }],
-        handleButtonRow
+        [{ text: 'E2 StreamTape HD', url: 'https://providers.example/breaking-bad-s1e2-hd' }]
       ]
     });
   });
@@ -386,8 +366,7 @@ describe('public search bot formatter', () => {
     expect(messages[0].text).toContain('Season 1');
     expect(messages[0].text).toContain('Episode 1');
     expect(messages[0].replyMarkup?.inline_keyboard).toEqual([
-      [{ text: 'E1 Filekeeper HD', url: 'https://filekeeper.example/repost-show-s1e1' }],
-      handleButtonRow
+      [{ text: 'E1 Filekeeper HD', url: 'https://filekeeper.example/repost-show-s1e1' }]
     ]);
     expect(messages[0].replyMarkup?.inline_keyboard.flat()).not.toContainEqual(
       expect.objectContaining({ text: 'Original Post' })
@@ -430,8 +409,7 @@ describe('public search bot formatter', () => {
 
     expect(messages[0].replyMarkup?.inline_keyboard).toEqual([
       [{ text: 'E1 MixDrop HD', url: 'https://providers.example/repeated-s1e1' }],
-      [{ text: 'E2 MixDrop HD', url: 'https://providers.example/repeated-s1e2' }],
-      handleButtonRow
+      [{ text: 'E2 MixDrop HD', url: 'https://providers.example/repeated-s1e2' }]
     ]);
   });
 
@@ -464,10 +442,9 @@ describe('public search bot formatter', () => {
     ]);
     const episode260Message = messages.find((message) => message.text.includes('Episode 260'));
     expect(episode260Message).toBeDefined();
-    expect(episode260Message?.replyMarkup?.inline_keyboard.at(-2)).toEqual([
+    expect(episode260Message?.replyMarkup?.inline_keyboard.at(-1)).toEqual([
       { text: 'E260 Host HD', url: 'https://providers.example/long-show-s1e260' }
     ]);
-    expect(episode260Message?.replyMarkup?.inline_keyboard.at(-1)).toEqual(handleButtonRow);
   });
 
   it('splits season details when inline keyboard row limits are reached', () => {
@@ -494,21 +471,19 @@ describe('public search bot formatter', () => {
     expect(messages).toHaveLength(2);
     expect(messages.every((message) => message.text.length < MAX_FORMATTED_MESSAGE_LENGTH)).toBe(true);
     expect(messages[0].replyMarkup?.inline_keyboard).toHaveLength(MAX_INLINE_KEYBOARD_ROWS);
-    expect(messages[0].replyMarkup?.inline_keyboard.at(-1)).toEqual(handleButtonRow);
+    expect(messages[0].replyMarkup?.inline_keyboard.at(-1)).toEqual([
+      {
+        text: `E${MAX_INLINE_KEYBOARD_ROWS} Host HD`,
+        url: `https://providers.example/keyboard-limit-s1e${MAX_INLINE_KEYBOARD_ROWS}`
+      }
+    ]);
     expect(messages[1].replyMarkup?.inline_keyboard).toEqual([
-      [
-        {
-          text: `E${MAX_INLINE_KEYBOARD_ROWS} Host HD`,
-          url: `https://providers.example/keyboard-limit-s1e${MAX_INLINE_KEYBOARD_ROWS}`
-        }
-      ],
       [
         {
           text: `E${MAX_INLINE_KEYBOARD_ROWS + 1} Host HD`,
           url: `https://providers.example/keyboard-limit-s1e${MAX_INLINE_KEYBOARD_ROWS + 1}`
         }
-      ],
-      handleButtonRow
+      ]
     ]);
   });
 
@@ -541,23 +516,17 @@ describe('public search bot formatter', () => {
       expect(message.text).toContain('Episode 1');
       expect(rows.length).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_ROWS);
       expect(rows.reduce((total, row) => total + row.length, 0)).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_BUTTONS);
-      expect(rows.flat().filter((button) => !button.text.startsWith('@')).every((button) => button.text.startsWith('E1 '))).toBe(true);
+      expect(rows.flat().every((button) => button.text.startsWith('E1 '))).toBe(true);
     }
-    expect(messages[0].replyMarkup?.inline_keyboard.at(-2)?.at(-1)).toEqual({
-      text: `E1 Host${MAX_INLINE_KEYBOARD_BUTTONS - 2} HD`,
-      url: `https://providers.example/big-episode-s1e1-${MAX_INLINE_KEYBOARD_BUTTONS - 2}`
+    expect(messages[0].replyMarkup?.inline_keyboard.at(-1)?.at(-1)).toEqual({
+      text: `E1 Host${MAX_INLINE_KEYBOARD_BUTTONS} HD`,
+      url: `https://providers.example/big-episode-s1e1-${MAX_INLINE_KEYBOARD_BUTTONS}`
     });
-    expect(messages[0].replyMarkup?.inline_keyboard.at(-1)).toEqual(handleButtonRow);
     expect(messages[1].replyMarkup?.inline_keyboard[0]).toEqual([
       {
-        text: `E1 Host${MAX_INLINE_KEYBOARD_BUTTONS - 1} HD`,
-        url: `https://providers.example/big-episode-s1e1-${MAX_INLINE_KEYBOARD_BUTTONS - 1}`
-      },
-      {
-        text: `E1 Host${MAX_INLINE_KEYBOARD_BUTTONS} HD`,
-        url: `https://providers.example/big-episode-s1e1-${MAX_INLINE_KEYBOARD_BUTTONS}`
+        text: `E1 Host${MAX_INLINE_KEYBOARD_BUTTONS + 1} HD`,
+        url: `https://providers.example/big-episode-s1e1-${MAX_INLINE_KEYBOARD_BUTTONS + 1}`
       }
     ]);
-    expect(messages[1].replyMarkup?.inline_keyboard.at(-1)).toEqual(handleButtonRow);
   });
 });

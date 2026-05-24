@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { PublicSearchResult, PublicSeasonDetails } from '../src/search.repository.js';
 import {
+  formatClearMessage,
   formatJoinRequiredMessage,
   formatNoResultsMessage,
   formatSearchResults,
+  formatSearchValidationMessage,
   formatSeasonDetails,
   formatStartMessage,
   formatUnavailableMessage,
@@ -19,15 +21,15 @@ const handles = {
 };
 
 describe('public search bot formatter', () => {
-  it('formats /start, join-required, no-result, and unavailable messages', () => {
+  it('formats command and status messages', () => {
     expect(formatStartMessage(handles).text).toBe(
       [
-        'Welcome to InfinityLinks Search.',
+        '🎬 Welcome to InfinityLinks Search.',
         '',
-        'Use:',
+        '🔎 Use:',
         '/search movie or tv show name',
         '',
-        'Examples:',
+        '✨ Examples:',
         '/search inception',
         '/search breaking bad',
         '',
@@ -37,9 +39,17 @@ describe('public search bot formatter', () => {
     );
     expect(formatStartMessage(handles).replyMarkup).toBeUndefined();
 
+    expect(formatSearchValidationMessage().text).toBe(
+      ['⚠️ Please provide a movie or TV show title.', '', 'Example: /search inception'].join('\n')
+    );
+    expect(formatSearchValidationMessage().replyMarkup).toBeUndefined();
+
+    expect(formatClearMessage().text).toBe('🧹 Cleared. Search anytime with /search movie or tv show name.');
+    expect(formatClearMessage().replyMarkup).toBeUndefined();
+
     expect(formatJoinRequiredMessage(handles).text).toBe(
       [
-        'Please join our channel first, then come back and use /search again.',
+        'We could not verify your channel membership right now. Please join the channel and try again.',
         '',
         '📢 Channel: @infinitylinks65',
         '👥 Group: @infinitylinks69'

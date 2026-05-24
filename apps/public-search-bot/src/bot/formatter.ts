@@ -21,12 +21,12 @@ export type PublicBotMessage = {
 export function formatStartMessage(handles: PublicBotHandles): PublicBotMessage {
   return {
     text: [
-      'Welcome to InfinityLinks Search.',
+      '🎬 Welcome to InfinityLinks Search.',
       '',
-      'Use:',
+      '🔎 Use:',
       '/search movie or tv show name',
       '',
-      'Examples:',
+      '✨ Examples:',
       '/search inception',
       '/search breaking bad',
       '',
@@ -35,10 +35,22 @@ export function formatStartMessage(handles: PublicBotHandles): PublicBotMessage 
   };
 }
 
+export function formatSearchValidationMessage(): PublicBotMessage {
+  return {
+    text: ['⚠️ Please provide a movie or TV show title.', '', 'Example: /search inception'].join('\n')
+  };
+}
+
+export function formatClearMessage(): PublicBotMessage {
+  return {
+    text: '🧹 Cleared. Search anytime with /search movie or tv show name.'
+  };
+}
+
 export function formatJoinRequiredMessage(handles: PublicBotHandles): PublicBotMessage {
   return {
     text: [
-      'Please join our channel first, then come back and use /search again.',
+      'We could not verify your channel membership right now. Please join the channel and try again.',
       '',
       formatHandles(handles)
     ].join('\n')

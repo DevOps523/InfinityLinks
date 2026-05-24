@@ -52,6 +52,7 @@ Sync is triggered from the local admin app on the `Public Search` page. The `Syn
 Copy or deploy only `apps/public-search-bot/` to the VPS, then run the standalone app's local commands from that directory. Use Node 22.x because the standalone package requires Node `>=22 <24`.
 
 ```sh
+cd /opt/infinitylinks-public-search-bot
 npm install
 npm run build
 npm start
@@ -68,7 +69,7 @@ Use this split when deploying from your private local admin app to the public VP
 1. Prepare the standalone VPS app:
 
    ```sh
-   cd apps/public-search-bot
+   cd /opt/infinitylinks-public-search-bot
    npm install
    cp .env.example .env
    ```
@@ -142,7 +143,7 @@ Use this split when deploying from your private local admin app to the public VP
 7. Quick checks for the standalone VPS app:
 
    ```sh
-   cd apps/public-search-bot
+   cd /opt/infinitylinks-public-search-bot
    npm run build
    npm test
    ```

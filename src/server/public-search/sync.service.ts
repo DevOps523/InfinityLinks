@@ -91,7 +91,7 @@ export function getPublicSearchSyncStatus(db: AppDatabase, config: AppConfig): P
   return {
     configured: Boolean(config.publicSearchSyncUrl && config.publicSearchSyncToken),
     hasPublicSearchableContent,
-    hasPendingChanges: hasPublicSearchableContent && catalogHash !== lastSyncState?.lastCatalogHash,
+    hasPendingChanges: lastSyncState ? catalogHash !== lastSyncState.lastCatalogHash : hasPublicSearchableContent,
     current: {
       catalogHash,
       movies: catalog.movies.length,

@@ -204,6 +204,39 @@ describe('public search sync route', () => {
     expect(statusResponse.body.lastSuccessfulSync).not.toHaveProperty('catalogHash');
   });
 
+  it('reports pending changes when previously synced content becomes non-exportable', async () => {
+    insertPostedMovie();
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
+    const config = {
+      ...baseConfig,
+      publicSearchSyncUrl: 'https://search.example.com/api/sync',
+      publicSearchSyncToken: 'secret-token'
+    };
+
+    const syncResponse = await request(app(config, fetchMock)).post('/api/public-search/sync').expect(200);
+
+    db.prepare("UPDATE movie_links SET status = 'inactive'").run();
+
+    const statusResponse = await request(app(config, fetchMock)).get('/api/public-search/sync-status').expect(200);
+
+    expect(statusResponse.body).toMatchObject({
+      configured: true,
+      hasPublicSearchableContent: false,
+      hasPendingChanges: true,
+      current: {
+        catalogHash: expect.any(String),
+        movies: 0,
+        tvShows: 0
+      },
+      lastSuccessfulSync: {
+        syncedAt: syncResponse.body.sync.syncedAt,
+        movies: 1,
+        tvShows: 0
+      }
+    });
+    expect(statusResponse.body.current.catalogHash).not.toBe(syncResponse.body.status.current.catalogHash);
+  });
+
   it('does not store sync state after failed remote sync, so pending changes remain', async () => {
     insertPostedMovie();
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response('nope', { status: 500 }));

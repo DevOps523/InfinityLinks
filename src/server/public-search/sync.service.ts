@@ -31,11 +31,16 @@ export async function syncPublicSearchCatalog(
     authorization: `Bearer ${config.publicSearchSyncToken}`
   });
 
-  const response = await fetcher(config.publicSearchSyncUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(catalog)
-  });
+  let response: Response;
+  try {
+    response = await fetcher(config.publicSearchSyncUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(catalog)
+    });
+  } catch {
+    throw new PublicSearchSyncError(502, 'Public search sync failed');
+  }
 
   if (!response.ok) {
     throw new PublicSearchSyncError(502, 'Public search sync failed');

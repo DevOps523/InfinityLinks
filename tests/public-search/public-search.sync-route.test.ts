@@ -143,4 +143,23 @@ describe('public search sync route', () => {
 
     expect(response.body).toEqual({ error: 'Public search sync failed' });
   });
+
+  it('returns 502 when the configured public search sync endpoint cannot be reached', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error('connection refused'));
+
+    const response = await request(
+      app(
+        {
+          ...baseConfig,
+          publicSearchSyncUrl: 'https://search.example.com/api/sync',
+          publicSearchSyncToken: 'secret-token'
+        },
+        fetchMock
+      )
+    )
+      .post('/api/public-search/sync')
+      .expect(502);
+
+    expect(response.body).toEqual({ error: 'Public search sync failed' });
+  });
 });

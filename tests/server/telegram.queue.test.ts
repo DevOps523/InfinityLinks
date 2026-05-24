@@ -30,6 +30,7 @@ function getJobs(db: AppDatabase) {
     payload: string;
     status: string;
     next_run_at: string;
+    last_error: string | null;
   }>;
 }
 
@@ -358,6 +359,41 @@ describe('telegram queue', () => {
     expect(client.deleteMessage).toHaveBeenCalledTimes(1);
     expect(client.sendPhotoPost).not.toHaveBeenCalled();
     expect(getJobs(db).find((job) => job.job_type === 'send')).toMatchObject({ status: 'queued' });
+
+    db.close();
+  });
+
+  it('does not process a repost send after retained delete permanently fails', async () => {
+    const db = setupDb();
+    createSeasonRow(db, 8);
+    db.prepare("UPDATE seasons SET telegram_message_id = 456, post_status = 'posted' WHERE id = ?").run(8);
+
+    enqueueTelegramJob(db, 'delete', 'season', 8, {
+      messageId: 456,
+      retainEntityState: true
+    });
+    enqueueTelegramJob(db, 'send', 'season', 8, {
+      posterUrl: 'https://example.com/season.jpg',
+      caption: 'Updated season'
+    });
+
+    const client = {
+      sendPhotoPost: vi.fn(async () => ({ messageId: 999 })),
+      editPhotoCaption: vi.fn(),
+      deleteMessage: vi.fn(async () => {
+        throw new Error('Telegram delete failed');
+      })
+    };
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(false);
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(false);
+
+    expect(client.deleteMessage).toHaveBeenCalledTimes(1);
+    expect(client.sendPhotoPost).not.toHaveBeenCalled();
+    expect(getJobs(db).find((job) => job.job_type === 'send')).toMatchObject({
+      status: 'failed',
+      last_error: 'Telegram delete failed'
+    });
 
     db.close();
   });

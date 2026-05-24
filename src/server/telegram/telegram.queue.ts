@@ -630,6 +630,7 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
     }
 
     db.transaction(() => {
+      const failedPayload = JSON.parse(job.payload) as TelegramJobPayload;
       updateEntityPostStatus(db, job.entity_type, job.entity_id, {
         postStatus: 'failed'
       });
@@ -640,6 +641,10 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
              updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`
       ).run(message, job.id);
+
+      if (job.job_type === 'delete' && (failedPayload as TelegramDeleteJobPayload).retainEntityState) {
+        failOtherActiveSendJobs(db, job, message);
+      }
     })();
     return false;
   }

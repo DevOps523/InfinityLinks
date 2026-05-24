@@ -117,7 +117,27 @@ export function buildPublicSearchCatalog(
 
 export function createPublicSearchCatalogFingerprint(catalog: PublicSearchCatalog): string {
   const { generatedAt: _generatedAt, ...fingerprintCatalog } = catalog;
-  return createHash('sha256').update(JSON.stringify(fingerprintCatalog)).digest('hex');
+  return createHash('sha256').update(stableSerialize(fingerprintCatalog)).digest('hex');
+}
+
+function stableSerialize(value: unknown): string {
+  return JSON.stringify(sortObjectKeys(value));
+}
+
+function sortObjectKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortObjectKeys);
+  }
+
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+      .map(([key, entryValue]) => [key, sortObjectKeys(entryValue)])
+  );
 }
 
 function buildMovies(db: AppDatabase, channelHandle: string): PublicSearchMovie[] {

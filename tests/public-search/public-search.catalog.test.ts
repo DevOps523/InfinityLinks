@@ -47,6 +47,43 @@ describe('public search catalog export', () => {
     }
   });
 
+  it('creates the same fingerprint when catalog object keys are inserted in a different order', () => {
+    const db = createMigratedDatabase();
+
+    try {
+      insertPostedMovieWithActiveLink(db);
+
+      const catalog = buildPublicSearchCatalog(db, {
+        channelHandle: '@infinitylinks65',
+        groupHandle: '@infinitylinks69',
+        now: () => new Date('2026-05-25T00:00:00.000Z')
+      });
+      const reorderedCatalog = {
+        tvShows: catalog.tvShows,
+        movies: catalog.movies.map((movie) => ({
+          providers: movie.providers.map((provider) => ({
+            url: provider.url,
+            sortOrder: provider.sortOrder,
+            quality: provider.quality,
+            providerName: provider.providerName
+          })),
+          channelPostUrl: movie.channelPostUrl,
+          telegramMessageId: movie.telegramMessageId,
+          year: movie.year,
+          title: movie.title,
+          id: movie.id
+        })),
+        groupHandle: catalog.groupHandle,
+        channelHandle: catalog.channelHandle,
+        generatedAt: catalog.generatedAt
+      };
+
+      expect(createPublicSearchCatalogFingerprint(reorderedCatalog)).toBe(createPublicSearchCatalogFingerprint(catalog));
+    } finally {
+      db.close();
+    }
+  });
+
   it('exports active movie links and excludes inactive movie links', () => {
     const db = createMigratedDatabase();
 

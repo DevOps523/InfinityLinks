@@ -234,11 +234,13 @@ On your private local InfinityLinks admin app, set:
 ```env
 PUBLIC_SEARCH_SYNC_URL=https://your-vps.example.com/api/sync
 PUBLIC_SEARCH_SYNC_TOKEN=replace_with_the_same_long_random_secret
+PUBLIC_SEARCH_STATUS_URL=https://your-vps.example.com/api/status
+PUBLIC_SEARCH_STATUS_TOKEN=replace_with_the_different_read_only_secret
 PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
 PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
 ```
 
-The local admin app does not need to be public. It only sends catalog sync requests to the VPS.
+The local admin app does not need to be public. It sends catalog sync requests to the VPS, and the status URL/token enable only the safe status panel; full logs remain available through `journalctl`.
 
 ### 11. Sync And Test In Telegram
 

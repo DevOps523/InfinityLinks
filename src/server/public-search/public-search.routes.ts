@@ -1,12 +1,21 @@
 import { Router } from 'express';
 import type { AppConfig } from '../config.js';
 import type { AppDatabase } from '../db/database.js';
-import { createPublicSearchStatusService, PublicSearchStatusError } from './status.service.js';
+import {
+  createPublicSearchStatusService,
+  PublicSearchStatusError,
+  type PublicSearchStatusServiceOptions
+} from './status.service.js';
 import { syncPublicSearchCatalog } from './sync.service.js';
 
-export function createPublicSearchRouter(db: AppDatabase, config: AppConfig, fetcher: typeof fetch = fetch) {
+export function createPublicSearchRouter(
+  db: AppDatabase,
+  config: AppConfig,
+  fetcher: typeof fetch = fetch,
+  statusOptions: PublicSearchStatusServiceOptions = {}
+) {
   const router = Router();
-  const statusService = createPublicSearchStatusService(config, fetcher);
+  const statusService = createPublicSearchStatusService(config, fetcher, undefined, statusOptions);
 
   router.post('/public-search/sync', async (_req, res, next) => {
     try {

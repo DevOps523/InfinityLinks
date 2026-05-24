@@ -4,6 +4,7 @@ import { createApp } from '../../src/server/app.js';
 import type { AppConfig } from '../../src/server/config.js';
 import { createDatabase, type AppDatabase } from '../../src/server/db/database.js';
 import { migrate } from '../../src/server/db/migrate.js';
+import type { PublicSearchStatusServiceOptions } from '../../src/server/public-search/status.service.js';
 
 const baseConfig: AppConfig = {
   tmdbApiKey: 'test-tmdb-key',
@@ -28,8 +29,12 @@ function validRemoteStatus() {
   };
 }
 
-function app(config: AppConfig, fetcher: typeof fetch = vi.fn<typeof fetch>()) {
-  return createApp({ db, config, fetcher });
+function app(
+  config: AppConfig,
+  fetcher: typeof fetch = vi.fn<typeof fetch>(),
+  publicSearchStatusOptions?: PublicSearchStatusServiceOptions
+) {
+  return createApp({ db, config, fetcher, publicSearchStatusOptions });
 }
 
 function createMigratedDatabase() {
@@ -126,6 +131,31 @@ describe('public search status route', () => {
     const [, init] = fetchMock.mock.calls[0];
     const headers = init?.headers as Headers;
     expect(headers.get('authorization')).toBe('Bearer status-token');
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('passes an abort timeout signal to the configured public search status endpoint', async () => {
+    const signal = new AbortController().signal;
+    const timeoutSignal = vi.fn(() => signal);
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json(validRemoteStatus()));
+
+    await request(
+      app(
+        {
+          ...baseConfig,
+          publicSearchStatusUrl: 'https://search.example.com/api/status',
+          publicSearchStatusToken: 'status-token'
+        },
+        fetchMock,
+        { timeoutMs: 123, timeoutSignal }
+      )
+    )
+      .get('/api/public-search/status')
+      .expect(200);
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(timeoutSignal).toHaveBeenCalledWith(123);
+    expect(init?.signal).toBe(signal);
   });
 
   it('returns 502 without raw remote data when public search status payload is malformed', async () => {

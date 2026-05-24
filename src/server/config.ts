@@ -36,7 +36,16 @@ const EnvSchema = z.object({
   PUBLIC_SEARCH_STATUS_TOKEN: OptionalTrimmedString,
   PUBLIC_SEARCH_CHANNEL_HANDLE: trimmedStringWithDefault('@infinitylinks65'),
   PUBLIC_SEARCH_GROUP_HANDLE: trimmedStringWithDefault('@infinitylinks69')
-});
+}).refine(
+  (env) =>
+    !env.PUBLIC_SEARCH_SYNC_TOKEN ||
+    !env.PUBLIC_SEARCH_STATUS_TOKEN ||
+    env.PUBLIC_SEARCH_SYNC_TOKEN !== env.PUBLIC_SEARCH_STATUS_TOKEN,
+  {
+    message: 'PUBLIC_SEARCH_STATUS_TOKEN must be different from PUBLIC_SEARCH_SYNC_TOKEN',
+    path: ['PUBLIC_SEARCH_STATUS_TOKEN']
+  }
+);
 
 export type AppConfig = {
   tmdbApiKey: string;

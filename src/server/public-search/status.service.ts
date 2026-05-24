@@ -20,6 +20,11 @@ type PublicSearchStatusService = {
   }>;
 };
 
+export type PublicSearchStatusServiceOptions = {
+  timeoutMs?: number;
+  timeoutSignal?: (timeoutMs: number) => AbortSignal;
+};
+
 export class PublicSearchStatusError extends Error {
   constructor(
     public readonly statusCode: number,
@@ -88,12 +93,26 @@ function normalizeRemoteStatus(value: unknown): PublicSearchRemoteStatus | undef
   };
 }
 
+function createTimeoutSignal(timeoutMs: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.timeout(timeoutMs);
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  timeout.unref?.();
+  return controller.signal;
+}
+
 export function createPublicSearchStatusService(
   config: AppConfig,
   fetcher: typeof fetch = fetch,
-  clock: () => Date = () => new Date()
+  clock: () => Date = () => new Date(),
+  options: PublicSearchStatusServiceOptions = {}
 ): PublicSearchStatusService {
   let lastSuccessfulCheckAt: string | null = null;
+  const timeoutMs = options.timeoutMs ?? 5000;
+  const timeoutSignal = options.timeoutSignal ?? createTimeoutSignal;
 
   async function checkPublicSearchStatus() {
     if (!config.publicSearchStatusUrl || !config.publicSearchStatusToken) {
@@ -108,7 +127,8 @@ export function createPublicSearchStatusService(
     try {
       response = await fetcher(config.publicSearchStatusUrl, {
         method: 'GET',
-        headers
+        headers,
+        signal: timeoutSignal(timeoutMs)
       });
     } catch {
       throw new PublicSearchStatusError(502, 'Public search status is unreachable', lastSuccessfulCheckAt);

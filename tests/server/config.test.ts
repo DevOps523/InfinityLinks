@@ -81,6 +81,18 @@ describe('loadConfig', () => {
     });
   });
 
+  it('rejects reusing the sync token as the status token after trimming', () => {
+    expect(() =>
+      loadConfig({
+        TMDB_API_KEY: 'tmdb-key',
+        TELEGRAM_BOT_TOKEN: 'telegram-token',
+        TELEGRAM_CHANNEL_ID: '@channel',
+        PUBLIC_SEARCH_SYNC_TOKEN: ' shared-token ',
+        PUBLIC_SEARCH_STATUS_TOKEN: 'shared-token'
+      })
+    ).toThrow(/PUBLIC_SEARCH_STATUS_TOKEN must be different from PUBLIC_SEARCH_SYNC_TOKEN/);
+  });
+
   it('treats empty optional public search status values as undefined', () => {
     expect(
       loadConfig({

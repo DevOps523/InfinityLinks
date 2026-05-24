@@ -29,6 +29,16 @@ describe('loadPublicSearchConfig', () => {
     ).toThrow(/PUBLIC_SEARCH_STATUS_TOKEN is required/);
   });
 
+  it('rejects reusing the sync token as the status token after trimming', () => {
+    expect(() =>
+      loadPublicSearchConfig({
+        PUBLIC_BOT_TOKEN: 'bot-token',
+        PUBLIC_SEARCH_SYNC_TOKEN: ' shared-token ',
+        PUBLIC_SEARCH_STATUS_TOKEN: 'shared-token'
+      })
+    ).toThrow(/PUBLIC_SEARCH_STATUS_TOKEN must be different from PUBLIC_SEARCH_SYNC_TOKEN/);
+  });
+
   it('returns required secrets and default public search settings', () => {
     expect(
       loadPublicSearchConfig({

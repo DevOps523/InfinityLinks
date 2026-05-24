@@ -25,6 +25,9 @@ const PublicSearchEnvSchema = z.object({
   PUBLIC_SEARCH_DATABASE_PATH: trimmedStringWithDefault('./data/public-search.sqlite'),
   PUBLIC_SEARCH_HOST: trimmedStringWithDefault('127.0.0.1'),
   PUBLIC_SEARCH_PORT: numberWithDefault(3001)
+}).refine((env) => env.PUBLIC_SEARCH_SYNC_TOKEN !== env.PUBLIC_SEARCH_STATUS_TOKEN, {
+  message: 'PUBLIC_SEARCH_STATUS_TOKEN must be different from PUBLIC_SEARCH_SYNC_TOKEN',
+  path: ['PUBLIC_SEARCH_STATUS_TOKEN']
 });
 
 export type PublicSearchConfig = {

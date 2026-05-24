@@ -127,6 +127,8 @@ function buildMovies(db: AppDatabase, channelHandle: string): PublicSearchMovie[
          FROM movies
          JOIN movie_links ON movie_links.movie_id = movies.id
         WHERE movie_links.status = 'active'
+          AND movies.post_status = 'posted'
+          AND movies.telegram_message_id IS NOT NULL
         ORDER BY lower(movies.title) ASC,
                  movies.id ASC,
                  movie_links.sort_order ASC,
@@ -181,6 +183,8 @@ function buildTvShows(db: AppDatabase, channelHandle: string): PublicSearchTvSho
          JOIN episodes ON episodes.season_id = seasons.id
          JOIN episode_links ON episode_links.episode_id = episodes.id
         WHERE episode_links.status = 'active'
+          AND seasons.post_status = 'posted'
+          AND seasons.telegram_message_id IS NOT NULL
         ORDER BY lower(tv_shows.title) ASC,
                  tv_shows.id ASC,
                  seasons.season_number ASC,

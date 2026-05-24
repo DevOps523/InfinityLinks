@@ -16,7 +16,7 @@ describe('public search catalog export', () => {
     try {
       const movie = db
         .prepare(
-          "INSERT INTO movies (title, year, quality, telegram_message_id) VALUES ('Inception', 2010, 'HD', 123)"
+          "INSERT INTO movies (title, year, quality, telegram_message_id, post_status) VALUES ('Inception', 2010, 'HD', 123, 'posted')"
         )
         .run();
 
@@ -66,10 +66,14 @@ describe('public search catalog export', () => {
     try {
       const show = db.prepare("INSERT INTO tv_shows (title, year, quality) VALUES ('Breaking Bad', 2008, 'HD')").run();
       const seasonOne = db
-        .prepare('INSERT INTO seasons (tv_show_id, season_number, telegram_message_id) VALUES (?, 1, 201)')
+        .prepare(
+          "INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (?, 1, 201, 'posted')"
+        )
         .run(show.lastInsertRowid);
       const seasonTwo = db
-        .prepare('INSERT INTO seasons (tv_show_id, season_number, telegram_message_id) VALUES (?, 2, 202)')
+        .prepare(
+          "INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (?, 2, 202, 'posted')"
+        )
         .run(show.lastInsertRowid);
 
       const episodeOne = db
@@ -156,6 +160,179 @@ describe('public search catalog export', () => {
             }
           ]
         }
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('excludes active links for movies and seasons that are not posted public Telegram content', () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const pendingMovie = db
+        .prepare(
+          "INSERT INTO movies (title, quality, telegram_message_id, post_status) VALUES ('Pending Movie', 'HD', 301, 'pending')"
+        )
+        .run();
+      const missingMessageMovie = db
+        .prepare(
+          "INSERT INTO movies (title, quality, telegram_message_id, post_status) VALUES ('Missing Message Movie', 'HD', NULL, 'posted')"
+        )
+        .run();
+      const deletedMovie = db
+        .prepare(
+          "INSERT INTO movies (title, quality, telegram_message_id, post_status) VALUES ('Deleted Movie', 'HD', 303, 'deleted')"
+        )
+        .run();
+
+      for (const movieId of [pendingMovie.lastInsertRowid, missingMessageMovie.lastInsertRowid, deletedMovie.lastInsertRowid]) {
+        db.prepare(
+          `INSERT INTO movie_links (movie_id, provider_name, quality, status, url)
+           VALUES (?, 'MixDrop', 'HD', 'active', 'https://mixdrop.example/not-public')`
+        ).run(movieId);
+      }
+
+      const show = db.prepare("INSERT INTO tv_shows (title, quality) VALUES ('Hidden Show', 'HD')").run();
+      const pendingSeason = db
+        .prepare(
+          "INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (?, 1, 401, 'pending')"
+        )
+        .run(show.lastInsertRowid);
+      const missingMessageSeason = db
+        .prepare(
+          "INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (?, 2, NULL, 'posted')"
+        )
+        .run(show.lastInsertRowid);
+      const deletedSeason = db
+        .prepare(
+          "INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (?, 3, 403, 'deleted')"
+        )
+        .run(show.lastInsertRowid);
+
+      for (const seasonId of [
+        pendingSeason.lastInsertRowid,
+        missingMessageSeason.lastInsertRowid,
+        deletedSeason.lastInsertRowid
+      ]) {
+        const episode = db.prepare('INSERT INTO episodes (season_id, episode_number) VALUES (?, 1)').run(seasonId);
+        db.prepare(
+          `INSERT INTO episode_links (episode_id, provider_name, quality, status, url)
+           VALUES (?, 'FileMoon', 'HD', 'active', 'https://filemoon.example/not-public')`
+        ).run(episode.lastInsertRowid);
+      }
+
+      const catalog = buildPublicSearchCatalog(db, {
+        channelHandle: '@infinitylinks65',
+        groupHandle: '@infinitylinks69',
+        now: () => new Date('2026-05-24T00:00:00.000Z')
+      });
+
+      expect(catalog.movies).toEqual([]);
+      expect(catalog.tvShows).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('orders movies, tv shows, seasons, episodes, and providers predictably', () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const betaMovie = db
+        .prepare(
+          "INSERT INTO movies (title, quality, telegram_message_id, post_status) VALUES ('Beta Movie', 'HD', 502, 'posted')"
+        )
+        .run();
+      const alphaMovie = db
+        .prepare(
+          "INSERT INTO movies (title, quality, telegram_message_id, post_status) VALUES ('Alpha Movie', 'HD', 501, 'posted')"
+        )
+        .run();
+
+      db.prepare(
+        `INSERT INTO movie_links (movie_id, provider_name, quality, status, url, sort_order)
+         VALUES (?, 'Second Provider', 'HD', 'active', 'https://example.com/beta-second', 2)`
+      ).run(betaMovie.lastInsertRowid);
+      db.prepare(
+        `INSERT INTO movie_links (movie_id, provider_name, quality, status, url, sort_order)
+         VALUES (?, 'First Provider', 'HD', 'active', 'https://example.com/beta-first', 1)`
+      ).run(betaMovie.lastInsertRowid);
+      db.prepare(
+        `INSERT INTO movie_links (movie_id, provider_name, quality, status, url, sort_order)
+         VALUES (?, 'Alpha Provider', 'HD', 'active', 'https://example.com/alpha', 1)`
+      ).run(alphaMovie.lastInsertRowid);
+
+      const zetaShow = db.prepare("INSERT INTO tv_shows (title, quality) VALUES ('Zeta Show', 'HD')").run();
+      const alphaShow = db.prepare("INSERT INTO tv_shows (title, quality) VALUES ('Alpha Show', 'HD')").run();
+
+      const zetaSeason = db
+        .prepare(
+          "INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (?, 1, 601, 'posted')"
+        )
+        .run(zetaShow.lastInsertRowid);
+      const zetaEpisode = db.prepare('INSERT INTO episodes (season_id, episode_number) VALUES (?, 1)').run(zetaSeason.lastInsertRowid);
+      db.prepare(
+        `INSERT INTO episode_links (episode_id, provider_name, quality, status, url, sort_order)
+         VALUES (?, 'Zeta Provider', 'HD', 'active', 'https://example.com/zeta', 1)`
+      ).run(zetaEpisode.lastInsertRowid);
+
+      const alphaSeasonTwo = db
+        .prepare(
+          "INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (?, 2, 702, 'posted')"
+        )
+        .run(alphaShow.lastInsertRowid);
+      const alphaSeasonOne = db
+        .prepare(
+          "INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (?, 1, 701, 'posted')"
+        )
+        .run(alphaShow.lastInsertRowid);
+
+      const alphaSeasonOneEpisodeTwo = db
+        .prepare('INSERT INTO episodes (season_id, episode_number) VALUES (?, 2)')
+        .run(alphaSeasonOne.lastInsertRowid);
+      const alphaSeasonOneEpisodeOne = db
+        .prepare('INSERT INTO episodes (season_id, episode_number) VALUES (?, 1)')
+        .run(alphaSeasonOne.lastInsertRowid);
+      const alphaSeasonTwoEpisodeOne = db
+        .prepare('INSERT INTO episodes (season_id, episode_number) VALUES (?, 1)')
+        .run(alphaSeasonTwo.lastInsertRowid);
+
+      db.prepare(
+        `INSERT INTO episode_links (episode_id, provider_name, quality, status, url, sort_order)
+         VALUES (?, 'Episode Two Provider', 'HD', 'active', 'https://example.com/alpha-s1e2', 1)`
+      ).run(alphaSeasonOneEpisodeTwo.lastInsertRowid);
+      db.prepare(
+        `INSERT INTO episode_links (episode_id, provider_name, quality, status, url, sort_order)
+         VALUES (?, 'Second Episode One Provider', 'HD', 'active', 'https://example.com/alpha-s1e1-second', 2)`
+      ).run(alphaSeasonOneEpisodeOne.lastInsertRowid);
+      db.prepare(
+        `INSERT INTO episode_links (episode_id, provider_name, quality, status, url, sort_order)
+         VALUES (?, 'First Episode One Provider', 'HD', 'active', 'https://example.com/alpha-s1e1-first', 1)`
+      ).run(alphaSeasonOneEpisodeOne.lastInsertRowid);
+      db.prepare(
+        `INSERT INTO episode_links (episode_id, provider_name, quality, status, url, sort_order)
+         VALUES (?, 'Season Two Provider', 'HD', 'active', 'https://example.com/alpha-s2e1', 1)`
+      ).run(alphaSeasonTwoEpisodeOne.lastInsertRowid);
+
+      const catalog = buildPublicSearchCatalog(db, {
+        channelHandle: '@infinitylinks65',
+        groupHandle: '@infinitylinks69',
+        now: () => new Date('2026-05-24T00:00:00.000Z')
+      });
+
+      expect(catalog.movies.map((movie) => movie.title)).toEqual(['Alpha Movie', 'Beta Movie']);
+      expect(catalog.movies[1].providers.map((provider) => provider.providerName)).toEqual([
+        'First Provider',
+        'Second Provider'
+      ]);
+
+      expect(catalog.tvShows.map((show) => show.title)).toEqual(['Alpha Show', 'Zeta Show']);
+      expect(catalog.tvShows[0].seasons.map((season) => season.seasonNumber)).toEqual([1, 2]);
+      expect(catalog.tvShows[0].seasons[0].episodes.map((episode) => episode.episodeNumber)).toEqual([1, 2]);
+      expect(catalog.tvShows[0].seasons[0].episodes[0].providers.map((provider) => provider.providerName)).toEqual([
+        'First Episode One Provider',
+        'Second Episode One Provider'
       ]);
     } finally {
       db.close();

@@ -11,7 +11,9 @@ const config: AppConfig = {
   telegramChannelId: '@test-channel',
   host: '127.0.0.1',
   port: 0,
-  databasePath: ':memory:'
+  databasePath: ':memory:',
+  publicSearchChannelHandle: '@infinitylinks65',
+  publicSearchGroupHandle: '@infinitylinks69'
 };
 
 let db: AppDatabase;

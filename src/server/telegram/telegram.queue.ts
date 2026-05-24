@@ -597,7 +597,15 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
     const completedPayload = JSON.parse(job.payload) as TelegramJobPayload;
 
     db.transaction(() => {
-      if (!(job.job_type === 'delete' && (completedPayload as TelegramDeleteJobPayload).retainEntityState)) {
+      const isRetainedDelete =
+        job.job_type === 'delete' && (completedPayload as TelegramDeleteJobPayload).retainEntityState;
+
+      if (isRetainedDelete) {
+        updateEntityPostStatus(db, job.entity_type, job.entity_id, {
+          messageId: null,
+          postStatus: 'posted'
+        });
+      } else {
         updateEntityPostStatus(db, job.entity_type, job.entity_id, {
           ...(job.job_type === 'delete' ? { messageId: null } : {}),
           ...(result?.messageId !== undefined ? { messageId: result.messageId } : {}),

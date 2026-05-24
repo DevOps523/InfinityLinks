@@ -363,6 +363,32 @@ describe('telegram queue', () => {
     db.close();
   });
 
+  it('clears old season message id after retained repost delete succeeds', async () => {
+    const db = setupDb();
+    createSeasonRow(db, 8);
+    db.prepare("UPDATE seasons SET telegram_message_id = 456, post_status = 'posted' WHERE id = ?").run(8);
+
+    enqueueTelegramJob(db, 'delete', 'season', 8, {
+      messageId: 456,
+      retainEntityState: true
+    });
+
+    const client = {
+      sendPhotoPost: vi.fn(),
+      editPhotoCaption: vi.fn(),
+      deleteMessage: vi.fn(async () => undefined)
+    };
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
+
+    expect(getSeasonPostState(db, 8)).toEqual({
+      telegram_message_id: null,
+      post_status: 'posted'
+    });
+
+    db.close();
+  });
+
   it('does not process a repost send after retained delete permanently fails', async () => {
     const db = setupDb();
     createSeasonRow(db, 8);

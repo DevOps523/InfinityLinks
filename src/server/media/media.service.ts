@@ -32,6 +32,8 @@ import {
   listMovies,
   listSeasons,
   listTvShows,
+  clearSeasonNeedsRepost,
+  markSeasonNeedsRepost,
   updateEpisode,
   updateEpisodeLink,
   updateMovieWithLinks,
@@ -191,6 +193,10 @@ function queueSeasonDelete(db: AppDatabase, season: Season) {
       messageId: season.telegramMessageId
     });
   }
+}
+
+function markSeasonRepostableAfterLinkedContentChange(db: AppDatabase, seasonId: number) {
+  markSeasonNeedsRepost(db, seasonId);
 }
 
 export function createMovie(db: AppDatabase, body: unknown) {
@@ -354,6 +360,45 @@ export function removeSeason(db: AppDatabase, id: number) {
   })();
 }
 
+export function repostSeason(db: AppDatabase, id: number) {
+  return db.transaction(() => {
+    const season = getSeason(db, id);
+
+    if (!season) {
+      return undefined;
+    }
+
+    if (!season.canRepost) {
+      throw new MediaHttpError(409, 'Season has no new linked episode changes to repost.');
+    }
+
+    const postData = getSeasonPostData(db, id);
+    if (!postData || !hasLinkedEpisode(postData)) {
+      throw new MediaHttpError(409, 'Season is not ready to repost.');
+    }
+
+    const payload = buildSeasonPayload(postData);
+    if (!payload) {
+      throw new MediaHttpError(409, 'Season needs a TV poster before it can be reposted.');
+    }
+
+    cancelPendingTelegramEditJobs(db, 'season', id);
+    cancelPendingTelegramSendJobs(db, 'season', id);
+    cancelPendingTelegramDeleteJobs(db, 'season', id);
+
+    if (postData.telegramMessageId) {
+      enqueueTelegramJob(db, 'delete', 'season', id, {
+        messageId: postData.telegramMessageId,
+        retainEntityState: true
+      });
+    }
+    enqueueTelegramJob(db, 'send', 'season', id, payload);
+    clearSeasonNeedsRepost(db, id);
+
+    return getSeason(db, id);
+  })();
+}
+
 export function getEpisodesForSeason(db: AppDatabase, seasonId: number) {
   return listEpisodes(db, seasonId);
 }
@@ -396,6 +441,7 @@ export function updateEpisodeById(db: AppDatabase, id: number, body: unknown) {
 
     if (episode) {
       syncSeasonPostAfterContentChange(db, episode.season.id);
+      markSeasonRepostableAfterLinkedContentChange(db, episode.season.id);
     }
 
     return episode;
@@ -408,6 +454,7 @@ export function removeEpisode(db: AppDatabase, id: number) {
 
     if (episode) {
       syncSeasonPostAfterContentChange(db, episode.season.id);
+      markSeasonRepostableAfterLinkedContentChange(db, episode.season.id);
     }
 
     return episode;
@@ -430,6 +477,7 @@ export function createEpisodeLinks(db: AppDatabase, episodeId: number, body: unk
 
     if (seasonId) {
       syncSeasonPostAfterContentChange(db, seasonId.season_id);
+      markSeasonRepostableAfterLinkedContentChange(db, seasonId.season_id);
     }
 
     return links;
@@ -442,6 +490,7 @@ export function removeEpisodeLink(db: AppDatabase, id: number) {
 
     if (link) {
       syncSeasonPostAfterContentChange(db, link.season.id);
+      markSeasonRepostableAfterLinkedContentChange(db, link.season.id);
     }
 
     return link;
@@ -460,6 +509,7 @@ export function updateEpisodeLinkById(db: AppDatabase, id: number, body: unknown
 
     if (link) {
       syncSeasonPostAfterContentChange(db, link.season.id);
+      markSeasonRepostableAfterLinkedContentChange(db, link.season.id);
     }
 
     return link;

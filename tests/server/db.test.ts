@@ -118,6 +118,37 @@ describe('database migration', () => {
     db.close();
   });
 
+  it('adds repost tracking to existing season tables', () => {
+    const db = createDatabase(':memory:');
+    db.exec(`
+      CREATE TABLE tv_shows (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        quality TEXT NOT NULL
+      );
+      CREATE TABLE seasons (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tv_show_id INTEGER NOT NULL,
+        season_number INTEGER NOT NULL,
+        telegram_message_id INTEGER,
+        post_status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    migrate(db);
+
+    const columns = db.prepare('PRAGMA table_info(seasons)').all() as Array<{ name: string }>;
+    expect(columns.map((column) => column.name)).toContain('needs_repost');
+
+    const show = db.prepare("INSERT INTO tv_shows (title, quality) VALUES ('Show', 'HD')").run();
+    const season = db.prepare('INSERT INTO seasons (tv_show_id, season_number) VALUES (?, 1)').run(show.lastInsertRowid);
+    expect(db.prepare('SELECT needs_repost FROM seasons WHERE id = ?').get(season.lastInsertRowid)).toEqual({ needs_repost: 0 });
+
+    db.close();
+  });
+
   it('resolves the schema path from source layout', () => {
     expect(resolveSchemaPath()).toMatch(/src[\\/]server[\\/]db[\\/]schema\.sql$/);
   });

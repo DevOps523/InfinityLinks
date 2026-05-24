@@ -503,6 +503,83 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: /^add season$/i })).not.toBeInTheDocument();
   });
 
+  it('shows and queues season repost only when a season is repostable', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/movies' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => ({ movies: [] })
+        };
+      }
+
+      if (url === '/api/tv-shows' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => ({
+            tvShows: [
+              {
+                id: 3,
+                title: 'Dark',
+                year: 2017,
+                description: 'Missing children and time loops'
+              }
+            ]
+          })
+        };
+      }
+
+      if (url === '/api/tv-shows/3/seasons' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => ({
+            seasons: [
+              {
+                id: 9,
+                tvShowId: 3,
+                seasonNumber: 1,
+                canRepost: true
+              }
+            ]
+          })
+        };
+      }
+
+      if (url === '/api/seasons/9/repost' && init?.method === 'POST') {
+        return {
+          ok: true,
+          json: async () => ({
+            season: {
+              id: 9,
+              tvShowId: 3,
+              seasonNumber: 1,
+              canRepost: false
+            }
+          })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({})
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
+
+    expect(await screen.findByText('Dark')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /open action menu/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /^manage seasons$/i }));
+
+    const repostButton = await screen.findByRole('button', { name: /^repost season$/i });
+    fireEvent.click(repostButton);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/seasons/9/repost', expect.objectContaining({ method: 'POST' })));
+    expect(await screen.findByText('Season repost queued.')).toBeInTheDocument();
+  });
+
   it('cancels delete confirmation without deleting', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/api/movies' && !init?.method) {

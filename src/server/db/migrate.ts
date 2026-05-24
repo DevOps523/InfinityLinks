@@ -25,6 +25,16 @@ export function resolveSchemaPath() {
 export function migrate(db: AppDatabase) {
   const schema = fs.readFileSync(resolveSchemaPath(), 'utf8');
   db.exec(schema);
+  ensureColumn(db, 'seasons', 'needs_repost', 'INTEGER NOT NULL DEFAULT 0 CHECK (needs_repost IN (0, 1))');
+}
+
+function ensureColumn(db: AppDatabase, tableName: string, columnName: string, columnDefinition: string) {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  if (columns.some((column) => column.name === columnName)) {
+    return;
+  }
+
+  db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

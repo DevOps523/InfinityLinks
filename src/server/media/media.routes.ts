@@ -19,6 +19,7 @@ import {
   removeMovie,
   removeSeason,
   removeTvShow,
+  repostSeason,
   searchMovies,
   searchTvShows,
   updateEpisodeById,
@@ -218,6 +219,22 @@ export function createMediaRouter(db: AppDatabase) {
     try {
       const { id } = IdParamSchema.parse(req.params);
       const season = updateSeasonById(db, id, req.body);
+
+      if (!season) {
+        res.status(404).json({ error: 'Season not found' });
+        return;
+      }
+
+      res.json({ season });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/seasons/:id/repost', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const season = repostSeason(db, id);
 
       if (!season) {
         res.status(404).json({ error: 'Season not found' });

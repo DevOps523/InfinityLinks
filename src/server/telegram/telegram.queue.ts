@@ -18,6 +18,7 @@ export type TelegramEditJobPayload = {
 
 export type TelegramDeleteJobPayload = {
   messageId: number;
+  retainEntityState?: boolean;
 };
 
 export type TelegramJobInput =
@@ -570,12 +571,16 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
       return true;
     }
 
+    const completedPayload = JSON.parse(job.payload) as TelegramJobPayload;
+
     db.transaction(() => {
-      updateEntityPostStatus(db, job.entity_type, job.entity_id, {
-        ...(job.job_type === 'delete' ? { messageId: null } : {}),
-        ...(result?.messageId !== undefined ? { messageId: result.messageId } : {}),
-        postStatus: getPostStatusForJobType(job.job_type)
-      });
+      if (!(job.job_type === 'delete' && (completedPayload as TelegramDeleteJobPayload).retainEntityState)) {
+        updateEntityPostStatus(db, job.entity_type, job.entity_id, {
+          ...(job.job_type === 'delete' ? { messageId: null } : {}),
+          ...(result?.messageId !== undefined ? { messageId: result.messageId } : {}),
+          postStatus: getPostStatusForJobType(job.job_type)
+        });
+      }
       db.prepare(
         `UPDATE telegram_jobs
          SET status = 'succeeded',

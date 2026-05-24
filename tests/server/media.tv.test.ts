@@ -466,6 +466,81 @@ describe('tv media API', () => {
     });
   });
 
+  it('marks posted seasons repostable after linked episode changes', async () => {
+    const { showId, episodeId } = createLinkedSeason({ telegramMessageId: 456 });
+
+    await request(app())
+      .post(`/api/episodes/${episodeId}/links`)
+      .send({
+        links: [
+          {
+            providerName: 'Infinity Stream',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/chronos/s2/e1'
+          }
+        ]
+      })
+      .expect(201);
+
+    const response = await request(app()).get(`/api/tv-shows/${showId}/seasons`).expect(200);
+
+    expect(response.body.seasons[0]).toMatchObject({
+      id: expect.any(Number),
+      canRepost: true
+    });
+  });
+
+  it('queues a repost only when a posted season has new linked episode changes', async () => {
+    const { seasonId, episodeId } = createLinkedSeason({ telegramMessageId: 456 });
+
+    await request(app()).post(`/api/seasons/${seasonId}/repost`).expect(409);
+
+    await request(app())
+      .post(`/api/episodes/${episodeId}/links`)
+      .send({
+        links: [
+          {
+            providerName: 'Infinity Stream',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/chronos/s2/e1'
+          }
+        ]
+      })
+      .expect(201);
+
+    await request(app()).post(`/api/seasons/${seasonId}/repost`).expect(200);
+
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(2);
+    expect(jobs[0]).toMatchObject({
+      job_type: 'delete',
+      entity_type: 'season',
+      entity_id: seasonId
+    });
+    expect(JSON.parse(jobs[0].payload)).toEqual({
+      messageId: 456,
+      retainEntityState: true
+    });
+    expect(jobs[1]).toMatchObject({
+      job_type: 'send',
+      entity_type: 'season',
+      entity_id: seasonId
+    });
+    expect(JSON.parse(jobs[1].payload)).toMatchObject({
+      posterUrl: 'https://example.com/chronos.jpg',
+      caption: expect.stringContaining('Infinity Stream')
+    });
+    expect(await request(app()).get(`/api/seasons/${seasonId}`).expect(200)).toMatchObject({
+      body: {
+        season: expect.objectContaining({
+          canRepost: false
+        })
+      }
+    });
+  });
+
   it('queues a posted season delete when the last episode link is deleted', async () => {
     const { seasonId, episodeId } = createLinkedSeason({ telegramMessageId: 456 });
     const link = db

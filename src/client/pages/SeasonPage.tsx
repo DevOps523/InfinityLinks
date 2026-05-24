@@ -1,4 +1,4 @@
-import { ArrowLeft, ListPlus, Plus, Save } from 'lucide-react';
+import { ArrowLeft, ListPlus, Plus, RefreshCw, Save } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { apiJson } from '../api/http';
 import { ActionMenu } from '../components/ActionMenu';
@@ -10,6 +10,7 @@ type Season = {
   id: number;
   tvShowId: number;
   seasonNumber: number;
+  canRepost?: boolean;
 };
 
 type SeasonPageProps = {
@@ -99,6 +100,7 @@ export function SeasonPage({ tvShowId, openAddOnEntry = false, onAddEntryHandled
   const [isSaving, setIsSaving] = useState(false);
   const [seasonToDelete, setSeasonToDelete] = useState<Season | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [repostingSeasonId, setRepostingSeasonId] = useState<number | null>(null);
   const requestIdRef = useRef(0);
   const mountedRef = useRef(false);
 
@@ -223,6 +225,26 @@ export function SeasonPage({ tvShowId, openAddOnEntry = false, onAddEntryHandled
     }
   }
 
+  async function repostSeason(season: Season) {
+    setRepostingSeasonId(season.id);
+    try {
+      await apiJson(`/api/seasons/${season.id}/repost`, { method: 'POST' });
+      if (!mountedRef.current) {
+        return;
+      }
+      await loadSeasons();
+      showToast('Season repost queued.');
+    } catch (repostError) {
+      if (mountedRef.current) {
+        showToast(repostError instanceof Error ? repostError.message : 'Unable to repost season.', 'error');
+      }
+    } finally {
+      if (mountedRef.current) {
+        setRepostingSeasonId(null);
+      }
+    }
+  }
+
   return (
     <section className="page-section">
       <div className="page-header">
@@ -253,6 +275,7 @@ export function SeasonPage({ tvShowId, openAddOnEntry = false, onAddEntryHandled
                 <tr>
                   <th>ID</th>
                   <th>Season number</th>
+                  <th>Repost</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -261,6 +284,19 @@ export function SeasonPage({ tvShowId, openAddOnEntry = false, onAddEntryHandled
                   <tr key={season.id}>
                     <td>{season.id}</td>
                     <td>{season.seasonNumber}</td>
+                    <td>
+                      {season.canRepost ? (
+                        <button
+                          className="button button--secondary"
+                          type="button"
+                          disabled={repostingSeasonId === season.id}
+                          onClick={() => repostSeason(season)}
+                        >
+                          <RefreshCw aria-hidden="true" size={16} />
+                          {repostingSeasonId === season.id ? 'Queueing...' : 'Repost Season'}
+                        </button>
+                      ) : null}
+                    </td>
                     <td>
                       <ActionMenu
                         extraActions={[

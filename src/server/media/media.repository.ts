@@ -69,6 +69,8 @@ export type Season = {
   seasonNumber: number;
   telegramMessageId?: number;
   postStatus: string;
+  needsRepost: boolean;
+  canRepost: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -179,6 +181,8 @@ type SeasonRow = {
   season_number: number;
   telegram_message_id: number | null;
   post_status: string;
+  needs_repost: 0 | 1;
+  can_repost: 0 | 1;
   created_at: string;
   updated_at: string;
 };
@@ -265,6 +269,8 @@ function mapSeason(row: SeasonRow): Season {
     seasonNumber: row.season_number,
     telegramMessageId: row.telegram_message_id ?? undefined,
     postStatus: row.post_status,
+    needsRepost: row.needs_repost === 1,
+    canRepost: row.can_repost === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -589,10 +595,32 @@ export function listSeasons(db: AppDatabase, tvShowId: number) {
   return (
     db
       .prepare(
-        `SELECT id, tv_show_id, season_number, telegram_message_id, post_status, created_at, updated_at
+        `SELECT seasons.id,
+                seasons.tv_show_id,
+                seasons.season_number,
+                seasons.telegram_message_id,
+                seasons.post_status,
+                seasons.needs_repost,
+                CASE
+                  WHEN seasons.needs_repost = 1
+                   AND seasons.telegram_message_id IS NOT NULL
+                   AND seasons.post_status = 'posted'
+                   AND TRIM(COALESCE(tv_shows.poster_url, '')) <> ''
+                   AND EXISTS (
+                     SELECT 1
+                     FROM episodes
+                     JOIN episode_links ON episode_links.episode_id = episodes.id
+                     WHERE episodes.season_id = seasons.id
+                   )
+                  THEN 1
+                  ELSE 0
+                END AS can_repost,
+                seasons.created_at,
+                seasons.updated_at
          FROM seasons
-         WHERE tv_show_id = ?
-         ORDER BY season_number ASC, id ASC`
+         JOIN tv_shows ON tv_shows.id = seasons.tv_show_id
+         WHERE seasons.tv_show_id = ?
+         ORDER BY seasons.season_number ASC, seasons.id ASC`
       )
       .all(tvShowId) as SeasonRow[]
   ).map(mapSeason);
@@ -601,13 +629,59 @@ export function listSeasons(db: AppDatabase, tvShowId: number) {
 export function getSeason(db: AppDatabase, id: number): Season | undefined {
   const row = db
     .prepare(
-      `SELECT id, tv_show_id, season_number, telegram_message_id, post_status, created_at, updated_at
+      `SELECT seasons.id,
+              seasons.tv_show_id,
+              seasons.season_number,
+              seasons.telegram_message_id,
+              seasons.post_status,
+              seasons.needs_repost,
+              CASE
+                WHEN seasons.needs_repost = 1
+                 AND seasons.telegram_message_id IS NOT NULL
+                 AND seasons.post_status = 'posted'
+                 AND TRIM(COALESCE(tv_shows.poster_url, '')) <> ''
+                 AND EXISTS (
+                   SELECT 1
+                   FROM episodes
+                   JOIN episode_links ON episode_links.episode_id = episodes.id
+                   WHERE episodes.season_id = seasons.id
+                 )
+                THEN 1
+                ELSE 0
+              END AS can_repost,
+              seasons.created_at,
+              seasons.updated_at
        FROM seasons
-       WHERE id = ?`
+       JOIN tv_shows ON tv_shows.id = seasons.tv_show_id
+       WHERE seasons.id = ?`
     )
     .get(id) as SeasonRow | undefined;
 
   return row ? mapSeason(row) : undefined;
+}
+
+export function markSeasonNeedsRepost(db: AppDatabase, id: number) {
+  return db
+    .prepare(
+      `UPDATE seasons
+       SET needs_repost = 1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+         AND telegram_message_id IS NOT NULL
+         AND post_status = 'posted'`
+    )
+    .run(id);
+}
+
+export function clearSeasonNeedsRepost(db: AppDatabase, id: number) {
+  return db
+    .prepare(
+      `UPDATE seasons
+       SET needs_repost = 0,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    )
+    .run(id);
 }
 
 export function updateSeason(db: AppDatabase, id: number, input: SeasonInput): Season | undefined {
@@ -907,6 +981,21 @@ export function getSeasonPostData(db: AppDatabase, seasonId: number): SeasonPost
               seasons.season_number,
               seasons.telegram_message_id,
               seasons.post_status,
+              seasons.needs_repost,
+              CASE
+                WHEN seasons.needs_repost = 1
+                 AND seasons.telegram_message_id IS NOT NULL
+                 AND seasons.post_status = 'posted'
+                 AND TRIM(COALESCE(tv_shows.poster_url, '')) <> ''
+                 AND EXISTS (
+                   SELECT 1
+                   FROM episodes
+                   JOIN episode_links ON episode_links.episode_id = episodes.id
+                   WHERE episodes.season_id = seasons.id
+                 )
+                THEN 1
+                ELSE 0
+              END AS can_repost,
               seasons.created_at,
               seasons.updated_at,
               tv_shows.title,

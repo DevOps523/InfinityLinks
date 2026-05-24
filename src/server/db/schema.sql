@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS seasons (
   season_number INTEGER NOT NULL,
   telegram_message_id INTEGER,
   post_status TEXT NOT NULL DEFAULT 'pending' CHECK (post_status IN ('pending', 'posted', 'failed', 'deleted')),
+  needs_repost INTEGER NOT NULL DEFAULT 0 CHECK (needs_repost IN (0, 1)),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (tv_show_id, season_number)

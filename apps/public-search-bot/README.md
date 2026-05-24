@@ -25,6 +25,7 @@ npm start
 ```env
 PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
 PUBLIC_SEARCH_SYNC_TOKEN=replace_with_secret_sync_token
+PUBLIC_SEARCH_STATUS_TOKEN=replace_with_read_only_status_token
 PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
 PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
 PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
@@ -32,6 +33,7 @@ PUBLIC_SEARCH_HOST=127.0.0.1
 PUBLIC_SEARCH_PORT=3001
 ```
 
+`PUBLIC_SEARCH_STATUS_TOKEN` is read-only and is used only for status checks. Keep it separate from `PUBLIC_SEARCH_SYNC_TOKEN`, which authorizes catalog sync writes.
 Keep `PUBLIC_SEARCH_HOST=127.0.0.1` for normal VPS deployments so the Node service is reachable only through the local reverse proxy.
 The `data/` folder is included as an empty placeholder; the SQLite database file is created there at runtime and is ignored by git.
 
@@ -111,6 +113,7 @@ Set these values:
 ```env
 PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
 PUBLIC_SEARCH_SYNC_TOKEN=replace_with_a_long_random_secret
+PUBLIC_SEARCH_STATUS_TOKEN=replace_with_a_different_read_only_secret
 PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
 PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
 PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
@@ -119,6 +122,7 @@ PUBLIC_SEARCH_PORT=3001
 ```
 
 Use a long random value for `PUBLIC_SEARCH_SYNC_TOKEN`. The local admin app must use the same token.
+Use a separate long random value for `PUBLIC_SEARCH_STATUS_TOKEN`. This token is read-only and must not match `PUBLIC_SEARCH_SYNC_TOKEN`.
 
 ### 6. Prepare The Data Directory
 
@@ -180,6 +184,13 @@ View logs:
 
 ```bash
 sudo journalctl -u public-search-bot -f
+```
+
+From your local machine, you can inspect full VPS logs over SSH:
+
+```bash
+ssh root@your-vps-ip "journalctl -u public-search-bot -n 100 --no-pager"
+ssh root@your-vps-ip "journalctl -u public-search-bot -f"
 ```
 
 ### 9. Configure Nginx And HTTPS
@@ -258,9 +269,18 @@ The local admin app remains private. Configure it with:
 ```env
 PUBLIC_SEARCH_SYNC_URL=https://your-vps.example.com/api/sync
 PUBLIC_SEARCH_SYNC_TOKEN=replace_with_secret_sync_token
+PUBLIC_SEARCH_STATUS_URL=https://your-vps.example.com/api/status
+PUBLIC_SEARCH_STATUS_TOKEN=replace_with_read_only_status_token
 ```
 
 Use the same `PUBLIC_SEARCH_SYNC_TOKEN` value on both the local admin app and this VPS app, then click Sync Public Search in the local admin app.
+Use the same read-only `PUBLIC_SEARCH_STATUS_TOKEN` value on both sides for safe status checks. Do not reuse `PUBLIC_SEARCH_SYNC_TOKEN` as the status token.
+
+Safe status test command:
+
+```bash
+curl -H "Authorization: Bearer $PUBLIC_SEARCH_STATUS_TOKEN" http://127.0.0.1:3001/api/status
+```
 
 ## Commands
 

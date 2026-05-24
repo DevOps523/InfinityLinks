@@ -79,6 +79,7 @@ Use this split when deploying from your private local admin app to the public VP
    ```env
    PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
    PUBLIC_SEARCH_SYNC_TOKEN=use_the_same_long_random_secret_as_local
+   PUBLIC_SEARCH_STATUS_TOKEN=replace_with_read_only_status_token
    PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
    PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
    PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
@@ -87,6 +88,7 @@ Use this split when deploying from your private local admin app to the public VP
    ```
 
    `PUBLIC_BOT_TOKEN` is the token for the public search bot. Add that bot as an admin in [@infinitylinks65](https://t.me/infinitylinks65) so it can check whether users joined the channel.
+   `PUBLIC_SEARCH_STATUS_TOKEN` is a read-only token for status checks. Keep it separate from `PUBLIC_SEARCH_SYNC_TOKEN`, which authorizes catalog sync writes.
    Keep `PUBLIC_SEARCH_HOST=127.0.0.1` so the Node service is reachable only through the VPS reverse proxy.
 
 3. Build and run the VPS service:
@@ -128,11 +130,14 @@ Use this split when deploying from your private local admin app to the public VP
 
    PUBLIC_SEARCH_SYNC_URL=https://your-vps.example.com/api/sync
    PUBLIC_SEARCH_SYNC_TOKEN=use_the_same_long_random_secret_as_vps
+   PUBLIC_SEARCH_STATUS_URL=https://your-vps-domain.example/api/status
+   PUBLIC_SEARCH_STATUS_TOKEN=replace-with-read-only-status-token
    PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
    PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
    ```
 
    The local `PUBLIC_SEARCH_SYNC_TOKEN` must exactly match the VPS `PUBLIC_SEARCH_SYNC_TOKEN`. The local app does not need to be publicly reachable.
+   The local `PUBLIC_SEARCH_STATUS_TOKEN` must match the VPS read-only status token and must not reuse the sync token. The local admin status panel shows only safe error status; full service logs stay in systemd on the VPS.
 
 6. Sync from local to VPS:
 

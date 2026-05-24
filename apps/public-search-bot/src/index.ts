@@ -8,6 +8,7 @@ import { createPublicTelegramClient } from './telegram.client.js';
 import { createTelegramReplyQueue } from './telegram.reply-queue.js';
 import { handleTelegramUpdate } from './bot/handlers.js';
 import { pollOnce, type PollState } from './poller.js';
+import { createPublicSearchStatusTracker } from './status-tracker.js';
 
 function delay(ms: number) {
   return new Promise((resolve) => {
@@ -19,8 +20,9 @@ async function main() {
   const config = loadPublicSearchConfig(process.env);
   const db = createPublicSearchDatabase(config.publicSearchDatabasePath);
   migratePublicSearchDatabase(db);
+  const statusTracker = createPublicSearchStatusTracker();
 
-  const app = createPublicSearchApp({ db, config });
+  const app = createPublicSearchApp({ db, config, statusTracker });
   app.listen(config.publicSearchPort, config.publicSearchHost, () => {
     console.log(
       `Public search sync API listening on http://${config.publicSearchHost}:${config.publicSearchPort}`
@@ -50,7 +52,9 @@ async function main() {
           update
         )
       );
+      statusTracker.clearError('telegram_poll');
     } catch (error) {
+      statusTracker.recordError('telegram_poll', error);
       console.error('Public search polling failed', error);
       await delay(1_000);
     }

@@ -34,7 +34,7 @@ export function createPublicSearchApp(options: CreatePublicSearchAppOptions) {
   app.set('trust proxy', 'loopback');
   app.use(express.json({ limit: '5mb' }));
   app.use('/api', createPublicSearchStatusRouter(options.config, statusTracker));
-  app.use('/api', createPublicSearchSyncRouter(options.db, options.config));
+  app.use('/api', createPublicSearchSyncRouter(options.db, options.config, statusTracker));
 
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'API route not found' });

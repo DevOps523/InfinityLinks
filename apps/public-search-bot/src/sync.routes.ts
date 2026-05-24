@@ -4,13 +4,20 @@ import { replacePublicCatalog } from './catalog.repository.js';
 import { PublicSearchCatalogSchema } from './catalog.schema.js';
 import type { PublicSearchDatabase } from './db/database.js';
 import { createFixedWindowRateLimiter } from './rate-limit.js';
+import { createPublicSearchStatusTracker } from './status-tracker.js';
+
+type PublicSearchStatusTracker = ReturnType<typeof createPublicSearchStatusTracker>;
 
 function extractBearerToken(authorization: string | undefined) {
   const match = authorization?.match(/^Bearer\s+(.+)$/i);
   return match?.[1];
 }
 
-export function createPublicSearchSyncRouter(db: PublicSearchDatabase, config: PublicSearchConfig) {
+export function createPublicSearchSyncRouter(
+  db: PublicSearchDatabase,
+  config: PublicSearchConfig,
+  statusTracker: PublicSearchStatusTracker
+) {
   const router = express.Router();
   const syncRateLimiter = createFixedWindowRateLimiter({ limit: 5, windowMs: 60_000 });
 
@@ -28,10 +35,16 @@ export function createPublicSearchSyncRouter(db: PublicSearchDatabase, config: P
       return;
     }
 
-    const catalog = PublicSearchCatalogSchema.parse(req.body);
-    const counts = replacePublicCatalog(db, catalog);
+    try {
+      const catalog = PublicSearchCatalogSchema.parse(req.body);
+      const counts = replacePublicCatalog(db, catalog);
 
-    res.json({ sync: counts });
+      statusTracker.clearError('sync');
+      res.json({ sync: counts });
+    } catch (error) {
+      statusTracker.recordError('sync', error);
+      throw error;
+    }
   });
 
   return router;

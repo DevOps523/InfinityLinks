@@ -4,6 +4,7 @@ import { createPublicSearchApp } from '../src/app.js';
 import type { PublicSearchConfig } from '../src/config.js';
 import { createPublicSearchDatabase, type PublicSearchDatabase } from '../src/db/database.js';
 import { migratePublicSearchDatabase } from '../src/db/migrate.js';
+import { createPublicSearchStatusTracker } from '../src/status-tracker.js';
 
 function createMigratedDatabase() {
   const db = createPublicSearchDatabase(':memory:');
@@ -23,6 +24,13 @@ function createConfig(overrides: Partial<PublicSearchConfig> = {}): PublicSearch
     publicSearchPort: 3001,
     ...overrides
   };
+}
+
+function createTracker() {
+  return createPublicSearchStatusTracker({
+    now: () => new Date('2026-05-24T00:00:00.000Z'),
+    uptimeSeconds: () => 12
+  });
 }
 
 function validCatalog() {
@@ -124,12 +132,18 @@ describe('public search sync endpoint', () => {
     const db = createMigratedDatabase();
 
     try {
-      const app = createPublicSearchApp({ db, config: createConfig() });
+      const tracker = createTracker();
+      const app = createPublicSearchApp({ db, config: createConfig(), statusTracker: tracker });
 
       const response = await request(app).post('/api/sync').send(validCatalog());
 
       expect(response.status).toBe(401);
       expect(response.body).toEqual({ error: 'Unauthorized' });
+      expect(tracker.snapshot()).toMatchObject({
+        state: 'ok',
+        consecutiveErrorCount: 0,
+        lastError: null
+      });
     } finally {
       db.close();
     }
@@ -139,12 +153,18 @@ describe('public search sync endpoint', () => {
     const db = createMigratedDatabase();
 
     try {
-      const app = createPublicSearchApp({ db, config: createConfig() });
+      const tracker = createTracker();
+      const app = createPublicSearchApp({ db, config: createConfig(), statusTracker: tracker });
 
       const response = await request(app).post('/api/sync').set('Authorization', 'Bearer wrong-token').send(validCatalog());
 
       expect(response.status).toBe(401);
       expect(response.body).toEqual({ error: 'Unauthorized' });
+      expect(tracker.snapshot()).toMatchObject({
+        state: 'ok',
+        consecutiveErrorCount: 0,
+        lastError: null
+      });
     } finally {
       db.close();
     }
@@ -154,7 +174,8 @@ describe('public search sync endpoint', () => {
     const db = createMigratedDatabase();
 
     try {
-      const app = createPublicSearchApp({ db, config: createConfig() });
+      const tracker = createTracker();
+      const app = createPublicSearchApp({ db, config: createConfig(), statusTracker: tracker });
 
       for (let index = 0; index < 5; index += 1) {
         await request(app).post('/api/sync').set('Authorization', 'Bearer sync-token').send(validCatalog()).expect(200);
@@ -166,6 +187,11 @@ describe('public search sync endpoint', () => {
       expect(Number(response.header['retry-after'])).toBeGreaterThan(0);
       expect(Number(response.header['retry-after'])).toBeLessThanOrEqual(60);
       expect(response.body).toEqual({ error: 'Too many sync attempts. Please wait and try again.' });
+      expect(tracker.snapshot()).toMatchObject({
+        state: 'ok',
+        consecutiveErrorCount: 0,
+        lastError: null
+      });
     } finally {
       db.close();
     }
@@ -225,7 +251,8 @@ describe('public search sync endpoint', () => {
 
     try {
       seedOldCatalog(db);
-      const app = createPublicSearchApp({ db, config: createConfig() });
+      const tracker = createTracker();
+      const app = createPublicSearchApp({ db, config: createConfig(), statusTracker: tracker });
 
       const response = await request(app)
         .post('/api/sync')
@@ -250,6 +277,14 @@ describe('public search sync endpoint', () => {
           })
         ])
       );
+      expect(tracker.snapshot()).toMatchObject({
+        state: 'error',
+        consecutiveErrorCount: 1,
+        lastError: {
+          source: 'sync',
+          at: '2026-05-24T00:00:00.000Z'
+        }
+      });
       expectOldCatalogPreserved(db);
     } finally {
       db.close();
@@ -479,7 +514,9 @@ describe('public search sync endpoint', () => {
 
     try {
       seedOldCatalog(db);
-      const app = createPublicSearchApp({ db, config: createConfig() });
+      const tracker = createTracker();
+      tracker.recordError('sync', new Error('Previous sync failed'));
+      const app = createPublicSearchApp({ db, config: createConfig(), statusTracker: tracker });
 
       const response = await request(app).post('/api/sync').set('Authorization', 'Bearer sync-token').send(validCatalog());
 
@@ -493,6 +530,11 @@ describe('public search sync endpoint', () => {
           episodes: 2,
           episodeProviders: 2
         }
+      });
+      expect(tracker.snapshot()).toMatchObject({
+        state: 'ok',
+        consecutiveErrorCount: 0,
+        lastError: null
       });
 
       expect(db.prepare('SELECT id, title, year, telegram_message_id, channel_post_url FROM public_movies').all()).toEqual([

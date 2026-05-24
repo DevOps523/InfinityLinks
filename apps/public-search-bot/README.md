@@ -20,6 +20,13 @@ npm run build
 npm start
 ```
 
+For a systemd install under `/opt/infinitylinks-public-search-bot`, make sure the app and SQLite data directory are writable by the service user:
+
+```bash
+sudo install -d -o www-data -g www-data /opt/infinitylinks-public-search-bot/data
+sudo chown -R www-data:www-data /opt/infinitylinks-public-search-bot
+```
+
 ## Environment
 
 ```env
@@ -53,6 +60,6 @@ npm test
 
 ## Deployment Notes
 
-Run this VPS app behind a reverse proxy such as nginx. The proxy must overwrite or sanitize `X-Forwarded-For` so clients cannot spoof the originating IP chain.
+Run this VPS app behind a TLS reverse proxy such as nginx. The sync endpoint uses a bearer-style secret token, so serve it over HTTPS; certbot can manage the certificate paths shown in the nginx example. The proxy must overwrite or sanitize `X-Forwarded-For` so clients cannot spoof the originating IP chain.
 
 Example nginx and systemd unit files are available in `deploy/`.

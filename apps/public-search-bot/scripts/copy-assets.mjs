@@ -10,7 +10,7 @@ try {
   await mkdir(dirname(schemaTarget), { recursive: true });
   await copyFile(schemaSource, schemaTarget);
 } catch (error) {
-  if (error?.code !== "ENOENT") {
-    throw error;
-  }
+  console.error(`Failed to copy required schema asset from ${schemaSource} to ${schemaTarget}.`);
+  console.error(error);
+  process.exitCode = 1;
 }

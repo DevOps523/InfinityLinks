@@ -173,6 +173,8 @@ function syncSeasonPostAfterContentChange(db: AppDatabase, seasonId: number) {
 
     if (payload) {
       upsertActiveTelegramSendJob(db, 'season', seasonId, payload);
+    } else {
+      cancelPendingTelegramSendJobs(db, 'season', seasonId);
     }
 
     return;

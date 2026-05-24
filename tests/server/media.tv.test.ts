@@ -589,6 +589,49 @@ describe('tv media API', () => {
     expect(JSON.parse(sendJob.payload).caption).toContain('Second Host');
   });
 
+  it('cancels pending repost send and keeps retained delete when poster is removed during repost', async () => {
+    const { showId, seasonId, episodeId } = createLinkedSeason({ telegramMessageId: 456 });
+
+    await request(app())
+      .post(`/api/episodes/${episodeId}/links`)
+      .send({
+        links: [
+          {
+            providerName: 'First Host',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/first'
+          }
+        ]
+      })
+      .expect(201);
+
+    await request(app()).post(`/api/seasons/${seasonId}/repost`).expect(200);
+
+    await request(app())
+      .put(`/api/tv-shows/${showId}`)
+      .send({
+        title: 'Chronos',
+        year: 2025,
+        posterUrl: '',
+        rating: 7.5,
+        quality: 'HD',
+        description: 'Time loops'
+      })
+      .expect(200);
+
+    const jobs = getTelegramJobs();
+    expect(jobs.filter((job) => job.job_type === 'send')).toHaveLength(0);
+    expect(jobs.filter((job) => job.job_type === 'edit')).toHaveLength(0);
+
+    const [deleteJob] = jobs.filter((job) => job.job_type === 'delete');
+    expect(deleteJob).toBeDefined();
+    expect(JSON.parse(deleteJob.payload)).toEqual({
+      messageId: 456,
+      retainEntityState: true
+    });
+  });
+
   it('queues a posted season delete when the last episode link is deleted', async () => {
     const { seasonId, episodeId } = createLinkedSeason({ telegramMessageId: 456 });
     const link = db

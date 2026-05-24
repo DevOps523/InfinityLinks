@@ -20,11 +20,11 @@ npm run build
 npm start
 ```
 
-For a systemd install under `/opt/infinitylinks-public-search-bot`, make sure the app and SQLite data directory are writable by the service user:
+For a systemd install under `/opt/infinitylinks-public-search-bot`, keep app files owned by your deploy user or root as appropriate. The service only needs write access to the SQLite data directory; do not make source files, `node_modules`, `dist`, or `.env` writable by `www-data`.
 
 ```bash
 sudo install -d -o www-data -g www-data /opt/infinitylinks-public-search-bot/data
-sudo chown -R www-data:www-data /opt/infinitylinks-public-search-bot
+sudo chown -R www-data:www-data /opt/infinitylinks-public-search-bot/data
 ```
 
 ## Environment

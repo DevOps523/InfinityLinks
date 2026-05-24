@@ -216,6 +216,7 @@ td {
 .filter-bar,
 .form-panel,
 .poster-panel,
+.sync-panel,
 .table-card {
   border: 1px solid #d8e0ea;
   border-radius: 8px;
@@ -240,6 +241,19 @@ td {
 .state-panel--error,
 .field-error {
   color: #b91c1c;
+}
+
+.sync-panel__result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  padding: 18px;
+  color: #334155;
+}
+
+.sync-panel__result strong {
+  color: #0f172a;
 }
 
 .action-menu {

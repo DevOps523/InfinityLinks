@@ -31,6 +31,7 @@ describe('App', () => {
     expect(within(navigation).getByRole('button', { name: /^add movie$/i })).toBeInTheDocument();
     expect(within(navigation).getByRole('button', { name: /^tv shows$/i })).toBeInTheDocument();
     expect(within(navigation).getByRole('button', { name: /^add tv show$/i })).toBeInTheDocument();
+    expect(within(navigation).getByRole('button', { name: /^public search$/i })).toBeInTheDocument();
   });
 
   it('renders the Add Movie form after clicking Add Movie', async () => {
@@ -52,6 +53,76 @@ describe('App', () => {
     expect(screen.getByLabelText(/tmdb search/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^quality$/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^save tv show$/i })).toBeInTheDocument();
+  });
+
+  it('renders the Public Search sync page after clicking Public Search', () => {
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+
+    expect(screen.getByRole('heading', { name: /^public search$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeInTheDocument();
+  });
+
+  it('syncs the public search catalog and shows returned counts', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync') {
+        return {
+          ok: true,
+          json: async () => ({
+            sync: {
+              syncedAt: '2026-05-24T10:00:00.000Z',
+              movies: 12,
+              tvShows: 4
+            }
+          })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^sync public search$/i }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/public-search/sync', expect.objectContaining({ method: 'POST' }))
+    );
+    expect(await screen.findByText(/12 movies/i)).toBeInTheDocument();
+    expect(screen.getByText(/4 tv shows/i)).toBeInTheDocument();
+  });
+
+  it('shows the public search sync error message', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync') {
+        return {
+          ok: false,
+          status: 502,
+          statusText: 'Bad Gateway',
+          json: async () => ({ error: 'Public search sync failed' })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^sync public search$/i }));
+
+    expect(await screen.findByText('Public search sync failed')).toBeInTheDocument();
   });
 
   it('opens season management from the TV show action menu', async () => {

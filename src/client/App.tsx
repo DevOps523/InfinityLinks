@@ -4,6 +4,7 @@ import { ToastProvider } from './components/ToastProvider';
 import { EpisodePage } from './pages/EpisodePage';
 import { MovieForm } from './pages/MovieForm';
 import { MoviesPage } from './pages/MoviesPage';
+import { PublicSearchPage } from './pages/PublicSearchPage';
 import { SeasonPage } from './pages/SeasonPage';
 import { TvShowForm } from './pages/TvShowForm';
 import { TvShowsPage } from './pages/TvShowsPage';
@@ -85,6 +86,10 @@ function renderPage(page: PageKey, state: AppState, actions: AppActions) {
     return <EpisodePage seasonId={selectedSeasonId} onBack={() => setPage('seasons')} />;
   }
 
+  if (page === 'public-search') {
+    return <PublicSearchPage />;
+  }
+
   return (
     <MoviesPage
       onAddMovie={() => {
@@ -115,10 +120,16 @@ export function App() {
           onNavigate={(nextPage) => {
             setEditingMovieId(null);
             setEditingTvShowId(null);
-            if (nextPage === 'movies' || nextPage === 'tv-shows' || nextPage === 'add-tv-show') {
+            if (nextPage === 'movies' || nextPage === 'tv-shows' || nextPage === 'add-tv-show' || nextPage === 'public-search') {
               setSelectedSeasonId(null);
             }
-            if (nextPage === 'movies' || nextPage === 'add-movie' || nextPage === 'tv-shows' || nextPage === 'add-tv-show') {
+            if (
+              nextPage === 'movies' ||
+              nextPage === 'add-movie' ||
+              nextPage === 'tv-shows' ||
+              nextPage === 'add-tv-show' ||
+              nextPage === 'public-search'
+            ) {
               setSelectedTvShowId(null);
             }
             setPage(nextPage);

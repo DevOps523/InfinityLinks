@@ -184,7 +184,6 @@ function buildTvShows(db: AppDatabase, channelHandle: string): PublicSearchTvSho
          JOIN episode_links ON episode_links.episode_id = episodes.id
         WHERE episode_links.status = 'active'
           AND seasons.post_status = 'posted'
-          AND seasons.telegram_message_id IS NOT NULL
         ORDER BY lower(tv_shows.title) ASC,
                  tv_shows.id ASC,
                  seasons.season_number ASC,

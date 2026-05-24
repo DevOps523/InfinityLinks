@@ -197,6 +197,60 @@ describe('public search catalog export', () => {
     }
   });
 
+  it('exports posted TV seasons with active episode links while a repost has no message id', () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const show = db.prepare("INSERT INTO tv_shows (title, year, quality) VALUES ('Repost Show', 2026, 'HD')").run();
+      const season = db
+        .prepare(
+          "INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (?, 1, NULL, 'posted')"
+        )
+        .run(show.lastInsertRowid);
+      const episode = db.prepare('INSERT INTO episodes (season_id, episode_number) VALUES (?, 1)').run(season.lastInsertRowid);
+
+      db.prepare(
+        `INSERT INTO episode_links (episode_id, provider_name, quality, status, url, sort_order)
+         VALUES (?, 'Filekeeper', 'HD', 'active', 'https://filekeeper.example/repost-show-s1e1', 1)`
+      ).run(episode.lastInsertRowid);
+
+      const catalog = buildPublicSearchCatalog(db, {
+        channelHandle: '@infinitylinks65',
+        groupHandle: '@infinitylinks69',
+        now: () => new Date('2026-05-24T00:00:00.000Z')
+      });
+
+      expect(catalog.tvShows).toEqual([
+        {
+          id: 1,
+          title: 'Repost Show',
+          year: 2026,
+          seasons: [
+            {
+              id: 1,
+              seasonNumber: 1,
+              episodes: [
+                {
+                  episodeNumber: 1,
+                  providers: [
+                    {
+                      providerName: 'Filekeeper',
+                      quality: 'HD',
+                      url: 'https://filekeeper.example/repost-show-s1e1',
+                      sortOrder: 1
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
   it('excludes active links for movies and seasons that are not posted public Telegram content', () => {
     const db = createMigratedDatabase();
 
@@ -230,22 +284,13 @@ describe('public search catalog export', () => {
           "INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (?, 1, 401, 'pending')"
         )
         .run(show.lastInsertRowid);
-      const missingMessageSeason = db
-        .prepare(
-          "INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (?, 2, NULL, 'posted')"
-        )
-        .run(show.lastInsertRowid);
       const deletedSeason = db
         .prepare(
           "INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (?, 3, 403, 'deleted')"
         )
         .run(show.lastInsertRowid);
 
-      for (const seasonId of [
-        pendingSeason.lastInsertRowid,
-        missingMessageSeason.lastInsertRowid,
-        deletedSeason.lastInsertRowid
-      ]) {
+      for (const seasonId of [pendingSeason.lastInsertRowid, deletedSeason.lastInsertRowid]) {
         const episode = db.prepare('INSERT INTO episodes (season_id, episode_number) VALUES (?, 1)').run(seasonId);
         db.prepare(
           `INSERT INTO episode_links (episode_id, provider_name, quality, status, url)

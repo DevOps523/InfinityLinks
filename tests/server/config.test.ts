@@ -18,7 +18,45 @@ describe('loadConfig', () => {
       telegramChannelId: '@channel',
       host: 'localhost',
       port: 4321,
-      databasePath: './data/test.sqlite'
+      databasePath: './data/test.sqlite',
+      publicSearchSyncUrl: undefined,
+      publicSearchSyncToken: undefined,
+      publicSearchChannelHandle: '@infinitylinks65',
+      publicSearchGroupHandle: '@infinitylinks69'
+    });
+  });
+
+  it('accepts optional public search sync configuration', () => {
+    expect(
+      loadConfig({
+        TMDB_API_KEY: 'tmdb-key',
+        TELEGRAM_BOT_TOKEN: 'telegram-token',
+        TELEGRAM_CHANNEL_ID: '@channel',
+        PUBLIC_SEARCH_SYNC_URL: 'https://search.example.com/api/sync',
+        PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
+        PUBLIC_SEARCH_CHANNEL_HANDLE: '@infinitylinks65',
+        PUBLIC_SEARCH_GROUP_HANDLE: '@infinitylinks69'
+      })
+    ).toMatchObject({
+      publicSearchSyncUrl: 'https://search.example.com/api/sync',
+      publicSearchSyncToken: 'sync-token',
+      publicSearchChannelHandle: '@infinitylinks65',
+      publicSearchGroupHandle: '@infinitylinks69'
+    });
+  });
+
+  it('treats empty optional public search sync values as undefined', () => {
+    expect(
+      loadConfig({
+        TMDB_API_KEY: 'tmdb-key',
+        TELEGRAM_BOT_TOKEN: 'telegram-token',
+        TELEGRAM_CHANNEL_ID: '@channel',
+        PUBLIC_SEARCH_SYNC_URL: '   ',
+        PUBLIC_SEARCH_SYNC_TOKEN: ''
+      })
+    ).toMatchObject({
+      publicSearchSyncUrl: undefined,
+      publicSearchSyncToken: undefined
     });
   });
 

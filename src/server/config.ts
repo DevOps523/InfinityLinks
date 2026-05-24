@@ -4,6 +4,11 @@ function requiredSecret(name: string) {
   return z.string({ required_error: `${name} is required` }).trim().min(1, `${name} is required`);
 }
 
+const OptionalTrimmedString = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim().length === 0 ? undefined : value),
+  z.string().trim().min(1).optional()
+);
+
 const EnvSchema = z.object({
   TMDB_API_KEY: requiredSecret('TMDB_API_KEY'),
   TELEGRAM_BOT_TOKEN: requiredSecret('TELEGRAM_BOT_TOKEN'),
@@ -16,7 +21,11 @@ const EnvSchema = z.object({
       message: 'HOST must be a localhost address'
     }),
   PORT: z.coerce.number().int().positive().default(3000),
-  DATABASE_PATH: z.string().trim().min(1).default('./data/infinitylinks.sqlite')
+  DATABASE_PATH: z.string().trim().min(1).default('./data/infinitylinks.sqlite'),
+  PUBLIC_SEARCH_SYNC_URL: OptionalTrimmedString,
+  PUBLIC_SEARCH_SYNC_TOKEN: OptionalTrimmedString,
+  PUBLIC_SEARCH_CHANNEL_HANDLE: OptionalTrimmedString.default('@infinitylinks65'),
+  PUBLIC_SEARCH_GROUP_HANDLE: OptionalTrimmedString.default('@infinitylinks69')
 });
 
 export type AppConfig = {
@@ -26,6 +35,10 @@ export type AppConfig = {
   host: string;
   port: number;
   databasePath: string;
+  publicSearchSyncUrl?: string;
+  publicSearchSyncToken?: string;
+  publicSearchChannelHandle: string;
+  publicSearchGroupHandle: string;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
@@ -37,6 +50,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     telegramChannelId: parsed.TELEGRAM_CHANNEL_ID,
     host: parsed.HOST,
     port: parsed.PORT,
-    databasePath: parsed.DATABASE_PATH
+    databasePath: parsed.DATABASE_PATH,
+    publicSearchSyncUrl: parsed.PUBLIC_SEARCH_SYNC_URL,
+    publicSearchSyncToken: parsed.PUBLIC_SEARCH_SYNC_TOKEN,
+    publicSearchChannelHandle: parsed.PUBLIC_SEARCH_CHANNEL_HANDLE,
+    publicSearchGroupHandle: parsed.PUBLIC_SEARCH_GROUP_HANDLE
   };
 }

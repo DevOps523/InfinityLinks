@@ -6,7 +6,6 @@ export const MAX_FORMATTED_MESSAGE_LENGTH = 3500;
 export const MAX_INLINE_KEYBOARD_ROWS = 20;
 export const MAX_INLINE_KEYBOARD_BUTTONS = 40;
 
-const SEASON_PROVIDER_BUTTONS_PER_ROW = 2;
 const TV_SEASON_BUTTONS_PER_ROW = 3;
 
 export type PublicBotHandles = {
@@ -73,64 +72,18 @@ export function formatSearchResults(results: PublicSearchResult[], handles: Publ
 }
 
 export function formatSeasonDetails(details: PublicSeasonDetails, handles: PublicBotHandles): PublicBotMessage[] {
-  const header = [formatTitle(details.showTitle, details.showYear), `Season ${details.seasonNumber}`].join('\n');
-  const footer = formatHandles(handles);
-  const fixedRows = originalPostButtonRows(details.channelPostUrl);
-  const messages: PublicBotMessage[] = [];
-  let blocks: string[] = [];
-  let keyboardRows: InlineKeyboardButton[][] = [];
+  const headerLines = [`📺 ${formatTitle(details.showTitle, details.showYear)}`, `📂 Season ${details.seasonNumber}`];
+  const footerLines = [
+    ...originalPostSection(details.channelPostUrl),
+    ...(details.channelPostUrl ? [''] : []),
+    ...formatHandleLines(handles)
+  ];
+  const episodeBlocks = details.episodes.map((episode) => ({
+    headingLines: [`🎞 Episode ${episode.episodeNumber}`, '🔗 Download Links:'],
+    providerLines: episode.providers.map(formatProviderLine)
+  }));
 
-  const flushMessage = () => {
-    if (blocks.length === 0 && keyboardRows.length === 0) {
-      return;
-    }
-
-    messages.push({
-      text: composeSeasonDetailsText(header, blocks, footer),
-      replyMarkup: toReplyMarkup([...originalPostButtonRows(details.channelPostUrl), ...keyboardRows])
-    });
-    blocks = [];
-    keyboardRows = [];
-  };
-
-  for (const episode of details.episodes) {
-    const block = [`Episode ${episode.episodeNumber}`, 'Providers:'].join('\n');
-    const episodeRows = chunkButtons(
-      providerButtons(episode.providers, `E${episode.episodeNumber} `),
-      SEASON_PROVIDER_BUTTONS_PER_ROW
-    );
-    let rowIndex = 0;
-
-    while (rowIndex < episodeRows.length) {
-      const rowsToAdd = countFittingRows({
-        header,
-        footer,
-        fixedRows,
-        existingBlocks: blocks,
-        existingRows: keyboardRows,
-        nextBlock: block,
-        candidateRows: episodeRows.slice(rowIndex)
-      });
-
-      if (rowsToAdd === 0 && blocks.length > 0) {
-        flushMessage();
-        continue;
-      }
-
-      const safeRowsToAdd = rowsToAdd === 0 ? 1 : rowsToAdd;
-      blocks.push(block);
-      keyboardRows.push(...episodeRows.slice(rowIndex, rowIndex + safeRowsToAdd));
-      rowIndex += safeRowsToAdd;
-
-      if (rowIndex < episodeRows.length) {
-        flushMessage();
-      }
-    }
-  }
-
-  flushMessage();
-
-  return messages;
+  return splitSeasonDetailSections(headerLines, episodeBlocks, footerLines).map((text) => ({ text }));
 }
 
 function formatMovieResult(result: Extract<PublicSearchResult, { type: 'movie' }>, handles: PublicBotHandles) {
@@ -188,17 +141,6 @@ function originalPostSection(channelPostUrl?: string) {
   return channelPostUrl ? ['📌 Original Post:', channelPostUrl] : [];
 }
 
-function providerButtons(providers: PublicProvider[], labelPrefix = '') {
-  return providers.map((provider) => ({
-    text: `${labelPrefix}${provider.providerName} ${provider.quality}`.trim(),
-    url: provider.url
-  }));
-}
-
-function originalPostButtonRows(channelPostUrl?: string): InlineKeyboardButton[][] {
-  return channelPostUrl ? [[{ text: 'Original Post', url: channelPostUrl }]] : [];
-}
-
 function splitKeyboardRows(
   contentRows: InlineKeyboardButton[][],
   prefixRows: InlineKeyboardButton[][],
@@ -246,6 +188,71 @@ function splitTextSections(headerLines: string[], bodyLines: string[], footerLin
   return chunks;
 }
 
+function splitSeasonDetailSections(
+  headerLines: string[],
+  episodes: { headingLines: string[]; providerLines: string[] }[],
+  footerLines: string[]
+) {
+  const chunks: string[] = [];
+  let currentBlocks: string[][] = [];
+  const compose = (blocks: string[][]) => composeTextSections(headerLines, ...blocks, footerLines);
+  const pushCurrentBlocks = () => {
+    if (currentBlocks.length === 0) {
+      return;
+    }
+
+    chunks.push(compose(currentBlocks));
+    currentBlocks = [];
+  };
+
+  for (const episode of episodes) {
+    const headingLineCount = episode.headingLines.length;
+    let currentEpisodeLines = [...episode.headingLines];
+
+    for (const providerLine of episode.providerLines) {
+      while (true) {
+        const candidateEpisodeLines = [...currentEpisodeLines, providerLine];
+        const candidateBlocks = [...currentBlocks, candidateEpisodeLines];
+        const candidateText = compose(candidateBlocks);
+
+        if (
+          candidateText.length <= MAX_FORMATTED_MESSAGE_LENGTH ||
+          (currentBlocks.length === 0 && currentEpisodeLines.length === headingLineCount)
+        ) {
+          currentEpisodeLines = candidateEpisodeLines;
+          break;
+        }
+
+        if (currentEpisodeLines.length > headingLineCount) {
+          currentBlocks.push(currentEpisodeLines);
+          pushCurrentBlocks();
+          currentEpisodeLines = [...episode.headingLines];
+          continue;
+        }
+
+        pushCurrentBlocks();
+      }
+    }
+
+    if (
+      currentBlocks.length > 0 &&
+      compose([...currentBlocks, currentEpisodeLines]).length > MAX_FORMATTED_MESSAGE_LENGTH
+    ) {
+      pushCurrentBlocks();
+    }
+
+    currentBlocks.push(currentEpisodeLines);
+  }
+
+  pushCurrentBlocks();
+
+  if (chunks.length === 0) {
+    chunks.push(compose([]));
+  }
+
+  return chunks;
+}
+
 function composeTextSections(...sections: string[][]) {
   return sections
     .filter((section) => section.length > 0)
@@ -278,48 +285,4 @@ function exceedsMessageLimits(text: string, keyboardRows: InlineKeyboardButton[]
 
 function countKeyboardButtons(rows: InlineKeyboardButton[][]) {
   return rows.reduce((total, row) => total + row.length, 0);
-}
-
-function countFittingRows({
-  header,
-  footer,
-  fixedRows,
-  existingBlocks,
-  existingRows,
-  nextBlock,
-  candidateRows
-}: {
-  header: string;
-  footer: string;
-  fixedRows: InlineKeyboardButton[][];
-  existingBlocks: string[];
-  existingRows: InlineKeyboardButton[][];
-  nextBlock: string;
-  candidateRows: InlineKeyboardButton[][];
-}) {
-  let fittingRows = 0;
-
-  for (let index = 0; index < candidateRows.length; index += 1) {
-    const rows = [...existingRows, ...candidateRows.slice(0, index + 1)];
-    const text = composeSeasonDetailsText(header, [...existingBlocks, nextBlock], footer);
-
-    if (exceedsMessageLimits(text, [...fixedRows, ...rows])) {
-      break;
-    }
-
-    fittingRows = index + 1;
-  }
-
-  return fittingRows;
-}
-
-function composeSeasonDetailsText(header: string, episodeBlocks: string[], footer: string) {
-  const parts = [header];
-
-  if (episodeBlocks.length > 0) {
-    parts.push(episodeBlocks.join('\n\n'));
-  }
-
-  parts.push(footer);
-  return parts.join('\n\n');
 }

@@ -259,7 +259,7 @@ describe('public search bot formatter', () => {
     expect(messages[0].replyMarkup?.inline_keyboard.at(-1)).toEqual([{ text: 'Season 40', callback_data: 'season:339' }]);
   });
 
-  it('formats season details with provider buttons grouped by episode', () => {
+  it('formats season details with provider links grouped by episode', () => {
     const details: PublicSeasonDetails = {
       id: 101,
       showTitle: 'Breaking Bad',
@@ -303,32 +303,29 @@ describe('public search bot formatter', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0].text).toBe(
       [
-        'Breaking Bad (2008)',
-        'Season 1',
+        '📺 Breaking Bad (2008)',
+        '📂 Season 1',
         '',
-        'Episode 1',
-        'Providers:',
+        '🎞 Episode 1',
+        '🔗 Download Links:',
+        '📁 MixDrop HD - https://providers.example/breaking-bad-s1e1-hd',
+        '📁 FileMoon 4K - https://providers.example/breaking-bad-s1e1-4k',
         '',
-        'Episode 2',
-        'Providers:',
+        '🎞 Episode 2',
+        '🔗 Download Links:',
+        '📁 StreamTape HD - https://providers.example/breaking-bad-s1e2-hd',
+        '',
+        '📌 Original Post:',
+        'https://t.me/infinitylinks65/301',
         '',
         '📢 Channel: @infinitylinks65',
         '👥 Group: @infinitylinks69'
       ].join('\n')
     );
-    expect(messages[0].replyMarkup).toEqual({
-      inline_keyboard: [
-        [{ text: 'Original Post', url: 'https://t.me/infinitylinks65/301' }],
-        [
-          { text: 'E1 MixDrop HD', url: 'https://providers.example/breaking-bad-s1e1-hd' },
-          { text: 'E1 FileMoon 4K', url: 'https://providers.example/breaking-bad-s1e1-4k' }
-        ],
-        [{ text: 'E2 StreamTape HD', url: 'https://providers.example/breaking-bad-s1e2-hd' }]
-      ]
-    });
+    expect(messages[0].replyMarkup).toBeUndefined();
   });
 
-  it('formats season details without an Original Post button when channel post url is missing', () => {
+  it('formats season details without an Original Post section when channel post url is missing', () => {
     const details: PublicSeasonDetails = {
       id: 301,
       showTitle: 'Repost Show',
@@ -353,17 +350,14 @@ describe('public search bot formatter', () => {
 
     expect(messages).toHaveLength(1);
     expect(messages[0].text).toContain('Repost Show (2026)');
-    expect(messages[0].text).toContain('Season 1');
-    expect(messages[0].text).toContain('Episode 1');
-    expect(messages[0].replyMarkup?.inline_keyboard).toEqual([
-      [{ text: 'E1 Filekeeper HD', url: 'https://filekeeper.example/repost-show-s1e1' }]
-    ]);
-    expect(messages[0].replyMarkup?.inline_keyboard.flat()).not.toContainEqual(
-      expect.objectContaining({ text: 'Original Post' })
-    );
+    expect(messages[0].text).toContain('📂 Season 1');
+    expect(messages[0].text).toContain('🎞 Episode 1');
+    expect(messages[0].text).toContain('📁 Filekeeper HD - https://filekeeper.example/repost-show-s1e1');
+    expect(messages[0].text).not.toContain('📌 Original Post:');
+    expect(messages[0].replyMarkup).toBeUndefined();
   });
 
-  it('labels repeated season provider buttons with episode numbers', () => {
+  it('labels repeated season provider links under their episode headings', () => {
     const details: PublicSeasonDetails = {
       id: 101,
       showTitle: 'Repeated Hosts',
@@ -397,13 +391,13 @@ describe('public search bot formatter', () => {
 
     const messages = formatSeasonDetails(details, handles);
 
-    expect(messages[0].replyMarkup?.inline_keyboard).toEqual([
-      [{ text: 'E1 MixDrop HD', url: 'https://providers.example/repeated-s1e1' }],
-      [{ text: 'E2 MixDrop HD', url: 'https://providers.example/repeated-s1e2' }]
-    ]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0].text).toContain('🎞 Episode 1\n🔗 Download Links:\n📁 MixDrop HD - https://providers.example/repeated-s1e1');
+    expect(messages[0].text).toContain('🎞 Episode 2\n🔗 Download Links:\n📁 MixDrop HD - https://providers.example/repeated-s1e2');
+    expect(messages[0].replyMarkup).toBeUndefined();
   });
 
-  it('splits long season details while keeping episode provider buttons with the matching episode', () => {
+  it('splits long season details while keeping episode provider links with the matching episode', () => {
     const details: PublicSeasonDetails = {
       id: 101,
       showTitle: 'Long Show',
@@ -426,30 +420,27 @@ describe('public search bot formatter', () => {
 
     expect(messages.length).toBeGreaterThan(1);
     expect(messages.every((message) => message.text.length <= MAX_FORMATTED_MESSAGE_LENGTH)).toBe(true);
-    expect(messages[0].text).toContain('Episode 1');
-    expect(messages[0].replyMarkup?.inline_keyboard[0]).toEqual([
-      { text: 'E1 Host HD', url: 'https://providers.example/long-show-s1e1' }
-    ]);
-    const episode260Message = messages.find((message) => message.text.includes('Episode 260'));
+    expect(messages.every((message) => message.replyMarkup === undefined)).toBe(true);
+    expect(messages[0].text).toContain('🎞 Episode 1');
+    expect(messages[0].text).toContain('📁 Host HD - https://providers.example/long-show-s1e1');
+    const episode260Message = messages.find((message) => message.text.includes('🎞 Episode 260'));
     expect(episode260Message).toBeDefined();
-    expect(episode260Message?.replyMarkup?.inline_keyboard.at(-1)).toEqual([
-      { text: 'E260 Host HD', url: 'https://providers.example/long-show-s1e260' }
-    ]);
+    expect(episode260Message?.text).toContain('📁 Host HD - https://providers.example/long-show-s1e260');
   });
 
-  it('splits season details when inline keyboard row limits are reached', () => {
+  it('splits season details when text length limits are reached', () => {
     const details: PublicSeasonDetails = {
       id: 101,
-      showTitle: 'Keyboard Limit Show',
+      showTitle: 'Text Limit Show',
       showYear: 2026,
       seasonNumber: 1,
-      episodes: Array.from({ length: MAX_INLINE_KEYBOARD_ROWS + 1 }, (_, index) => ({
+      episodes: Array.from({ length: 120 }, (_, index) => ({
         episodeNumber: index + 1,
         providers: [
           {
             providerName: 'Host',
             quality: 'HD',
-            url: `https://providers.example/keyboard-limit-s1e${index + 1}`,
+            url: `https://providers.example/text-limit-s1e${index + 1}-${'x'.repeat(80)}`,
             sortOrder: 1
           }
         ]
@@ -458,26 +449,14 @@ describe('public search bot formatter', () => {
 
     const messages = formatSeasonDetails(details, handles);
 
-    expect(messages).toHaveLength(2);
-    expect(messages.every((message) => message.text.length < MAX_FORMATTED_MESSAGE_LENGTH)).toBe(true);
-    expect(messages[0].replyMarkup?.inline_keyboard).toHaveLength(MAX_INLINE_KEYBOARD_ROWS);
-    expect(messages[0].replyMarkup?.inline_keyboard.at(-1)).toEqual([
-      {
-        text: `E${MAX_INLINE_KEYBOARD_ROWS} Host HD`,
-        url: `https://providers.example/keyboard-limit-s1e${MAX_INLINE_KEYBOARD_ROWS}`
-      }
-    ]);
-    expect(messages[1].replyMarkup?.inline_keyboard).toEqual([
-      [
-        {
-          text: `E${MAX_INLINE_KEYBOARD_ROWS + 1} Host HD`,
-          url: `https://providers.example/keyboard-limit-s1e${MAX_INLINE_KEYBOARD_ROWS + 1}`
-        }
-      ]
-    ]);
+    expect(messages.length).toBeGreaterThan(1);
+    expect(messages.every((message) => message.text.length <= MAX_FORMATTED_MESSAGE_LENGTH)).toBe(true);
+    expect(messages.every((message) => message.replyMarkup === undefined)).toBe(true);
+    expect(messages[0].text).toContain('📁 Host HD - https://providers.example/text-limit-s1e1');
+    expect(messages.at(-1)?.text).toContain('📁 Host HD - https://providers.example/text-limit-s1e120');
   });
 
-  it('splits one episode with too many provider buttons across safe messages', () => {
+  it('splits one episode with many providers across safe messages', () => {
     const details: PublicSeasonDetails = {
       id: 101,
       showTitle: 'Big Episode Show',
@@ -486,10 +465,10 @@ describe('public search bot formatter', () => {
       episodes: [
         {
           episodeNumber: 1,
-          providers: Array.from({ length: MAX_INLINE_KEYBOARD_BUTTONS + 1 }, (_, index) => ({
+          providers: Array.from({ length: 90 }, (_, index) => ({
             providerName: `Host${index + 1}`,
             quality: 'HD',
-            url: `https://providers.example/big-episode-s1e1-${index + 1}`,
+            url: `https://providers.example/big-episode-s1e1-${index + 1}-${'x'.repeat(80)}`,
             sortOrder: index + 1
           }))
         }
@@ -498,25 +477,18 @@ describe('public search bot formatter', () => {
 
     const messages = formatSeasonDetails(details, handles);
 
-    expect(messages).toHaveLength(2);
+    expect(messages.length).toBeGreaterThan(1);
     for (const message of messages) {
-      const rows = message.replyMarkup?.inline_keyboard ?? [];
-
       expect(message.text.length).toBeLessThanOrEqual(MAX_FORMATTED_MESSAGE_LENGTH);
-      expect(message.text).toContain('Episode 1');
-      expect(rows.length).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_ROWS);
-      expect(rows.reduce((total, row) => total + row.length, 0)).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_BUTTONS);
-      expect(rows.flat().every((button) => button.text.startsWith('E1 '))).toBe(true);
+      expect(message.text).toContain('🎞 Episode 1');
+      expect(message.replyMarkup).toBeUndefined();
     }
-    expect(messages[0].replyMarkup?.inline_keyboard.at(-1)?.at(-1)).toEqual({
-      text: `E1 Host${MAX_INLINE_KEYBOARD_BUTTONS} HD`,
-      url: `https://providers.example/big-episode-s1e1-${MAX_INLINE_KEYBOARD_BUTTONS}`
-    });
-    expect(messages[1].replyMarkup?.inline_keyboard[0]).toEqual([
-      {
-        text: `E1 Host${MAX_INLINE_KEYBOARD_BUTTONS + 1} HD`,
-        url: `https://providers.example/big-episode-s1e1-${MAX_INLINE_KEYBOARD_BUTTONS + 1}`
-      }
-    ]);
+    expect(messages[0].text).toContain('📁 Host1 HD - https://providers.example/big-episode-s1e1-1');
+    expect(messages.at(-1)?.text).toContain('📁 Host90 HD - https://providers.example/big-episode-s1e1-90');
+    expect(
+      messages
+        .filter((message) => message.text.includes('https://providers.example/big-episode-s1e1-'))
+        .every((message) => message.text.includes('🎞 Episode 1'))
+    ).toBe(true);
   });
 });

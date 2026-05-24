@@ -22,6 +22,7 @@ const PublicSearchEnvSchema = z.object({
   PUBLIC_SEARCH_CHANNEL_HANDLE: trimmedStringWithDefault('@infinitylinks65'),
   PUBLIC_SEARCH_GROUP_HANDLE: trimmedStringWithDefault('@infinitylinks69'),
   PUBLIC_SEARCH_DATABASE_PATH: trimmedStringWithDefault('./data/public-search.sqlite'),
+  PUBLIC_SEARCH_HOST: trimmedStringWithDefault('127.0.0.1'),
   PUBLIC_SEARCH_PORT: numberWithDefault(3001)
 });
 
@@ -31,6 +32,7 @@ export type PublicSearchConfig = {
   publicSearchChannelHandle: string;
   publicSearchGroupHandle: string;
   publicSearchDatabasePath: string;
+  publicSearchHost: string;
   publicSearchPort: number;
 };
 
@@ -43,6 +45,7 @@ export function loadPublicSearchConfig(env: NodeJS.ProcessEnv): PublicSearchConf
     publicSearchChannelHandle: parsed.PUBLIC_SEARCH_CHANNEL_HANDLE,
     publicSearchGroupHandle: parsed.PUBLIC_SEARCH_GROUP_HANDLE,
     publicSearchDatabasePath: parsed.PUBLIC_SEARCH_DATABASE_PATH,
+    publicSearchHost: parsed.PUBLIC_SEARCH_HOST,
     publicSearchPort: parsed.PUBLIC_SEARCH_PORT
   };
 }

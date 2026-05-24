@@ -82,10 +82,12 @@ Use this split when deploying from your private local admin app to the public VP
    PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
    PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
    PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
+   PUBLIC_SEARCH_HOST=127.0.0.1
    PUBLIC_SEARCH_PORT=3001
    ```
 
    `PUBLIC_BOT_TOKEN` is the token for the public search bot. Add that bot as an admin in [@infinitylinks65](https://t.me/infinitylinks65) so it can check whether users joined the channel.
+   Keep `PUBLIC_SEARCH_HOST=127.0.0.1` so the Node service is reachable only through the VPS reverse proxy.
 
 3. Build and run the VPS service:
 

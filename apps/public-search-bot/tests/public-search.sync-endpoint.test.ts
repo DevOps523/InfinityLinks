@@ -18,6 +18,7 @@ function createConfig(overrides: Partial<PublicSearchConfig> = {}): PublicSearch
     publicSearchChannelHandle: '@infinitylinks65',
     publicSearchGroupHandle: '@infinitylinks69',
     publicSearchDatabasePath: ':memory:',
+    publicSearchHost: '127.0.0.1',
     publicSearchPort: 3001,
     ...overrides
   };

@@ -21,8 +21,10 @@ async function main() {
   migratePublicSearchDatabase(db);
 
   const app = createPublicSearchApp({ db, config });
-  app.listen(config.publicSearchPort, () => {
-    console.log(`Public search sync API listening on port ${config.publicSearchPort}`);
+  app.listen(config.publicSearchPort, config.publicSearchHost, () => {
+    console.log(
+      `Public search sync API listening on http://${config.publicSearchHost}:${config.publicSearchPort}`
+    );
   });
 
   const telegram = createPublicTelegramClient({ botToken: config.publicBotToken });

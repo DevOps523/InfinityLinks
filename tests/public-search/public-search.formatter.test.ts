@@ -18,6 +18,11 @@ const handles = {
   groupHandle: '@infinitylinks69'
 };
 
+const handleButtonRow = [
+  { text: '@infinitylinks65', url: 'https://t.me/infinitylinks65' },
+  { text: '@infinitylinks69', url: 'https://t.me/infinitylinks69' }
+];
+
 describe('public search bot formatter', () => {
   it('formats /start, join-required, no-result, and unavailable messages', () => {
     expect(formatStartMessage(handles).text).toBe(
@@ -35,6 +40,7 @@ describe('public search bot formatter', () => {
         'Group: @infinitylinks69'
       ].join('\n')
     );
+    expect(formatStartMessage(handles).replyMarkup).toEqual({ inline_keyboard: [handleButtonRow] });
 
     expect(formatJoinRequiredMessage(handles).text).toBe(
       [
@@ -44,6 +50,7 @@ describe('public search bot formatter', () => {
         'Group: @infinitylinks69'
       ].join('\n')
     );
+    expect(formatJoinRequiredMessage(handles).replyMarkup).toEqual({ inline_keyboard: [handleButtonRow] });
 
     expect(formatNoResultsMessage(handles).text).toBe(
       [
@@ -53,6 +60,7 @@ describe('public search bot formatter', () => {
         'Group: @infinitylinks69'
       ].join('\n')
     );
+    expect(formatNoResultsMessage(handles).replyMarkup).toEqual({ inline_keyboard: [handleButtonRow] });
     expect(formatUnavailableMessage().text).toBe('Search is temporarily unavailable. Please try again later.');
   });
 
@@ -63,6 +71,7 @@ describe('public search bot formatter', () => {
         id: 1,
         title: 'Inception',
         year: 2010,
+        channelPostUrl: 'https://t.me/infinitylinks65/101',
         providers: [
           {
             providerName: 'MixDrop',
@@ -96,10 +105,12 @@ describe('public search bot formatter', () => {
     );
     expect(messages[0].replyMarkup).toEqual({
       inline_keyboard: [
+        [{ text: 'Original Post', url: 'https://t.me/infinitylinks65/101' }],
         [
           { text: 'MixDrop HD', url: 'https://providers.example/inception-hd' },
           { text: 'FileMoon 4K', url: 'https://providers.example/inception-4k' }
-        ]
+        ],
+        handleButtonRow
       ]
     });
   });
@@ -131,7 +142,8 @@ describe('public search bot formatter', () => {
         { text: 'Host3 HD', url: 'https://providers.example/movie-3' },
         { text: 'Host4 HD', url: 'https://providers.example/movie-4' }
       ],
-      [{ text: 'Host5 HD', url: 'https://providers.example/movie-5' }]
+      [{ text: 'Host5 HD', url: 'https://providers.example/movie-5' }],
+      handleButtonRow
     ]);
   });
 
@@ -171,7 +183,8 @@ describe('public search bot formatter', () => {
         [
           { text: 'Season 1', callback_data: 'season:101' },
           { text: 'Season 2', callback_data: 'season:102' }
-        ]
+        ],
+        handleButtonRow
       ]
     });
   });
@@ -203,7 +216,8 @@ describe('public search bot formatter', () => {
         { text: 'Season 5', callback_data: 'season:205' },
         { text: 'Season 6', callback_data: 'season:206' }
       ],
-      [{ text: 'Season 7', callback_data: 'season:207' }]
+      [{ text: 'Season 7', callback_data: 'season:207' }],
+      handleButtonRow
     ]);
   });
 
@@ -213,6 +227,7 @@ describe('public search bot formatter', () => {
       showTitle: 'Breaking Bad',
       showYear: 2008,
       seasonNumber: 1,
+      channelPostUrl: 'https://t.me/infinitylinks65/301',
       episodes: [
         {
           episodeNumber: 1,
@@ -265,11 +280,13 @@ describe('public search bot formatter', () => {
     );
     expect(messages[0].replyMarkup).toEqual({
       inline_keyboard: [
+        [{ text: 'Original Post', url: 'https://t.me/infinitylinks65/301' }],
         [
           { text: 'E1 MixDrop HD', url: 'https://providers.example/breaking-bad-s1e1-hd' },
           { text: 'E1 FileMoon 4K', url: 'https://providers.example/breaking-bad-s1e1-4k' }
         ],
-        [{ text: 'E2 StreamTape HD', url: 'https://providers.example/breaking-bad-s1e2-hd' }]
+        [{ text: 'E2 StreamTape HD', url: 'https://providers.example/breaking-bad-s1e2-hd' }],
+        handleButtonRow
       ]
     });
   });
@@ -310,7 +327,8 @@ describe('public search bot formatter', () => {
 
     expect(messages[0].replyMarkup?.inline_keyboard).toEqual([
       [{ text: 'E1 MixDrop HD', url: 'https://providers.example/repeated-s1e1' }],
-      [{ text: 'E2 MixDrop HD', url: 'https://providers.example/repeated-s1e2' }]
+      [{ text: 'E2 MixDrop HD', url: 'https://providers.example/repeated-s1e2' }],
+      handleButtonRow
     ]);
   });
 
@@ -343,9 +361,10 @@ describe('public search bot formatter', () => {
     ]);
     const episode260Message = messages.find((message) => message.text.includes('Episode 260'));
     expect(episode260Message).toBeDefined();
-    expect(episode260Message?.replyMarkup?.inline_keyboard.at(-1)).toEqual([
+    expect(episode260Message?.replyMarkup?.inline_keyboard.at(-2)).toEqual([
       { text: 'E260 Host HD', url: 'https://providers.example/long-show-s1e260' }
     ]);
+    expect(episode260Message?.replyMarkup?.inline_keyboard.at(-1)).toEqual(handleButtonRow);
   });
 
   it('splits season details when inline keyboard row limits are reached', () => {
@@ -372,13 +391,21 @@ describe('public search bot formatter', () => {
     expect(messages).toHaveLength(2);
     expect(messages.every((message) => message.text.length < MAX_FORMATTED_MESSAGE_LENGTH)).toBe(true);
     expect(messages[0].replyMarkup?.inline_keyboard).toHaveLength(MAX_INLINE_KEYBOARD_ROWS);
+    expect(messages[0].replyMarkup?.inline_keyboard.at(-1)).toEqual(handleButtonRow);
     expect(messages[1].replyMarkup?.inline_keyboard).toEqual([
+      [
+        {
+          text: `E${MAX_INLINE_KEYBOARD_ROWS} Host HD`,
+          url: `https://providers.example/keyboard-limit-s1e${MAX_INLINE_KEYBOARD_ROWS}`
+        }
+      ],
       [
         {
           text: `E${MAX_INLINE_KEYBOARD_ROWS + 1} Host HD`,
           url: `https://providers.example/keyboard-limit-s1e${MAX_INLINE_KEYBOARD_ROWS + 1}`
         }
-      ]
+      ],
+      handleButtonRow
     ]);
   });
 
@@ -411,17 +438,23 @@ describe('public search bot formatter', () => {
       expect(message.text).toContain('Episode 1');
       expect(rows.length).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_ROWS);
       expect(rows.reduce((total, row) => total + row.length, 0)).toBeLessThanOrEqual(MAX_INLINE_KEYBOARD_BUTTONS);
-      expect(rows.flat().every((button) => button.text.startsWith('E1 '))).toBe(true);
+      expect(rows.flat().filter((button) => !button.text.startsWith('@')).every((button) => button.text.startsWith('E1 '))).toBe(true);
     }
-    expect(messages[0].replyMarkup?.inline_keyboard.at(-1)?.at(-1)).toEqual({
-      text: `E1 Host${MAX_INLINE_KEYBOARD_BUTTONS} HD`,
-      url: `https://providers.example/big-episode-s1e1-${MAX_INLINE_KEYBOARD_BUTTONS}`
+    expect(messages[0].replyMarkup?.inline_keyboard.at(-2)?.at(-1)).toEqual({
+      text: `E1 Host${MAX_INLINE_KEYBOARD_BUTTONS - 2} HD`,
+      url: `https://providers.example/big-episode-s1e1-${MAX_INLINE_KEYBOARD_BUTTONS - 2}`
     });
+    expect(messages[0].replyMarkup?.inline_keyboard.at(-1)).toEqual(handleButtonRow);
     expect(messages[1].replyMarkup?.inline_keyboard[0]).toEqual([
       {
-        text: `E1 Host${MAX_INLINE_KEYBOARD_BUTTONS + 1} HD`,
-        url: `https://providers.example/big-episode-s1e1-${MAX_INLINE_KEYBOARD_BUTTONS + 1}`
+        text: `E1 Host${MAX_INLINE_KEYBOARD_BUTTONS - 1} HD`,
+        url: `https://providers.example/big-episode-s1e1-${MAX_INLINE_KEYBOARD_BUTTONS - 1}`
+      },
+      {
+        text: `E1 Host${MAX_INLINE_KEYBOARD_BUTTONS} HD`,
+        url: `https://providers.example/big-episode-s1e1-${MAX_INLINE_KEYBOARD_BUTTONS}`
       }
     ]);
+    expect(messages[1].replyMarkup?.inline_keyboard.at(-1)).toEqual(handleButtonRow);
   });
 });

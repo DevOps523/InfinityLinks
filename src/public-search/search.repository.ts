@@ -17,6 +17,7 @@ export type PublicSeasonDetails = {
   showTitle: string;
   showYear?: number;
   seasonNumber: number;
+  channelPostUrl?: string;
   episodes: Array<{
     episodeNumber: number;
     providers: PublicProvider[];
@@ -24,7 +25,7 @@ export type PublicSeasonDetails = {
 };
 
 export type PublicSearchResult =
-  | { type: 'movie'; id: number; title: string; year?: number; providers: PublicProvider[] }
+  | { type: 'movie'; id: number; title: string; year?: number; channelPostUrl?: string; providers: PublicProvider[] }
   | { type: 'tv'; id: number; title: string; year?: number; seasons: PublicSeasonSummary[] };
 
 type SearchRow = {
@@ -32,6 +33,7 @@ type SearchRow = {
   id: number;
   title: string;
   year: number | null;
+  channelPostUrl: string | null;
 };
 
 type ProviderRow = {
@@ -56,6 +58,7 @@ type SeasonDetailsRow = {
   showTitle: string;
   showYear: number | null;
   seasonNumber: number;
+  channelPostUrl: string | null;
 };
 
 export function searchPublicCatalog(db: AppDatabase, query: string, limit = 10): PublicSearchResult[] {
@@ -68,13 +71,14 @@ export function searchPublicCatalog(db: AppDatabase, query: string, limit = 10):
   const safeLimit = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 10;
   const rows = db
     .prepare(
-      `SELECT type, id, title, year
+      `SELECT type, id, title, year, channelPostUrl
        FROM (
          SELECT
            'movie' AS type,
            id,
            title,
            year,
+           channel_post_url AS channelPostUrl,
            CASE
              WHEN LOWER(title) = @query THEN 0
              WHEN LOWER(title) LIKE @prefix ESCAPE '\\' THEN 1
@@ -93,6 +97,7 @@ export function searchPublicCatalog(db: AppDatabase, query: string, limit = 10):
            id,
            title,
            year,
+           NULL AS channelPostUrl,
            CASE
              WHEN LOWER(title) = @query THEN 0
              WHEN LOWER(title) LIKE @prefix ESCAPE '\\' THEN 1
@@ -125,6 +130,7 @@ export function searchPublicCatalog(db: AppDatabase, query: string, limit = 10):
         id: row.id,
         title: row.title,
         year: row.year ?? undefined,
+        channelPostUrl: row.channelPostUrl ?? undefined,
         providers: getMovieProviders(db, row.id)
       };
     }
@@ -146,7 +152,8 @@ export function getPublicSeasonDetails(db: AppDatabase, seasonId: number): Publi
          public_seasons.id,
          public_tv_shows.title AS showTitle,
          public_tv_shows.year AS showYear,
-         public_seasons.season_number AS seasonNumber
+         public_seasons.season_number AS seasonNumber,
+         public_seasons.channel_post_url AS channelPostUrl
        FROM public_seasons
        JOIN public_tv_shows ON public_tv_shows.id = public_seasons.tv_show_id
        WHERE public_seasons.id = ?`
@@ -176,6 +183,7 @@ export function getPublicSeasonDetails(db: AppDatabase, seasonId: number): Publi
     showTitle: season.showTitle,
     showYear: season.showYear ?? undefined,
     seasonNumber: season.seasonNumber,
+    channelPostUrl: season.channelPostUrl ?? undefined,
     episodes: episodes.map((episode) => ({
       episodeNumber: episode.episodeNumber,
       providers: getEpisodeProviders(db, episode.id)

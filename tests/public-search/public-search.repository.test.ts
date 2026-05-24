@@ -321,6 +321,7 @@ describe('public search repository', () => {
         id: 1,
         title: 'Alpha',
         year: 2000,
+        channelPostUrl: 'https://t.me/infinitylinks65/101',
         providers: [
           {
             providerName: 'FirstHost',
@@ -362,6 +363,7 @@ describe('public search repository', () => {
         showTitle: 'Alpha',
         showYear: 2011,
         seasonNumber: 2,
+        channelPostUrl: 'https://t.me/infinitylinks65/302',
         episodes: [
           {
             episodeNumber: 1,

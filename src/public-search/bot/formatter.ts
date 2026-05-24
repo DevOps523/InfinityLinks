@@ -33,7 +33,8 @@ export function formatStartMessage(handles: PublicBotHandles): PublicBotMessage 
       '/search breaking bad',
       '',
       formatHandles(handles)
-    ].join('\n')
+    ].join('\n'),
+    replyMarkup: toReplyMarkup(handleButtonRows(handles))
   };
 }
 
@@ -43,7 +44,8 @@ export function formatJoinRequiredMessage(handles: PublicBotHandles): PublicBotM
       'Please join our channel first, then come back and use /search again.',
       '',
       formatHandles(handles)
-    ].join('\n')
+    ].join('\n'),
+    replyMarkup: toReplyMarkup(handleButtonRows(handles))
   };
 }
 
@@ -53,7 +55,8 @@ export function formatNoResultsMessage(handles: PublicBotHandles): PublicBotMess
       'No results found. Try checking the spelling or using fewer words.',
       '',
       formatHandles(handles)
-    ].join('\n')
+    ].join('\n'),
+    replyMarkup: toReplyMarkup(handleButtonRows(handles))
   };
 }
 
@@ -76,6 +79,7 @@ export function formatSearchResults(results: PublicSearchResult[], handles: Publ
 export function formatSeasonDetails(details: PublicSeasonDetails, handles: PublicBotHandles): PublicBotMessage[] {
   const header = [formatTitle(details.showTitle, details.showYear), `Season ${details.seasonNumber}`].join('\n');
   const footer = formatHandles(handles);
+  const fixedRows = [...originalPostButtonRows(details.channelPostUrl), ...handleButtonRows(handles)];
   const messages: PublicBotMessage[] = [];
   let blocks: string[] = [];
   let keyboardRows: InlineKeyboardButton[][] = [];
@@ -87,7 +91,11 @@ export function formatSeasonDetails(details: PublicSeasonDetails, handles: Publi
 
     messages.push({
       text: composeSeasonDetailsText(header, blocks, footer),
-      replyMarkup: toReplyMarkup(keyboardRows)
+      replyMarkup: toReplyMarkup([
+        ...originalPostButtonRows(details.channelPostUrl),
+        ...keyboardRows,
+        ...handleButtonRows(handles)
+      ])
     });
     blocks = [];
     keyboardRows = [];
@@ -105,6 +113,7 @@ export function formatSeasonDetails(details: PublicSeasonDetails, handles: Publi
       const rowsToAdd = countFittingRows({
         header,
         footer,
+        fixedRows,
         existingBlocks: blocks,
         existingRows: keyboardRows,
         nextBlock: block,
@@ -142,7 +151,11 @@ function formatMovieResult(result: Extract<PublicSearchResult, { type: 'movie' }
       '',
       formatHandles(handles)
     ].join('\n'),
-    replyMarkup: toReplyMarkup(chunkButtons(providerButtons(result.providers), MOVIE_PROVIDER_BUTTONS_PER_ROW))
+    replyMarkup: toReplyMarkup([
+      ...originalPostButtonRows(result.channelPostUrl),
+      ...chunkButtons(providerButtons(result.providers), MOVIE_PROVIDER_BUTTONS_PER_ROW),
+      ...handleButtonRows(handles)
+    ])
   };
 }
 
@@ -157,13 +170,16 @@ function formatTvResult(result: Extract<PublicSearchResult, { type: 'tv' }>, han
       formatHandles(handles)
     ].join('\n'),
     replyMarkup: toReplyMarkup(
-      chunkButtons(
-        result.seasons.map((season) => ({
-          text: `Season ${season.seasonNumber}`,
-          callback_data: encodeSeasonCallback(season.id)
-        })),
-        TV_SEASON_BUTTONS_PER_ROW
-      )
+      [
+        ...chunkButtons(
+          result.seasons.map((season) => ({
+            text: `Season ${season.seasonNumber}`,
+            callback_data: encodeSeasonCallback(season.id)
+          })),
+          TV_SEASON_BUTTONS_PER_ROW
+        ),
+        ...handleButtonRows(handles)
+      ]
     )
   };
 }
@@ -181,6 +197,23 @@ function providerButtons(providers: PublicProvider[], labelPrefix = '') {
     text: `${labelPrefix}${provider.providerName} ${provider.quality}`.trim(),
     url: provider.url
   }));
+}
+
+function originalPostButtonRows(channelPostUrl?: string): InlineKeyboardButton[][] {
+  return channelPostUrl ? [[{ text: 'Original Post', url: channelPostUrl }]] : [];
+}
+
+function handleButtonRows(handles: PublicBotHandles): InlineKeyboardButton[][] {
+  return [
+    [
+      { text: handles.channelHandle, url: handleUrl(handles.channelHandle) },
+      { text: handles.groupHandle, url: handleUrl(handles.groupHandle) }
+    ]
+  ];
+}
+
+function handleUrl(handle: string): string {
+  return `https://t.me/${handle.replace(/^@/, '')}`;
 }
 
 function chunkButtons<TButton extends InlineKeyboardButton>(buttons: TButton[], size: number): TButton[][] {
@@ -213,6 +246,7 @@ function countKeyboardButtons(rows: InlineKeyboardButton[][]) {
 function countFittingRows({
   header,
   footer,
+  fixedRows,
   existingBlocks,
   existingRows,
   nextBlock,
@@ -220,6 +254,7 @@ function countFittingRows({
 }: {
   header: string;
   footer: string;
+  fixedRows: InlineKeyboardButton[][];
   existingBlocks: string[];
   existingRows: InlineKeyboardButton[][];
   nextBlock: string;
@@ -231,7 +266,7 @@ function countFittingRows({
     const rows = [...existingRows, ...candidateRows.slice(0, index + 1)];
     const text = composeSeasonDetailsText(header, [...existingBlocks, nextBlock], footer);
 
-    if (exceedsMessageLimits(text, rows)) {
+    if (exceedsMessageLimits(text, [...fixedRows, ...rows])) {
       break;
     }
 

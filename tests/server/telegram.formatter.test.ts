@@ -26,15 +26,19 @@ describe('telegram caption formatter', () => {
       })
     ).toBe(
       [
-        'Inception (2010)',
-        'Rating: 8.8',
-        'Quality: 1080p',
+        '🎬 Inception (2010)',
+        '⭐ Rating: 8.8',
+        '🎥 Quality: 1080p',
         '',
         'A thief who steals corporate secrets through dream-sharing technology.',
         '',
-        'Links:',
-        'StreamHub [4K, Active]: https://example.com/inception',
-        'Mirror [HD]: https://mirror.example.com/inception'
+        '📥 Download Links:',
+        '🔗 StreamHub - https://example.com/inception',
+        '',
+        '🔗 Mirror - https://mirror.example.com/inception',
+        '',
+        '👥 Group Channel Link: @infinitylinks69',
+        '🔎 Search Movies and Series: @dlhubcatalog_bot'
       ].join('\n')
     );
   });
@@ -80,21 +84,27 @@ describe('telegram caption formatter', () => {
 
     expect(caption).toBe(
       [
-        'Chronos (2025) - Season 2',
-        'Rating: 7.6',
-        'Quality: Full HD',
+        '📺 Chronos (2025) - Season 2',
+        '⭐ Rating: 7.6',
+        '🎥 Quality: Full HD',
         '',
         'A time-loop anthology.',
         '',
-        'Episodes:',
-        'Episode 1 - Reset',
-        'StreamHub [HD, Active]: https://example.com/chronos/s02e01',
-        'Episode 3',
-        'Archive [SD]: https://example.com/chronos/s02e03'
+        '🎞️ Episode 1',
+        '📥 Download Links:',
+        '🔗 StreamHub - https://example.com/chronos/s02e01',
+        '',
+        '🎞️ Episode 3',
+        '📥 Download Links:',
+        '🔗 Archive - https://example.com/chronos/s02e03',
+        '',
+        '👥 Group Channel Link: @infinitylinks69',
+        '🔎 Search Movies and Series: @dlhubcatalog_bot'
       ].join('\n')
     );
     expect(caption).not.toContain('Missing Link');
     expect(caption).not.toContain('Episode 2');
+    expect(caption).not.toContain('Episode 1 - Reset');
   });
 
   it('trims long descriptions first so required title, meta, and links remain within the caption limit', () => {
@@ -122,10 +132,12 @@ describe('telegram caption formatter', () => {
 
     expect(caption.length).toBeLessThanOrEqual(1024);
     expect(caption).toContain('The Very Long Archive (2026)');
-    expect(caption).toContain('Rating: 9.1');
-    expect(caption).toContain('Quality: 4K');
-    expect(caption).toContain('Primary [4K, Active]: https://example.com/archive/primary');
-    expect(caption).toContain('Backup [1080p, Standby]: https://example.com/archive/backup');
+    expect(caption).toContain('⭐ Rating: 9.1');
+    expect(caption).toContain('🎥 Quality: 4K');
+    expect(caption).toContain('🔗 Primary - https://example.com/archive/primary');
+    expect(caption).toContain('🔗 Backup - https://example.com/archive/backup');
+    expect(caption).toContain('👥 Group Channel Link: @infinitylinks69');
+    expect(caption).toContain('🔎 Search Movies and Series: @dlhubcatalog_bot');
     expect(caption).toContain('Opening description');
     expect(caption).toContain('...');
     expect(caption).not.toContain('final sentence that should be trimmed away.');
@@ -142,7 +154,15 @@ describe('telegram caption formatter', () => {
     });
 
     expect(caption).toBe(
-      ['Null Case', 'Quality: HD', '', 'Nullable database values should not leak into captions.'].join('\n')
+      [
+        '🎬 Null Case',
+        '🎥 Quality: HD',
+        '',
+        'Nullable database values should not leak into captions.',
+        '',
+        '👥 Group Channel Link: @infinitylinks69',
+        '🔎 Search Movies and Series: @dlhubcatalog_bot'
+      ].join('\n')
     );
     expect(caption).not.toContain('(null)');
     expect(caption).not.toContain('Rating: null');
@@ -166,12 +186,12 @@ describe('telegram caption formatter', () => {
 
     expect(caption.length).toBeLessThanOrEqual(1024);
     expect(caption).toContain('Required Overflow (2026)');
-    expect(caption).toContain('Provider 1 [4K, Active]: https://example.com/media/01/abcdefghijklmnopqrstuvwxyz');
+    expect(caption).toContain('🔗 Provider 1 - https://example.com/media/01/abcdefghijklmnopqrstuvwxyz');
     expect(caption).not.toContain('...');
 
     for (const line of caption.split('\n')) {
       if (line.includes('https://')) {
-        expect(line).toMatch(/^Provider \d+ \[4K, Active\]: https:\/\/example\.com\/media\/\d{2}\/abcdefghijklmnopqrstuvwxyz$/);
+        expect(line).toMatch(/^🔗 Provider \d+ - https:\/\/example\.com\/media\/\d{2}\/abcdefghijklmnopqrstuvwxyz$/);
       }
     }
   });

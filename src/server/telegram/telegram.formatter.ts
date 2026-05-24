@@ -1,4 +1,6 @@
 const TELEGRAM_PHOTO_CAPTION_LIMIT = 1024;
+const GROUP_CHANNEL_HANDLE = '@infinitylinks69';
+const SEARCH_BOT_HANDLE = '@dlhubcatalog_bot';
 
 type NullableValue = number | string | null | undefined;
 type CaptionBlock = string[];
@@ -37,7 +39,7 @@ export type TelegramSeasonCaptionInput = {
 
 export function formatMovieCaption(input: TelegramMovieCaptionInput): string {
   return fitCaption({
-    heading: formatTitle(input.title, input.year),
+    heading: `🎬 ${formatTitle(input.title, input.year)}`,
     meta: formatMeta(input.rating, input.quality),
     description: input.description,
     trailing: formatMovieLinks(input.links ?? [])
@@ -46,7 +48,7 @@ export function formatMovieCaption(input: TelegramMovieCaptionInput): string {
 
 export function formatSeasonCaption(input: TelegramSeasonCaptionInput): string {
   return fitCaption({
-    heading: `${formatTitle(input.title, input.year)} - Season ${input.seasonNumber}`,
+    heading: `📺 ${formatTitle(input.title, input.year)} - Season ${input.seasonNumber}`,
     meta: formatMeta(input.rating, input.quality),
     description: input.description,
     trailing: formatEpisodes(input.episodes ?? [])
@@ -66,11 +68,11 @@ function formatMeta(rating?: NullableValue, quality?: string): string[] {
   const normalizedQuality = normalizeValue(quality);
 
   if (normalizedRating) {
-    meta.push(`Rating: ${normalizedRating}`);
+    meta.push(`⭐ Rating: ${normalizedRating}`);
   }
 
   if (normalizedQuality) {
-    meta.push(`Quality: ${normalizedQuality}`);
+    meta.push(`🎥 Quality: ${normalizedQuality}`);
   }
 
   return meta;
@@ -79,28 +81,36 @@ function formatMeta(rating?: NullableValue, quality?: string): string[] {
 function formatMovieLinks(links: TelegramLinkInput[]): CaptionBlock[] {
   const linkLines = links.map(formatLink).filter((line) => line.length > 0);
 
-  return linkLines.length > 0 ? [['Links:', linkLines[0]], ...linkLines.slice(1).map((line) => [line])] : [];
+  if (linkLines.length === 0) {
+    return [formatFooter()];
+  }
+
+  return [
+    ['📥 Download Links:', linkLines[0]],
+    ...linkLines.slice(1).map((line) => ['', line]),
+    ['', ...formatFooter()]
+  ];
 }
 
 function formatEpisodes(episodes: TelegramSeasonEpisodeInput[]): CaptionBlock[] {
-  let hasEpisodesHeading = false;
-
-  return episodes.flatMap((episode) => {
+  let hasLinkedEpisode = false;
+  const episodeBlocks = episodes.flatMap((episode) => {
     const linkLines = (episode.links ?? []).map(formatLink).filter((line) => line.length > 0);
 
     if (linkLines.length === 0) {
       return [];
     }
 
-    const title = normalizeValue(episode.title);
-    const episodeHeading = title
-      ? `Episode ${episode.episodeNumber} - ${title}`
-      : `Episode ${episode.episodeNumber}`;
-    const heading = hasEpisodesHeading ? [episodeHeading] : ['Episodes:', episodeHeading];
-    hasEpisodesHeading = true;
+    const headingPrefix = hasLinkedEpisode ? [''] : [];
+    hasLinkedEpisode = true;
 
-    return [[...heading, ...linkLines]];
+    return [
+      [...headingPrefix, `🎞️ Episode ${episode.episodeNumber}`, '📥 Download Links:', linkLines[0]],
+      ...linkLines.slice(1).map((line) => ['', line])
+    ];
   });
+
+  return episodeBlocks.length > 0 ? [...episodeBlocks, ['', ...formatFooter()]] : [formatFooter()];
 }
 
 function formatLink(link: TelegramLinkInput): string {
@@ -111,10 +121,11 @@ function formatLink(link: TelegramLinkInput): string {
     return '';
   }
 
-  const details = [link.quality, link.status].map(normalizeValue).filter(Boolean);
-  const suffix = details.length > 0 ? ` [${details.join(', ')}]` : '';
+  return `🔗 ${providerName} - ${url}`;
+}
 
-  return `${providerName}${suffix}: ${url}`;
+function formatFooter(): CaptionBlock {
+  return [`👥 Group Channel Link: ${GROUP_CHANNEL_HANDLE}`, `🔎 Search Movies and Series: ${SEARCH_BOT_HANDLE}`];
 }
 
 function fitCaption(input: {

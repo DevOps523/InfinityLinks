@@ -328,6 +328,40 @@ describe('telegram queue', () => {
     db.close();
   });
 
+  it('does not process a repost send while retained delete is waiting retry', async () => {
+    const db = setupDb();
+    createSeasonRow(db, 8);
+    db.prepare("UPDATE seasons SET telegram_message_id = 456, post_status = 'posted' WHERE id = ?").run(8);
+
+    enqueueTelegramJob(db, 'delete', 'season', 8, {
+      messageId: 456,
+      retainEntityState: true
+    });
+    enqueueTelegramJob(db, 'send', 'season', 8, {
+      posterUrl: 'https://example.com/season.jpg',
+      caption: 'Updated season'
+    });
+
+    const client = {
+      sendPhotoPost: vi.fn(async () => ({ messageId: 999 })),
+      editPhotoCaption: vi.fn(),
+      deleteMessage: vi.fn(async () => {
+        const error = new Error('Rate limited') as Error & { retryAfter: number };
+        error.retryAfter = 60;
+        throw error;
+      })
+    };
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(false);
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(false);
+
+    expect(client.deleteMessage).toHaveBeenCalledTimes(1);
+    expect(client.sendPhotoPost).not.toHaveBeenCalled();
+    expect(getJobs(db).find((job) => job.job_type === 'send')).toMatchObject({ status: 'queued' });
+
+    db.close();
+  });
+
   it('updates waiting_retry send payload without changing retry timing', () => {
     const db = setupDb();
     const job = enqueueTelegramJob(db, 'send', 'movie', 7, {

@@ -59,7 +59,7 @@ function renderPage(page: PageKey, state: AppState, actions: AppActions) {
         onManageSeasons={(id) => {
           setSelectedTvShowId(id);
           setSelectedSeasonId(null);
-          setOpenSeasonDialogOnEntry(true);
+          setOpenSeasonDialogOnEntry(false);
           setPage('seasons');
         }}
       />

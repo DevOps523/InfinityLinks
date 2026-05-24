@@ -1,4 +1,4 @@
-import { CalendarPlus, Plus, Search } from 'lucide-react';
+import { List, Plus, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiJson } from '../api/http';
 import { ActionMenu } from '../components/ActionMenu';
@@ -175,8 +175,8 @@ export function TvShowsPage({ onAddTvShow, onEditTvShow, onManageSeasons }: TvSh
                       <ActionMenu
                         extraActions={[
                           {
-                            label: 'Add Season',
-                            icon: CalendarPlus,
+                            label: 'Manage Seasons',
+                            icon: List,
                             onSelect: () => onManageSeasons(tvShow.id)
                           }
                         ]}

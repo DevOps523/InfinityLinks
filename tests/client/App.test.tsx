@@ -451,7 +451,7 @@ describe('App', () => {
     expect(screen.queryByText('Bearer secret-token')).not.toBeInTheDocument();
   });
 
-  it('opens season management from the TV show action menu', async () => {
+  it('opens season management from the TV show action menu without opening the add dialog', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/api/movies' && !init?.method) {
         return {
@@ -496,11 +496,11 @@ describe('App', () => {
 
     expect(await screen.findByText('Dark')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /open action menu/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /^add season$/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /^manage seasons$/i }));
 
     expect(await screen.findByRole('heading', { name: /^seasons$/i })).toBeInTheDocument();
-    const dialog = await screen.findByRole('dialog', { name: /^add season$/i });
-    expect(within(dialog).getByLabelText(/season number/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^add season$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /^add season$/i })).not.toBeInTheDocument();
   });
 
   it('cancels delete confirmation without deleting', async () => {

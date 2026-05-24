@@ -58,7 +58,7 @@ npm run build
 npm start
 ```
 
-Create the VPS service environment from `apps/public-search-bot/.env.example`. The standalone service loads `.env` by default, so copy the example to `.env` on the VPS or inject these variables through your process manager.
+Create the VPS service environment from `apps/public-search-bot/.env.example`. The standalone service loads `.env` by default, so copy the example to `.env` on the VPS or inject these variables through your process manager. After copying the example, add `PUBLIC_SEARCH_STATUS_TOKEN` as a separate required read-only value; do not reuse `PUBLIC_SEARCH_SYNC_TOKEN`.
 
 Full VPS setup details, including reverse proxy and process manager notes, are in [`apps/public-search-bot/README.md`](apps/public-search-bot/README.md).
 

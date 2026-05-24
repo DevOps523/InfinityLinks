@@ -16,9 +16,12 @@ IMPORTANT: deploy with Node 22.x, not Node 24. The standalone package engines re
 ```bash
 npm install
 cp .env.example .env
+nano .env
 npm run build
 npm start
 ```
+
+Before building, configure `.env`. `PUBLIC_BOT_TOKEN`, `PUBLIC_SEARCH_SYNC_TOKEN`, and `PUBLIC_SEARCH_STATUS_TOKEN` are required; keep the status token read-only and separate from the sync token.
 
 ## Environment
 
@@ -279,6 +282,7 @@ Use the same read-only `PUBLIC_SEARCH_STATUS_TOKEN` value on both sides for safe
 Safe status test command:
 
 ```bash
+set -a; . ./.env; set +a
 curl -H "Authorization: Bearer $PUBLIC_SEARCH_STATUS_TOKEN" http://127.0.0.1:3001/api/status
 ```
 

@@ -1,7 +1,5 @@
 import type { AppConfig } from '../config.js';
 
-let lastSuccessfulCheckAt: string | null = null;
-
 type PublicSearchRemoteStatus = {
   state: 'ok' | 'error';
   checkedAt: string;
@@ -12,6 +10,14 @@ type PublicSearchRemoteStatus = {
     at: string;
     message: string;
   };
+};
+
+type PublicSearchStatusService = {
+  checkPublicSearchStatus: () => Promise<{
+    reachable: true;
+    lastSuccessfulCheckAt: string;
+    remote: PublicSearchRemoteStatus;
+  }>;
 };
 
 export class PublicSearchStatusError extends Error {
@@ -82,46 +88,56 @@ function normalizeRemoteStatus(value: unknown): PublicSearchRemoteStatus | undef
   };
 }
 
-export async function checkPublicSearchStatus(config: AppConfig, fetcher: typeof fetch = fetch) {
-  if (!config.publicSearchStatusUrl || !config.publicSearchStatusToken) {
-    throw new PublicSearchStatusError(400, 'Public search status is not configured', lastSuccessfulCheckAt);
-  }
+export function createPublicSearchStatusService(
+  config: AppConfig,
+  fetcher: typeof fetch = fetch,
+  clock: () => Date = () => new Date()
+): PublicSearchStatusService {
+  let lastSuccessfulCheckAt: string | null = null;
 
-  const headers = new Headers({
-    authorization: `Bearer ${config.publicSearchStatusToken}`
-  });
+  async function checkPublicSearchStatus() {
+    if (!config.publicSearchStatusUrl || !config.publicSearchStatusToken) {
+      throw new PublicSearchStatusError(400, 'Public search status is not configured', lastSuccessfulCheckAt);
+    }
 
-  let response: Response;
-  try {
-    response = await fetcher(config.publicSearchStatusUrl, {
-      method: 'GET',
-      headers
+    const headers = new Headers({
+      authorization: `Bearer ${config.publicSearchStatusToken}`
     });
-  } catch {
-    throw new PublicSearchStatusError(502, 'Public search status is unreachable', lastSuccessfulCheckAt);
+
+    let response: Response;
+    try {
+      response = await fetcher(config.publicSearchStatusUrl, {
+        method: 'GET',
+        headers
+      });
+    } catch {
+      throw new PublicSearchStatusError(502, 'Public search status is unreachable', lastSuccessfulCheckAt);
+    }
+
+    if (!response.ok) {
+      throw new PublicSearchStatusError(502, 'Public search status is unreachable', lastSuccessfulCheckAt);
+    }
+
+    let remote: unknown;
+    try {
+      remote = await response.json();
+    } catch {
+      throw new PublicSearchStatusError(502, 'Public search status is unreachable', lastSuccessfulCheckAt);
+    }
+
+    const normalizedRemote = normalizeRemoteStatus(remote);
+    if (!normalizedRemote) {
+      throw new PublicSearchStatusError(502, 'Public search status is unreachable', lastSuccessfulCheckAt);
+    }
+
+    lastSuccessfulCheckAt = clock().toISOString();
+
+    return {
+      reachable: true as const,
+      lastSuccessfulCheckAt,
+      remote: normalizedRemote
+    };
   }
 
-  if (!response.ok) {
-    throw new PublicSearchStatusError(502, 'Public search status is unreachable', lastSuccessfulCheckAt);
-  }
-
-  let remote: unknown;
-  try {
-    remote = await response.json();
-  } catch {
-    throw new PublicSearchStatusError(502, 'Public search status is unreachable', lastSuccessfulCheckAt);
-  }
-
-  const normalizedRemote = normalizeRemoteStatus(remote);
-  if (!normalizedRemote) {
-    throw new PublicSearchStatusError(502, 'Public search status is unreachable', lastSuccessfulCheckAt);
-  }
-
-  lastSuccessfulCheckAt = new Date().toISOString();
-
-  return {
-    reachable: true,
-    lastSuccessfulCheckAt,
-    remote: normalizedRemote
-  };
+  return { checkPublicSearchStatus };
 }

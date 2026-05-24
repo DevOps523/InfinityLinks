@@ -18,6 +18,16 @@ const baseConfig: AppConfig = {
 
 let db: AppDatabase;
 
+function validRemoteStatus() {
+  return {
+    state: 'ok',
+    checkedAt: '2026-05-24T09:10:11.000Z',
+    uptimeSeconds: 1234,
+    consecutiveErrorCount: 0,
+    lastError: null
+  };
+}
+
 function app(config: AppConfig, fetcher: typeof fetch = vi.fn<typeof fetch>()) {
   return createApp({ db, config, fetcher });
 }
@@ -72,11 +82,7 @@ describe('public search status route', () => {
   it('calls the configured URL with a bearer token and returns reachable status', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       Response.json({
-        state: 'ok',
-        checkedAt: '2026-05-24T09:10:11.000Z',
-        uptimeSeconds: 1234,
-        consecutiveErrorCount: 0,
-        lastError: null,
+        ...validRemoteStatus(),
         token: 'remote-token-value',
         authorization: 'Bearer status-token',
         nested: {
@@ -101,13 +107,7 @@ describe('public search status route', () => {
     expect(response.body).toEqual({
       reachable: true,
       lastSuccessfulCheckAt: expect.any(String),
-      remote: {
-        state: 'ok',
-        checkedAt: '2026-05-24T09:10:11.000Z',
-        uptimeSeconds: 1234,
-        consecutiveErrorCount: 0,
-        lastError: null
-      }
+      remote: validRemoteStatus()
     });
     expect(response.text).not.toContain('status-token');
     expect(response.text).not.toContain('remote-token-value');
@@ -158,7 +158,7 @@ describe('public search status route', () => {
 
     expect(response.body).toEqual({
       reachable: false,
-      lastSuccessfulCheckAt: expect.any(String),
+      lastSuccessfulCheckAt: null,
       error: 'Public search status is unreachable'
     });
     expect(response.text).not.toContain('leaked-token');
@@ -184,7 +184,7 @@ describe('public search status route', () => {
 
     expect(response.body).toEqual({
       reachable: false,
-      lastSuccessfulCheckAt: expect.any(String),
+      lastSuccessfulCheckAt: null,
       error: 'Public search status is unreachable'
     });
     expect(response.text).not.toContain('status-token');
@@ -208,10 +208,36 @@ describe('public search status route', () => {
 
     expect(response.body).toEqual({
       reachable: false,
-      lastSuccessfulCheckAt: expect.any(String),
+      lastSuccessfulCheckAt: null,
       error: 'Public search status is unreachable'
     });
     expect(response.text).not.toContain('connection refused');
     expect(response.text).not.toContain('status-token');
+  });
+
+  it('retains last successful check timestamp for later failures in the same app instance', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(validRemoteStatus()))
+      .mockRejectedValueOnce(new Error('connection refused'));
+    const testApp = app(
+      {
+        ...baseConfig,
+        publicSearchStatusUrl: 'https://search.example.com/api/status',
+        publicSearchStatusToken: 'status-token'
+      },
+      fetchMock
+    );
+
+    const successResponse = await request(testApp).get('/api/public-search/status').expect(200);
+    const retainedTimestamp = successResponse.body.lastSuccessfulCheckAt;
+
+    const failureResponse = await request(testApp).get('/api/public-search/status').expect(502);
+
+    expect(failureResponse.body).toEqual({
+      reachable: false,
+      lastSuccessfulCheckAt: retainedTimestamp,
+      error: 'Public search status is unreachable'
+    });
   });
 });

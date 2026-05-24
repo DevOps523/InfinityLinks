@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Sidebar, type PageKey } from './components/Sidebar';
 import { ToastProvider } from './components/ToastProvider';
 import { EpisodePage } from './pages/EpisodePage';
@@ -25,6 +25,17 @@ type AppActions = {
   setSelectedSeasonId: (id: number | null) => void;
   setOpenSeasonDialogOnEntry: (open: boolean) => void;
 };
+
+const refreshSafePages = new Set<PageKey>(['movies', 'add-movie', 'tv-shows', 'add-tv-show', 'public-search']);
+
+function pageFromHash(hash: string): PageKey {
+  const page = hash.replace(/^#\/?/, '') as PageKey;
+  return refreshSafePages.has(page) ? page : 'movies';
+}
+
+function pageToHash(page: PageKey) {
+  return `#/${page}`;
+}
 
 function renderPage(page: PageKey, state: AppState, actions: AppActions) {
   const { editingMovieId, editingTvShowId, selectedTvShowId, selectedSeasonId, openSeasonDialogOnEntry } = state;
@@ -105,12 +116,36 @@ function renderPage(page: PageKey, state: AppState, actions: AppActions) {
 }
 
 export function App() {
-  const [page, setPage] = useState<PageKey>('movies');
+  const [page, setPageState] = useState<PageKey>(() => pageFromHash(window.location.hash));
   const [editingMovieId, setEditingMovieId] = useState<number | null>(null);
   const [editingTvShowId, setEditingTvShowId] = useState<number | null>(null);
   const [selectedTvShowId, setSelectedTvShowId] = useState<number | null>(null);
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
   const [openSeasonDialogOnEntry, setOpenSeasonDialogOnEntry] = useState(false);
+  const setPage = useCallback((nextPage: PageKey) => {
+    setPageState(nextPage);
+
+    if (refreshSafePages.has(nextPage) && window.location.hash !== pageToHash(nextPage)) {
+      window.history.pushState(null, '', pageToHash(nextPage));
+    }
+  }, []);
+
+  useEffect(() => {
+    function handleHashChange() {
+      setPageState(pageFromHash(window.location.hash));
+      setEditingMovieId(null);
+      setEditingTvShowId(null);
+      setSelectedTvShowId(null);
+      setSelectedSeasonId(null);
+      setOpenSeasonDialogOnEntry(false);
+    }
+
+    window.addEventListener('hashchange', handleHashChange);
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
 
   return (
     <ToastProvider>

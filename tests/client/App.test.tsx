@@ -9,6 +9,7 @@ const fetchMock = vi.fn();
 
 beforeEach(() => {
   vi.useRealTimers();
+  window.history.replaceState(null, '', '/');
   fetchMock.mockReset();
   fetchMock.mockResolvedValue({
     ok: true,
@@ -41,6 +42,26 @@ describe('App', () => {
     fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
 
     expect(screen.getByRole('heading', { name: /^add movie$/i })).toBeInTheDocument();
+  });
+
+  it('keeps the selected top-level page after reload through the URL hash', async () => {
+    window.history.replaceState(null, '', '/#/public-search');
+
+    render(<App />);
+
+    expect(screen.getByRole('heading', { name: /^public search$/i })).toBeInTheDocument();
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    expect(within(navigation).getByRole('button', { name: /^public search$/i })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('updates the URL hash when navigating between top-level pages', async () => {
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
+
+    expect(window.location.hash).toBe('#/tv-shows');
+    expect(await screen.findByRole('heading', { name: /^tv shows$/i })).toBeInTheDocument();
   });
 
   it('renders movie action menus outside the scrollable table', async () => {

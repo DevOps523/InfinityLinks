@@ -182,7 +182,7 @@ describe('public search sync route', () => {
         tvShows: 0
       }
     });
-    expect(syncResponse.body.status.lastSuccessfulSync.catalogHash).toBe(syncResponse.body.status.current.catalogHash);
+    expect(syncResponse.body.status.lastSuccessfulSync).not.toHaveProperty('catalogHash');
 
     const statusResponse = await request(app(config, fetchMock)).get('/api/public-search/sync-status').expect(200);
 
@@ -197,11 +197,11 @@ describe('public search sync route', () => {
       },
       lastSuccessfulSync: {
         syncedAt: syncResponse.body.sync.syncedAt,
-        catalogHash: syncResponse.body.status.current.catalogHash,
         movies: 1,
         tvShows: 0
       }
     });
+    expect(statusResponse.body.lastSuccessfulSync).not.toHaveProperty('catalogHash');
   });
 
   it('does not store sync state after failed remote sync, so pending changes remain', async () => {

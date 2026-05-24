@@ -14,7 +14,6 @@ export type PublicSearchSyncStatus = {
   };
   lastSuccessfulSync: {
     syncedAt: string;
-    catalogHash: string;
     movies: number;
     tvShows: number;
   } | null;
@@ -101,7 +100,6 @@ export function getPublicSearchSyncStatus(db: AppDatabase, config: AppConfig): P
     lastSuccessfulSync: lastSyncState
       ? {
           syncedAt: lastSyncState.lastSuccessfulSyncAt,
-          catalogHash: lastSyncState.lastCatalogHash,
           movies: lastSyncState.lastMovieCount,
           tvShows: lastSyncState.lastTvShowCount
         }

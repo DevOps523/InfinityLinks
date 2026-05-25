@@ -16,7 +16,7 @@ The private local admin app remains on the user's PC. It continues to own editin
 
 ## Current Context
 
-The public search bot service currently lives under `src/public-search`. It already has most of the correct runtime behavior:
+The public search bot service initially lived under `src/public-search` and already had most of the correct runtime behavior:
 
 - `POST /api/sync` catalog sync endpoint.
 - SQLite storage for the public catalog.
@@ -76,7 +76,7 @@ apps/public-search-bot/
 
 The standalone app must not import from the root `src/` tree. The first implementation should copy the current working public-search service into the app folder and adapt imports, package scripts, tests, and docs.
 
-The old `src/public-search` service stays temporarily for compatibility. It should be removed in a later cleanup after the standalone app is verified.
+The old `src/public-search` service stayed temporarily for compatibility during the standalone extraction. It was later removed after the standalone app became the public bot runtime.
 
 ## Data Flow
 
@@ -144,7 +144,7 @@ npm run build
 npm start
 ```
 
-The root repo can keep its current public-search scripts during the compatibility phase, but VPS instructions should point to the standalone app commands.
+For historical reference, the root repo kept public-search scripts during the compatibility phase, while VPS instructions pointed to the standalone app commands.
 
 ## Deployment Examples
 
@@ -206,21 +206,22 @@ The standalone test suite should cover:
 - reply queue and bot-side rate limiting.
 - polling runtime behavior.
 
-Root tests should remain green during the compatibility phase.
+Root tests remained green during the compatibility phase.
 
 ## Migration Plan
 
-Phase 1, now:
+Phase 1 (historical):
 
 - Add `apps/public-search-bot`.
 - Copy and adapt current public-search code/tests into it.
 - Add standalone package scripts, env example, README, and deploy examples.
-- Keep `src/public-search` in place.
-- Update root README to explain that the VPS can deploy only `apps/public-search-bot`.
+- The root local admin app keeps only `src/server/public-search/` for export and sync proxy behavior.
+- The standalone app owns the public bot runtime.
+- Update README files to explain that the VPS can deploy only `apps/public-search-bot`.
 
-Phase 2, later:
+Phase 2 (historical):
 
-- Remove old `src/public-search` service.
+- Remove the old root `src/public-search` compatibility copy.
 - Remove or update root public-search build/start scripts.
 - Keep the local admin export/sync route.
 - Keep the same `/api/sync` contract unless a new migration is explicitly planned.

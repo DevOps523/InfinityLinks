@@ -298,6 +298,24 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: /^filter$/i })).not.toBeInTheDocument();
   });
 
+  it('requests movies with a non-default sort query', async () => {
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^movies$/i })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/movies', expect.any(Object));
+
+    fireEvent.change(screen.getByLabelText(/^sort$/i), { target: { value: 'updated' } });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/movies?sort=updated', expect.any(Object)));
+    expect(screen.getByRole('option', { name: 'Newest' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Oldest' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Recently updated' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Title A-Z' })).toBeInTheDocument();
+  });
+
   it('renders the Add TV Show form after clicking Add TV Show', async () => {
     render(<App />);
 
@@ -397,6 +415,24 @@ describe('App', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/tv-shows?title=dark', expect.any(Object)));
     expect(screen.queryByPlaceholderText('2026')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^filter$/i })).not.toBeInTheDocument();
+  });
+
+  it('requests TV shows with a non-default sort query', async () => {
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^tv shows$/i })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/tv-shows', expect.any(Object));
+
+    fireEvent.change(screen.getByLabelText(/^sort$/i), { target: { value: 'title_asc' } });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/tv-shows?sort=title_asc', expect.any(Object)));
+    expect(screen.getByRole('option', { name: 'Newest' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Oldest' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Recently updated' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Title A-Z' })).toBeInTheDocument();
   });
 
   it('renders the Public Search sync page after clicking Public Search', async () => {

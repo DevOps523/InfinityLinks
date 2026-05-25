@@ -141,6 +141,47 @@ describe('tv media API', () => {
     });
   });
 
+  it('sorts TV shows by created date, updated date, and title', async () => {
+    db.prepare(
+      `INSERT INTO tv_shows (title, year, quality, description, created_at, updated_at)
+       VALUES ('Dark', 2017, 'HD', 'Time loops', '2026-01-01 00:00:00', '2026-01-02 00:00:00')`
+    ).run();
+    db.prepare(
+      `INSERT INTO tv_shows (title, year, quality, description, created_at, updated_at)
+       VALUES ('Severance', 2022, 'HD', 'Workplace mystery', '2026-01-03 00:00:00', '2026-01-04 00:00:00')`
+    ).run();
+    db.prepare(
+      `INSERT INTO tv_shows (title, year, quality, description, created_at, updated_at)
+       VALUES ('Andor', 2022, 'HD', 'Rebellion', '2026-01-02 00:00:00', '2026-01-05 00:00:00')`
+    ).run();
+
+    const newest = await request(app()).get('/api/tv-shows').expect(200);
+    expect(newest.body.tvShows.map((tvShow: { title: string }) => tvShow.title)).toEqual(['Severance', 'Andor', 'Dark']);
+
+    const oldest = await request(app()).get('/api/tv-shows?sort=oldest').expect(200);
+    expect(oldest.body.tvShows.map((tvShow: { title: string }) => tvShow.title)).toEqual(['Dark', 'Andor', 'Severance']);
+
+    const updated = await request(app()).get('/api/tv-shows?sort=updated').expect(200);
+    expect(updated.body.tvShows.map((tvShow: { title: string }) => tvShow.title)).toEqual(['Andor', 'Severance', 'Dark']);
+
+    const titleAsc = await request(app()).get('/api/tv-shows?sort=title_asc').expect(200);
+    expect(titleAsc.body.tvShows.map((tvShow: { title: string }) => tvShow.title)).toEqual(['Andor', 'Dark', 'Severance']);
+  });
+
+  it('returns 400 JSON for invalid TV show list sort filters', async () => {
+    const response = await request(app()).get('/api/tv-shows?sort=random').expect(400);
+
+    expect(response.body).toMatchObject({
+      error: 'Validation failed',
+      issues: [
+        expect.objectContaining({
+          path: 'sort',
+          message: expect.any(String)
+        })
+      ]
+    });
+  });
+
   it('finds possible duplicate TV shows by title and year', async () => {
     await request(app())
       .post('/api/tv-shows')

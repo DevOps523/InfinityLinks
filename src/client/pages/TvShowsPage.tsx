@@ -12,6 +12,15 @@ type TvShow = {
   description: string;
 };
 
+type MediaSort = 'newest' | 'oldest' | 'updated' | 'title_asc';
+
+const sortOptions: Array<{ value: MediaSort; label: string }> = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+  { value: 'updated', label: 'Recently updated' },
+  { value: 'title_asc', label: 'Title A-Z' }
+];
+
 type TvShowsPageProps = {
   onAddTvShow: () => void;
   onEditTvShow: (id: number) => void;
@@ -23,6 +32,7 @@ export function TvShowsPage({ onAddTvShow, onEditTvShow, onManageSeasons }: TvSh
   const [tvShows, setTvShows] = useState<TvShow[]>([]);
   const [title, setTitle] = useState('');
   const [debouncedTitle, setDebouncedTitle] = useState('');
+  const [sort, setSort] = useState<MediaSort>('newest');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [tvShowToDelete, setTvShowToDelete] = useState<TvShow | null>(null);
@@ -35,10 +45,13 @@ export function TvShowsPage({ onAddTvShow, onEditTvShow, onManageSeasons }: TvSh
     if (debouncedTitle.trim()) {
       params.set('title', debouncedTitle.trim());
     }
+    if (sort !== 'newest') {
+      params.set('sort', sort);
+    }
 
     const query = params.toString();
     return query ? `/api/tv-shows?${query}` : '/api/tv-shows';
-  }, [debouncedTitle]);
+  }, [debouncedTitle, sort]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -138,13 +151,23 @@ export function TvShowsPage({ onAddTvShow, onEditTvShow, onManageSeasons }: TvSh
         </button>
       </div>
 
-      <div className="filter-bar filter-bar--title-only">
+      <div className="filter-bar">
         <label className="filter-bar__search">
           Title
           <span className="input-with-icon">
             <Search aria-hidden="true" size={18} />
             <input value={title} placeholder="Filter by title" onChange={(event) => setTitle(event.target.value)} />
           </span>
+        </label>
+        <label>
+          Sort
+          <select value={sort} onChange={(event) => setSort(event.target.value as MediaSort)}>
+            {sortOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </label>
       </div>
 

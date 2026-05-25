@@ -216,6 +216,33 @@ describe('movie media API', () => {
     expect(response.body.movies.map((movie: { title: string }) => movie.title)).toEqual(['Alien', 'Arrival']);
   });
 
+  it('sorts movies by created date, updated date, and title', async () => {
+    db.prepare(
+      `INSERT INTO movies (title, year, quality, description, created_at, updated_at)
+       VALUES ('Arrival', 2016, 'HD', 'First contact', '2026-01-01 00:00:00', '2026-01-02 00:00:00')`
+    ).run();
+    db.prepare(
+      `INSERT INTO movies (title, year, quality, description, created_at, updated_at)
+       VALUES ('Moon', 2009, 'HD', 'Lunar mystery', '2026-01-03 00:00:00', '2026-01-04 00:00:00')`
+    ).run();
+    db.prepare(
+      `INSERT INTO movies (title, year, quality, description, created_at, updated_at)
+       VALUES ('Alien', 1979, 'HD', 'Space horror', '2026-01-02 00:00:00', '2026-01-05 00:00:00')`
+    ).run();
+
+    const newest = await request(app()).get('/api/movies').expect(200);
+    expect(newest.body.movies.map((movie: { title: string }) => movie.title)).toEqual(['Moon', 'Alien', 'Arrival']);
+
+    const oldest = await request(app()).get('/api/movies?sort=oldest').expect(200);
+    expect(oldest.body.movies.map((movie: { title: string }) => movie.title)).toEqual(['Arrival', 'Alien', 'Moon']);
+
+    const updated = await request(app()).get('/api/movies?sort=updated').expect(200);
+    expect(updated.body.movies.map((movie: { title: string }) => movie.title)).toEqual(['Alien', 'Moon', 'Arrival']);
+
+    const titleAsc = await request(app()).get('/api/movies?sort=title_asc').expect(200);
+    expect(titleAsc.body.movies.map((movie: { title: string }) => movie.title)).toEqual(['Alien', 'Arrival', 'Moon']);
+  });
+
   it('finds possible duplicate movies by title and year', async () => {
     await request(app())
       .post('/api/movies')
@@ -563,6 +590,8 @@ describe('movie media API', () => {
         })
       ]
     });
+
+    await request(app()).get('/api/movies?sort=random').expect(400);
   });
 
   it('returns 400 JSON for unknown movie list filters', async () => {

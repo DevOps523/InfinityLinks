@@ -87,7 +87,8 @@ const SearchQuerySchema = z
         }
 
         return Number(value);
-      }, z.number().int().positive().optional())
+      }, z.number().int().positive().optional()),
+    sort: z.enum(['newest', 'oldest', 'updated', 'title_asc']).optional()
   })
   .strict();
 
@@ -272,7 +273,8 @@ export function searchMovies(db: AppDatabase, query: unknown) {
 
   return listMovies(db, {
     title: filters.title,
-    year: filters.year
+    year: filters.year,
+    sort: filters.sort
   });
 }
 
@@ -323,7 +325,8 @@ export function searchTvShows(db: AppDatabase, query: unknown) {
 
   return listTvShows(db, {
     title: filters.title,
-    year: filters.year
+    year: filters.year,
+    sort: filters.sort
   });
 }
 

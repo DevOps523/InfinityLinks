@@ -12,6 +12,15 @@ type Movie = {
   description: string;
 };
 
+type MediaSort = 'newest' | 'oldest' | 'updated' | 'title_asc';
+
+const sortOptions: Array<{ value: MediaSort; label: string }> = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+  { value: 'updated', label: 'Recently updated' },
+  { value: 'title_asc', label: 'Title A-Z' }
+];
+
 type MoviesPageProps = {
   onAddMovie: () => void;
   onEditMovie: (id: number) => void;
@@ -22,6 +31,7 @@ export function MoviesPage({ onAddMovie, onEditMovie }: MoviesPageProps) {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [title, setTitle] = useState('');
   const [debouncedTitle, setDebouncedTitle] = useState('');
+  const [sort, setSort] = useState<MediaSort>('newest');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [movieToDelete, setMovieToDelete] = useState<Movie | null>(null);
@@ -34,10 +44,13 @@ export function MoviesPage({ onAddMovie, onEditMovie }: MoviesPageProps) {
     if (debouncedTitle.trim()) {
       params.set('title', debouncedTitle.trim());
     }
+    if (sort !== 'newest') {
+      params.set('sort', sort);
+    }
 
     const query = params.toString();
     return query ? `/api/movies?${query}` : '/api/movies';
-  }, [debouncedTitle]);
+  }, [debouncedTitle, sort]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -137,13 +150,23 @@ export function MoviesPage({ onAddMovie, onEditMovie }: MoviesPageProps) {
         </button>
       </div>
 
-      <div className="filter-bar filter-bar--title-only">
+      <div className="filter-bar">
         <label className="filter-bar__search">
           Title
           <span className="input-with-icon">
             <Search aria-hidden="true" size={18} />
             <input value={title} placeholder="Filter by title" onChange={(event) => setTitle(event.target.value)} />
           </span>
+        </label>
+        <label>
+          Sort
+          <select value={sort} onChange={(event) => setSort(event.target.value as MediaSort)}>
+            {sortOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </label>
       </div>
 

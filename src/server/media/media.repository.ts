@@ -49,6 +49,7 @@ export type MovieWithLinks = Movie & {
 export type MovieFilters = {
   title?: string;
   year?: number;
+  sort?: MediaSort;
 };
 
 export type DuplicateMediaCandidate = {
@@ -110,7 +111,10 @@ export type EpisodeLink = {
 export type TvShowFilters = {
   title?: string;
   year?: number;
+  sort?: MediaSort;
 };
+
+export type MediaSort = 'newest' | 'oldest' | 'updated' | 'title_asc';
 
 export type DeletedTvShow = TvShow & {
   seasons: Season[];
@@ -331,6 +335,17 @@ function normalizeDuplicateQuery(title: string) {
   return title.trim().toLowerCase();
 }
 
+function getMediaOrderBy(sort: MediaSort = 'newest') {
+  const orderBy: Record<MediaSort, string> = {
+    newest: 'created_at DESC, id DESC',
+    oldest: 'created_at ASC, id ASC',
+    updated: 'updated_at DESC, id DESC',
+    title_asc: 'title COLLATE NOCASE ASC, id ASC'
+  };
+
+  return orderBy[sort];
+}
+
 export function listMovies(db: AppDatabase, filters: MovieFilters = {}) {
   const where: string[] = [];
   const params: Array<number | string> = [];
@@ -354,7 +369,7 @@ export function listMovies(db: AppDatabase, filters: MovieFilters = {}) {
                 telegram_message_id, post_status, created_at, updated_at
          FROM movies
          ${whereSql}
-         ORDER BY created_at DESC, id DESC`
+         ORDER BY ${getMediaOrderBy(filters.sort)}`
       )
       .all(...params) as MovieRow[]
   ).map(mapMovie);
@@ -522,7 +537,7 @@ export function listTvShows(db: AppDatabase, filters: TvShowFilters = {}) {
         `SELECT id, tmdb_id, title, year, poster_url, description, rating, quality, topic_key, created_at, updated_at
          FROM tv_shows
          ${whereSql}
-         ORDER BY created_at DESC, id DESC`
+         ORDER BY ${getMediaOrderBy(filters.sort)}`
       )
       .all(...params) as TvShowRow[]
   ).map(mapTvShow);

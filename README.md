@@ -157,6 +157,29 @@ Use this split when deploying from your private local admin app to the public VP
 
    After syncing, open Telegram and test the public bot with `/start` and `/search <Movie or TV Show>`.
 
+### Reset Databases With Git Bash
+
+Stop the running local app or public bot before deleting a SQLite database file.
+
+To reset the private local admin app database:
+
+```sh
+cd /c/Users/Batosai/Desktop/infinitylinks
+rm -f ./data/infinitylinks.sqlite
+npm run db:migrate
+```
+
+To reset the standalone public search bot database:
+
+```sh
+cd /c/Users/Batosai/Desktop/infinitylinks/apps/public-search-bot
+rm -f ./data/public-search.sqlite
+npm run db:migrate
+npm run dev
+```
+
+After resetting the public search bot database, open the local admin app and click `Sync Public Search` again. The public bot database starts empty until the catalog is synced.
+
 ## MVP Scope
 
 - Telegram channel posting only.

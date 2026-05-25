@@ -14,14 +14,12 @@ export function createFixedWindowRateLimiter(options: { limit: number; windowMs:
     throw new Error('Rate limit windowMs must be a positive integer');
   }
 
-  const limit = options.limit;
-  const windowMs = options.windowMs;
-  const now = options.now ?? Date.now;
   const buckets = new Map<string, RateLimitBucket>();
+  const now = options.now ?? Date.now;
 
   function pruneExpiredBuckets(currentTime: number) {
     for (const [key, bucket] of buckets) {
-      if (currentTime >= bucket.windowStart + windowMs) {
+      if (currentTime >= bucket.windowStart + options.windowMs) {
         buckets.delete(key);
       }
     }
@@ -33,28 +31,17 @@ export function createFixedWindowRateLimiter(options: { limit: number; windowMs:
       pruneExpiredBuckets(currentTime);
 
       const existing = buckets.get(key);
-
       if (!existing) {
-        buckets.set(key, {
-          count: 1,
-          windowStart: currentTime
-        });
+        buckets.set(key, { count: 1, windowStart: currentTime });
         return { allowed: true };
       }
 
-      if (existing.count >= limit) {
-        return {
-          allowed: false,
-          retryAfterMs: existing.windowStart + windowMs - currentTime
-        };
+      if (existing.count >= options.limit) {
+        return { allowed: false, retryAfterMs: existing.windowStart + options.windowMs - currentTime };
       }
 
       existing.count += 1;
       return { allowed: true };
-    },
-
-    debugBucketCount(): number {
-      return buckets.size;
     }
   };
 }

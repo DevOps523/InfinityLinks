@@ -20,8 +20,8 @@ In scope:
 
 Out of scope:
 
-- Root public-search copy under `src/public-search/`.
-- Root public-search tests under `tests/public-search/`.
+- This change targeted only `apps/public-search-bot/`; the old root `src/public-search/` compatibility copy was not part of this design and rollout.
+- Root `tests/public-search/` files were not part of this change; the old public-search copy is historical context only.
 - Local admin app behavior.
 - Telegram message deletion or persistent conversation history.
 - Database schema changes.

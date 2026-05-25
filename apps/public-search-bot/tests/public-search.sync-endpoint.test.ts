@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+import type { Request, Response } from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createPublicSearchApp } from '../src/app.js';
@@ -6,6 +8,7 @@ import type { PublicSearchConfig } from '../src/config.js';
 import { createPublicSearchDatabase, type PublicSearchDatabase } from '../src/db/database.js';
 import { migratePublicSearchDatabase } from '../src/db/migrate.js';
 import { createPublicSearchStatusTracker } from '../src/status-tracker.js';
+import { createPublicSearchSyncRouter } from '../src/sync.routes.js';
 
 function createMigratedDatabase() {
   const db = createPublicSearchDatabase(':memory:');
@@ -171,6 +174,93 @@ describe('public search sync endpoint', () => {
     }
   });
 
+  it('rejects invalid bearer tokens before parsing invalid large JSON bodies', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const config = createConfig();
+      const router = createPublicSearchSyncRouter(db, config, createTracker());
+      let bodyConsumed = false;
+      const req = new Readable({
+        read() {
+          bodyConsumed = true;
+          this.push('{');
+          this.push(null);
+        }
+      }) as Request;
+      const response = {
+        body: undefined as unknown,
+        statusCode: 200,
+        headers: {} as Record<string, string>,
+        json(body: unknown) {
+          this.body = body;
+          return this;
+        },
+        set(name: string, value: string) {
+          this.headers[name.toLowerCase()] = value;
+          return this;
+        },
+        status(statusCode: number) {
+          this.statusCode = statusCode;
+          return this;
+        }
+      } as Response & { body: unknown; statusCode: number; headers: Record<string, string> };
+
+      req.method = 'POST';
+      req.url = '/sync';
+      req.headers = {
+        authorization: 'Bearer wrong-token',
+        'content-length': String(1024 * 1024 + 1),
+        'content-type': 'application/json'
+      };
+      req.ip = '127.0.0.1';
+      req.header = (name: string) => req.headers[name.toLowerCase()] as string | undefined;
+      req.resume = () => {
+        bodyConsumed = true;
+        return req;
+      };
+
+      await new Promise<void>((resolve, reject) => {
+        router.handle(req, response, reject);
+        setImmediate(resolve);
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.body).toEqual({ error: 'Unauthorized' });
+      expect(bodyConsumed).toBe(false);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rate limits repeated invalid bearer tokens without parsing request bodies', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      for (let index = 0; index < 10; index += 1) {
+        await request(app)
+          .post('/api/sync')
+          .set('Authorization', 'Bearer wrong-token')
+          .set('Content-Type', 'application/json')
+          .send('{')
+          .expect(401);
+      }
+
+      const response = await request(app)
+        .post('/api/sync')
+        .set('Authorization', 'Bearer wrong-token')
+        .set('Content-Type', 'application/json')
+        .send('{');
+
+      expect(response.status).toBe(429);
+      expect(response.body).toEqual({ error: 'Too many unauthorized sync attempts. Please wait and try again.' });
+    } finally {
+      db.close();
+    }
+  });
+
   it('returns 429 when valid sync requests exceed the per-token IP limit', async () => {
     const db = createMigratedDatabase();
 
@@ -306,6 +396,54 @@ describe('public search sync endpoint', () => {
 
       expect(response.status).toBe(400);
       expect(response.body).toEqual({ error: 'Invalid request body' });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not count valid-token malformed JSON against the valid sync quota', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      for (let index = 0; index < 6; index += 1) {
+        const response = await request(app)
+          .post('/api/sync')
+          .set('Authorization', 'Bearer sync-token')
+          .set('Content-Type', 'application/json')
+          .send('{"generatedAt":');
+
+        expect(response.status).toBe(400);
+        expect(response.body).toEqual({ error: 'Invalid request body' });
+      }
+
+      await request(app).post('/api/sync').set('Authorization', 'Bearer sync-token').send(validCatalog()).expect(200);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('returns 413 for oversized valid-token JSON without counting against the valid sync quota', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const app = createPublicSearchApp({ db, config: createConfig() });
+      const oversizedBody = JSON.stringify({
+        ...validCatalog(),
+        padding: 'x'.repeat(5 * 1024 * 1024)
+      });
+
+      const response = await request(app)
+        .post('/api/sync')
+        .set('Authorization', 'Bearer sync-token')
+        .set('Content-Type', 'application/json')
+        .send(oversizedBody);
+
+      expect(response.status).toBe(413);
+      expect(response.body).toEqual({ error: 'Request body too large' });
+
+      await request(app).post('/api/sync').set('Authorization', 'Bearer sync-token').send(validCatalog()).expect(200);
     } finally {
       db.close();
     }

@@ -99,7 +99,7 @@ In `apps/public-search-bot/src/bot/formatter.ts`:
 
 - Update `formatJoinRequiredMessage` to use the new membership verification message plus handles.
 
-Do not change `src/public-search/bot/formatter.ts`.
+The command-message change targeted only `apps/public-search-bot/`; the old root `src/public-search/` compatibility copy was not part of that change.
 
 **Step 4: Run test to verify it passes**
 
@@ -178,7 +178,7 @@ In `apps/public-search-bot/src/bot/handlers.ts`:
 
 - For callback membership unavailable with a chat id, send `formatJoinRequiredMessage(getHandles(deps))` instead of raw retry-later text.
 
-Do not change `src/public-search/bot/handlers.ts`.
+The command-message change targeted only `apps/public-search-bot/`; the old root `src/public-search/` compatibility copy was not part of that change.
 
 **Step 4: Run test to verify it passes**
 
@@ -256,7 +256,7 @@ git status --short
 Expected:
 
 - Feature diff includes only `apps/public-search-bot/src/bot/formatter.ts`, `apps/public-search-bot/src/bot/handlers.ts`, standalone tests, and this plan/spec commits.
-- No root `src/public-search/` or root `tests/public-search/` files changed.
+- Root `src/public-search/` files and root `tests/public-search/` files were not part of this change.
 - The pre-existing deleted `apps/public-search-bot/.env.example` remains unrelated unless the user explicitly asks to handle it.
 
 **Step 6: Final review**

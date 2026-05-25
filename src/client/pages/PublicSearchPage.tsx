@@ -1,5 +1,5 @@
 import { Activity, RefreshCw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiJson } from '../api/http';
 import { useToast } from '../components/ToastProvider';
 
@@ -24,6 +24,17 @@ type PublicSearchSyncStatus = {
     tvShows: number;
   };
   lastSuccessfulSync: SyncResult | null;
+};
+
+type PublicSearchPreview = {
+  movies: number;
+  tvShows: number;
+  sampleMovies: string[];
+  sampleTvShows: string[];
+};
+
+type PublicSearchPreviewResponse = {
+  preview: PublicSearchPreview;
 };
 
 type PublicSearchLastError = {
@@ -122,6 +133,24 @@ function isSyncResponse(value: unknown): value is SyncResponse {
   return isRecord(value) && isSyncResult(value.sync) && isPublicSearchSyncStatus(value.status);
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+function isPublicSearchPreview(value: unknown): value is PublicSearchPreview {
+  return (
+    isRecord(value) &&
+    typeof value.movies === 'number' &&
+    typeof value.tvShows === 'number' &&
+    isStringArray(value.sampleMovies) &&
+    isStringArray(value.sampleTvShows)
+  );
+}
+
+function isPublicSearchPreviewResponse(value: unknown): value is PublicSearchPreviewResponse {
+  return isRecord(value) && isPublicSearchPreview(value.preview);
+}
+
 function createReadinessMessage(syncStatus: PublicSearchSyncStatus | null, isLoadingSyncStatus: boolean) {
   if (isLoadingSyncStatus) {
     return 'Checking sync readiness...';
@@ -178,20 +207,60 @@ async function fetchPublicSearchSyncStatus(): Promise<PublicSearchSyncStatus> {
   throw new Error('Public search sync readiness check failed');
 }
 
+async function fetchPublicSearchPreview(): Promise<PublicSearchPreview> {
+  const payload = await apiJson<unknown>('/api/public-search/preview');
+
+  if (isPublicSearchPreviewResponse(payload)) {
+    return payload.preview;
+  }
+
+  throw new Error('Public search preview could not be loaded');
+}
+
 export function PublicSearchPage() {
   const { showToast } = useToast();
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [syncStatus, setSyncStatus] = useState<PublicSearchSyncStatus | null>(null);
+  const [preview, setPreview] = useState<PublicSearchPreview | null>(null);
   const [statusResult, setStatusResult] = useState<PublicSearchStatusResponse | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoadingSyncStatus, setIsLoadingSyncStatus] = useState(true);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [error, setError] = useState('');
   const [syncStatusError, setSyncStatusError] = useState('');
+  const [previewError, setPreviewError] = useState('');
   const [statusError, setStatusError] = useState('');
+  const isMountedRef = useRef(false);
+  const previewRequestIdRef = useRef(0);
+
+  const loadPublicSearchPreview = useCallback(async () => {
+    const requestId = previewRequestIdRef.current + 1;
+    previewRequestIdRef.current = requestId;
+
+    if (isMountedRef.current) {
+      setPreviewError('');
+    }
+
+    try {
+      const payload = await fetchPublicSearchPreview();
+
+      if (isMountedRef.current && requestId === previewRequestIdRef.current) {
+        setPreview(payload);
+      }
+    } catch (previewLoadError) {
+      const message =
+        previewLoadError instanceof Error ? previewLoadError.message : 'Public search preview could not be loaded';
+
+      if (isMountedRef.current && requestId === previewRequestIdRef.current) {
+        setPreview(null);
+        setPreviewError(message || 'Public search preview could not be loaded');
+      }
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
+    isMountedRef.current = true;
 
     async function loadSyncStatus() {
       setIsLoadingSyncStatus(true);
@@ -223,11 +292,14 @@ export function PublicSearchPage() {
     }
 
     void loadSyncStatus();
+    void loadPublicSearchPreview();
 
     return () => {
       isMounted = false;
+      isMountedRef.current = false;
+      previewRequestIdRef.current += 1;
     };
-  }, []);
+  }, [loadPublicSearchPreview]);
 
   async function syncPublicSearch() {
     setIsSyncing(true);
@@ -242,6 +314,7 @@ export function PublicSearchPage() {
 
       setSyncResult(payload.sync);
       setSyncStatus(payload.status);
+      void loadPublicSearchPreview();
       showToast('Public search synced.');
     } catch (syncError) {
       const message = syncError instanceof Error ? syncError.message : 'Public search sync failed.';
@@ -311,6 +384,55 @@ export function PublicSearchPage() {
             <span>{syncResult.tvShows} TV shows</span>
           </div>
         ) : null}
+      </div>
+
+      <div className="sync-panel public-search-preview">
+        <div className="public-search-status__header">
+          <strong>Catalog preview</strong>
+        </div>
+        <div className="public-search-preview__body" aria-live="polite">
+          {previewError ? <div className="state-panel state-panel--error">{previewError}</div> : null}
+          {!previewError && preview ? (
+            <>
+              <dl className="public-search-preview__counts">
+                <div>
+                  <dt>Movies</dt>
+                  <dd>{preview.movies}</dd>
+                </div>
+                <div>
+                  <dt>TV shows</dt>
+                  <dd>{preview.tvShows}</dd>
+                </div>
+              </dl>
+              <div className="public-search-preview__samples">
+                <div>
+                  <strong>Sample movies</strong>
+                  {preview.sampleMovies.length > 0 ? (
+                    <ul>
+                      {preview.sampleMovies.map((title) => (
+                        <li key={title}>{title}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>No movies in the public catalog.</p>
+                  )}
+                </div>
+                <div>
+                  <strong>Sample TV shows</strong>
+                  {preview.sampleTvShows.length > 0 ? (
+                    <ul>
+                      {preview.sampleTvShows.map((title) => (
+                        <li key={title}>{title}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>No TV shows in the public catalog.</p>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
       </div>
 
       <div className="sync-panel public-search-status">

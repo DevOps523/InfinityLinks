@@ -1,6 +1,10 @@
 import type { AppConfig } from '../config.js';
 import type { AppDatabase } from '../db/database.js';
-import { buildPublicSearchCatalog, createPublicSearchCatalogFingerprint } from './catalog.js';
+import {
+  buildPublicSearchCatalog,
+  buildPublicSearchCatalogPreview,
+  createPublicSearchCatalogFingerprint
+} from './catalog.js';
 import { getPublicSearchSyncState, upsertPublicSearchSyncState } from './sync-state.repository.js';
 
 export type PublicSearchSyncStatus = {
@@ -105,4 +109,13 @@ export function getPublicSearchSyncStatus(db: AppDatabase, config: AppConfig): P
         }
       : null
   };
+}
+
+export function getPublicSearchPreview(db: AppDatabase, config: AppConfig) {
+  const catalog = buildPublicSearchCatalog(db, {
+    channelHandle: config.publicSearchGroupHandle,
+    groupHandle: config.publicSearchGroupHandle
+  });
+
+  return buildPublicSearchCatalogPreview(catalog);
 }

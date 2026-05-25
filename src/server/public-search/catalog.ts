@@ -46,6 +46,13 @@ export type PublicSearchCatalog = {
   tvShows: PublicSearchTvShow[];
 };
 
+export type PublicSearchCatalogPreview = {
+  movies: number;
+  tvShows: number;
+  sampleMovies: string[];
+  sampleTvShows: string[];
+};
+
 type MovieCatalogRow = {
   movie_id: number;
   title: string;
@@ -118,6 +125,15 @@ export function buildPublicSearchCatalog(
 export function createPublicSearchCatalogFingerprint(catalog: PublicSearchCatalog): string {
   const { generatedAt: _generatedAt, ...fingerprintCatalog } = catalog;
   return createHash('sha256').update(stableSerialize(fingerprintCatalog)).digest('hex');
+}
+
+export function buildPublicSearchCatalogPreview(catalog: PublicSearchCatalog): PublicSearchCatalogPreview {
+  return {
+    movies: catalog.movies.length,
+    tvShows: catalog.tvShows.length,
+    sampleMovies: catalog.movies.slice(0, 5).map((movie) => movie.title),
+    sampleTvShows: catalog.tvShows.slice(0, 5).map((tvShow) => tvShow.title)
+  };
 }
 
 function stableSerialize(value: unknown): string {

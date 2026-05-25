@@ -24,6 +24,13 @@ type PublicSearchSyncStatusFixture = {
   };
 };
 
+type PublicSearchPreviewFixture = {
+  movies: number;
+  tvShows: number;
+  sampleMovies: string[];
+  sampleTvShows: string[];
+};
+
 function createPublicSearchSyncStatus(
   overrides: Partial<Omit<PublicSearchSyncStatusFixture, 'current'>> & {
     current?: Partial<PublicSearchSyncStatusFixture['current']>;
@@ -43,6 +50,16 @@ function createPublicSearchSyncStatus(
       tvShows: 0,
       ...current
     }
+  };
+}
+
+function createPublicSearchPreview(overrides: Partial<PublicSearchPreviewFixture> = {}): PublicSearchPreviewFixture {
+  return {
+    movies: 1,
+    tvShows: 0,
+    sampleMovies: ['Inception'],
+    sampleTvShows: [],
+    ...overrides
   };
 }
 
@@ -73,6 +90,13 @@ beforeEach(() => {
             pendingPublicSearchChanges: false
           }
         })
+      };
+    }
+
+    if (url === '/api/public-search/preview') {
+      return {
+        ok: true,
+        json: async () => ({ preview: createPublicSearchPreview() })
       };
     }
 
@@ -543,6 +567,86 @@ describe('App', () => {
     expect(await screen.findByText('1 movie ready to sync')).toBeInTheDocument();
   });
 
+  it('renders the public search catalog preview', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync-status') {
+        return {
+          ok: true,
+          json: async () =>
+            createPublicSearchSyncStatus({
+              current: {
+                movies: 3,
+                tvShows: 2
+              }
+            })
+        };
+      }
+
+      if (url === '/api/public-search/preview') {
+        return {
+          ok: true,
+          json: async () => ({
+            preview: createPublicSearchPreview({
+              movies: 3,
+              tvShows: 2,
+              sampleMovies: ['Alpha Movie', 'Beta Movie'],
+              sampleTvShows: ['Alpha Show']
+            })
+          })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+
+    const previewSection = (await screen.findByText('Catalog preview')).closest('.public-search-preview') as HTMLElement;
+    expect(within(previewSection).getByText('3')).toBeInTheDocument();
+    expect(within(previewSection).getByText('2')).toBeInTheDocument();
+    expect(within(previewSection).getByText('Alpha Movie')).toBeInTheDocument();
+    expect(within(previewSection).getByText('Beta Movie')).toBeInTheDocument();
+    expect(within(previewSection).getByText('Alpha Show')).toBeInTheDocument();
+  });
+
+  it('shows a public search preview error when the preview cannot be loaded', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/public-search/sync-status') {
+        return {
+          ok: true,
+          json: async () => createPublicSearchSyncStatus()
+        };
+      }
+
+      if (url === '/api/public-search/preview') {
+        return {
+          ok: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+          json: async () => ({ error: 'Preview failed' })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
+
+    expect(await screen.findByText('Preview failed')).toBeInTheDocument();
+  });
+
   it('shows loading public search readiness and enables sync when changes are pending', async () => {
     let resolveSyncStatus: (response: unknown) => void = () => undefined;
     const syncStatusPromise = new Promise((resolve) => {
@@ -686,6 +790,8 @@ describe('App', () => {
   });
 
   it('syncs the public search catalog and updates readiness', async () => {
+    let previewRequests = 0;
+
     fetchMock.mockImplementation(async (url: string) => {
       if (url === '/api/public-search/sync-status') {
         return {
@@ -720,6 +826,22 @@ describe('App', () => {
         };
       }
 
+      if (url === '/api/public-search/preview') {
+        previewRequests += 1;
+
+        return {
+          ok: true,
+          json: async () => ({
+            preview: createPublicSearchPreview({
+              movies: previewRequests > 1 ? 12 : 1,
+              tvShows: previewRequests > 1 ? 4 : 0,
+              sampleMovies: previewRequests > 1 ? ['Synced Movie'] : ['Pending Movie'],
+              sampleTvShows: previewRequests > 1 ? ['Synced Show'] : []
+            })
+          })
+        };
+      }
+
       return {
         ok: true,
         json: async () => ({ movies: [] })
@@ -740,6 +862,9 @@ describe('App', () => {
     expect(screen.getByText(/4 tv shows/i)).toBeInTheDocument();
     expect(screen.getByText('Everything is synced')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeDisabled();
+    expect(await screen.findByText('Synced Movie')).toBeInTheDocument();
+    expect(screen.getByText('Synced Show')).toBeInTheDocument();
+    expect(previewRequests).toBe(2);
   });
 
   it('shows a sync error when the successful public search response is invalid', async () => {

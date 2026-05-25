@@ -39,6 +39,21 @@ function insertPostedMovie() {
   ).run(movie.lastInsertRowid);
 }
 
+function insertPostedTvShow(title: string) {
+  const show = db.prepare('INSERT INTO tv_shows (title, quality) VALUES (?, ?)').run(title, 'HD');
+  const season = db
+    .prepare(
+      "INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (?, 1, 456, 'posted')"
+    )
+    .run(show.lastInsertRowid);
+  const episode = db.prepare('INSERT INTO episodes (season_id, episode_number) VALUES (?, 1)').run(season.lastInsertRowid);
+
+  db.prepare(
+    `INSERT INTO episode_links (episode_id, provider_name, quality, status, url)
+     VALUES (?, 'MixDrop', 'HD', 'active', ?)`
+  ).run(episode.lastInsertRowid, `https://mixdrop.example/${title.toLowerCase().replace(/\s+/g, '-')}`);
+}
+
 beforeEach(() => {
   createMigratedDatabase();
 });
@@ -147,6 +162,36 @@ describe('public search sync route', () => {
         tvShows: 0
       },
       lastSuccessfulSync: null
+    });
+  });
+
+  it('returns a public search catalog preview with counts and sample titles', async () => {
+    const movieTitles = ['Zulu Movie', 'Alpha Movie', 'Beta Movie', 'Delta Movie', 'Echo Movie', 'Foxtrot Movie'];
+
+    for (const [index, title] of movieTitles.entries()) {
+      const movie = db
+        .prepare('INSERT INTO movies (title, quality, telegram_message_id, post_status) VALUES (?, ?, ?, ?)')
+        .run(title, 'HD', 700 + index, 'posted');
+
+      db.prepare(
+        `INSERT INTO movie_links (movie_id, provider_name, quality, status, url)
+         VALUES (?, 'MixDrop', 'HD', 'active', ?)`
+      ).run(movie.lastInsertRowid, `https://mixdrop.example/${title.toLowerCase().replace(/\s+/g, '-')}`);
+    }
+
+    for (const title of ['Zeta Show', 'Alpha Show', 'Beta Show', 'Delta Show', 'Echo Show', 'Foxtrot Show']) {
+      insertPostedTvShow(title);
+    }
+
+    const response = await request(app(baseConfig)).get('/api/public-search/preview').expect(200);
+
+    expect(response.body).toEqual({
+      preview: {
+        movies: 6,
+        tvShows: 6,
+        sampleMovies: ['Alpha Movie', 'Beta Movie', 'Delta Movie', 'Echo Movie', 'Foxtrot Movie'],
+        sampleTvShows: ['Alpha Show', 'Beta Show', 'Delta Show', 'Echo Show', 'Foxtrot Show']
+      }
     });
   });
 

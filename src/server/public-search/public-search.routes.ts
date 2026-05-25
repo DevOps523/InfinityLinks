@@ -6,7 +6,7 @@ import {
   PublicSearchStatusError,
   type PublicSearchStatusServiceOptions
 } from './status.service.js';
-import { getPublicSearchSyncStatus, syncPublicSearchCatalog } from './sync.service.js';
+import { getPublicSearchPreview, getPublicSearchSyncStatus, syncPublicSearchCatalog } from './sync.service.js';
 
 export function createPublicSearchRouter(
   db: AppDatabase,
@@ -30,6 +30,14 @@ export function createPublicSearchRouter(
   router.get('/public-search/sync-status', (_req, res, next) => {
     try {
       res.json(getPublicSearchSyncStatus(db, config));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/public-search/preview', (_req, res, next) => {
+    try {
+      res.json({ preview: getPublicSearchPreview(db, config) });
     } catch (error) {
       next(error);
     }

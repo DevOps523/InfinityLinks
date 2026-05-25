@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ZodError } from 'zod';
+import { createAdminRouter } from './admin/admin.routes.js';
 import type { AppConfig } from './config.js';
 import type { AppDatabase } from './db/database.js';
 import { createMediaRouter } from './media/media.routes.js';
@@ -36,6 +37,7 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use('/api', createAdminApiRequestGuard());
 
   if (options.db && options.config) {
+    app.use('/api', createAdminRouter(options.db, options.config));
     app.use('/api', createMediaRouter(options.db));
     app.use('/api/tmdb', createTmdbRouter(options.db, options.config, options.tmdbOptions));
     app.use('/api', createPublicSearchRouter(options.db, options.config, options.fetcher, options.publicSearchStatusOptions));

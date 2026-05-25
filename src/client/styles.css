@@ -214,6 +214,7 @@ td {
 }
 
 .filter-bar,
+.dashboard-card,
 .form-panel,
 .poster-panel,
 .sync-panel,
@@ -250,6 +251,72 @@ td {
 .state-panel--error,
 .field-error {
   color: #b91c1c;
+}
+
+.dashboard-state {
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.dashboard-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+.dashboard-card__icon,
+.dashboard-sync__icon {
+  display: grid;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 8px;
+  background: #e8f1ff;
+  color: #1d4ed8;
+}
+
+.dashboard-card span,
+.dashboard-card strong {
+  display: block;
+}
+
+.dashboard-card span {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.dashboard-card strong {
+  color: #0f172a;
+  font-size: 1.8rem;
+  line-height: 1.15;
+}
+
+.dashboard-sync {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+}
+
+.dashboard-sync h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.1rem;
+}
+
+.dashboard-sync p {
+  margin: 3px 0 0;
+  color: #64748b;
 }
 
 .sync-panel__result {

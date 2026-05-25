@@ -60,9 +60,26 @@ beforeEach(() => {
   vi.useRealTimers();
   window.history.replaceState(null, '', '/');
   fetchMock.mockReset();
-  fetchMock.mockResolvedValue({
-    ok: true,
-    json: async () => ({ movies: [] })
+  fetchMock.mockImplementation(async (url: string) => {
+    if (url === '/api/admin/dashboard') {
+      return {
+        ok: true,
+        json: async () => ({
+          dashboard: {
+            movies: 0,
+            tvShows: 0,
+            activeLinks: 0,
+            failedTelegramJobs: 0,
+            pendingPublicSearchChanges: false
+          }
+        })
+      };
+    }
+
+    return {
+      ok: true,
+      json: async () => ({ movies: [] })
+    };
   });
   vi.stubGlobal('fetch', fetchMock);
 });
@@ -75,13 +92,47 @@ describe('App', () => {
   it('shows media navigation and the Add Movie link', async () => {
     render(<App />);
 
-    expect(await screen.findByRole('heading', { name: /movies/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /dashboard/i })).toBeInTheDocument();
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    expect(within(navigation).getByRole('button', { name: /^dashboard$/i })).toBeInTheDocument();
     expect(within(navigation).getByRole('button', { name: /^movies$/i })).toBeInTheDocument();
     expect(within(navigation).getByRole('button', { name: /^add movie$/i })).toBeInTheDocument();
     expect(within(navigation).getByRole('button', { name: /^tv shows$/i })).toBeInTheDocument();
     expect(within(navigation).getByRole('button', { name: /^add tv show$/i })).toBeInTheDocument();
     expect(within(navigation).getByRole('button', { name: /^public search$/i })).toBeInTheDocument();
+  });
+
+  it('renders the dashboard with local admin counts', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 2,
+              tvShows: 1,
+              activeLinks: 5,
+              failedTelegramJobs: 1,
+              pendingPublicSearchChanges: true
+            }
+          })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^dashboard$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^dashboard$/i })).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('Pending public search sync')).toBeInTheDocument();
   });
 
   it('renders the Add Movie form after clicking Add Movie', async () => {
@@ -173,6 +224,9 @@ describe('App', () => {
 
     render(<App />);
 
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
+
     expect(await screen.findByText(/tom clancy jack ryan/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^open action menu$/i }));
 
@@ -185,6 +239,9 @@ describe('App', () => {
 
   it('filters movies by title automatically while typing', async () => {
     render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
 
     expect(await screen.findByRole('heading', { name: /^movies$/i })).toBeInTheDocument();
 
@@ -985,6 +1042,9 @@ describe('App', () => {
 
     render(<App />);
 
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
+
     expect(await screen.findByText('Arrival')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /open action menu/i }));
 
@@ -1051,6 +1111,9 @@ describe('App', () => {
     });
 
     render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
 
     expect(await screen.findByText('Arrival')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /open action menu/i }));

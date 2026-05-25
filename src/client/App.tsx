@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Sidebar, type PageKey } from './components/Sidebar';
 import { ToastProvider } from './components/ToastProvider';
+import { DashboardPage } from './pages/DashboardPage';
 import { EpisodePage } from './pages/EpisodePage';
 import { MovieForm } from './pages/MovieForm';
 import { MoviesPage } from './pages/MoviesPage';
@@ -26,11 +27,11 @@ type AppActions = {
   setOpenSeasonDialogOnEntry: (open: boolean) => void;
 };
 
-const refreshSafePages = new Set<PageKey>(['movies', 'add-movie', 'tv-shows', 'add-tv-show', 'public-search']);
+const refreshSafePages = new Set<PageKey>(['dashboard', 'movies', 'add-movie', 'tv-shows', 'add-tv-show', 'public-search']);
 
 function pageFromHash(hash: string): PageKey {
   const page = hash.replace(/^#\/?/, '') as PageKey;
-  return refreshSafePages.has(page) ? page : 'movies';
+  return refreshSafePages.has(page) ? page : 'dashboard';
 }
 
 function pageToHash(page: PageKey) {
@@ -40,6 +41,10 @@ function pageToHash(page: PageKey) {
 function renderPage(page: PageKey, state: AppState, actions: AppActions) {
   const { editingMovieId, editingTvShowId, selectedTvShowId, selectedSeasonId, openSeasonDialogOnEntry } = state;
   const { setPage, setEditingMovieId, setEditingTvShowId, setSelectedTvShowId, setSelectedSeasonId, setOpenSeasonDialogOnEntry } = actions;
+
+  if (page === 'dashboard') {
+    return <DashboardPage />;
+  }
 
   if (page === 'add-movie') {
     return <MovieForm movieId={editingMovieId ?? undefined} onSaved={() => setPage('movies')} />;
@@ -155,10 +160,17 @@ export function App() {
           onNavigate={(nextPage) => {
             setEditingMovieId(null);
             setEditingTvShowId(null);
-            if (nextPage === 'movies' || nextPage === 'tv-shows' || nextPage === 'add-tv-show' || nextPage === 'public-search') {
+            if (
+              nextPage === 'dashboard' ||
+              nextPage === 'movies' ||
+              nextPage === 'tv-shows' ||
+              nextPage === 'add-tv-show' ||
+              nextPage === 'public-search'
+            ) {
               setSelectedSeasonId(null);
             }
             if (
+              nextPage === 'dashboard' ||
               nextPage === 'movies' ||
               nextPage === 'add-movie' ||
               nextPage === 'tv-shows' ||

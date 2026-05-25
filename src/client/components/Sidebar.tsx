@@ -1,6 +1,6 @@
-import { Clapperboard, Film, Plus, Search, Tv } from 'lucide-react';
+import { Clapperboard, Film, LayoutDashboard, Plus, Search, Tv } from 'lucide-react';
 
-export type PageKey = 'movies' | 'add-movie' | 'tv-shows' | 'add-tv-show' | 'seasons' | 'episodes' | 'public-search';
+export type PageKey = 'dashboard' | 'movies' | 'add-movie' | 'tv-shows' | 'add-tv-show' | 'seasons' | 'episodes' | 'public-search';
 
 type SidebarProps = {
   currentPage: PageKey;
@@ -8,6 +8,7 @@ type SidebarProps = {
 };
 
 const items: Array<{ key: PageKey; label: string; icon: typeof Film }> = [
+  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'movies', label: 'Movies', icon: Film },
   { key: 'add-movie', label: 'Add Movie', icon: Plus },
   { key: 'tv-shows', label: 'TV Shows', icon: Tv },

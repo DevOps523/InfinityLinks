@@ -171,6 +171,54 @@ describe('public search sync endpoint', () => {
     }
   });
 
+  it('rejects invalid bearer tokens before parsing invalid large JSON bodies', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const app = createPublicSearchApp({ db, config: createConfig() });
+      const oversizedInvalidBody = `${' '.repeat(1024 * 1024)}{`;
+
+      const response = await request(app)
+        .post('/api/sync')
+        .set('Authorization', 'Bearer wrong-token')
+        .set('Content-Type', 'application/json')
+        .send(oversizedInvalidBody);
+
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: 'Unauthorized' });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rate limits repeated invalid bearer tokens without parsing request bodies', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      for (let index = 0; index < 10; index += 1) {
+        await request(app)
+          .post('/api/sync')
+          .set('Authorization', 'Bearer wrong-token')
+          .set('Content-Type', 'application/json')
+          .send('{')
+          .expect(401);
+      }
+
+      const response = await request(app)
+        .post('/api/sync')
+        .set('Authorization', 'Bearer wrong-token')
+        .set('Content-Type', 'application/json')
+        .send('{');
+
+      expect(response.status).toBe(429);
+      expect(response.body).toEqual({ error: 'Too many unauthorized sync attempts. Please wait and try again.' });
+    } finally {
+      db.close();
+    }
+  });
+
   it('returns 429 when valid sync requests exceed the per-token IP limit', async () => {
     const db = createMigratedDatabase();
 

@@ -32,7 +32,6 @@ export function createPublicSearchApp(options: CreatePublicSearchAppOptions) {
   const statusTracker = options.statusTracker ?? createPublicSearchStatusTracker();
 
   app.set('trust proxy', 'loopback');
-  app.use(express.json({ limit: '5mb' }));
   app.use('/api', createPublicSearchStatusRouter(options.config, statusTracker));
   app.use('/api', createPublicSearchSyncRouter(options.db, options.config, statusTracker));
 

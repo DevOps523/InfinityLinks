@@ -39,16 +39,18 @@ export function createPublicSearchSyncRouter(
       return;
     }
 
-    const rateLimit = syncRateLimiter.check(`${clientIp}:${token.slice(0, 8)}`);
-    if (!rateLimit.allowed) {
-      res.set('Retry-After', String(Math.max(1, Math.ceil(rateLimit.retryAfterMs / 1000))));
-      res.status(429).json({ error: 'Too many sync attempts. Please wait and try again.' });
-      return;
-    }
-
     parseSyncJson(req, res, next);
   }, (req, res) => {
     try {
+      const token = extractBearerToken(req.header('authorization'));
+      const clientIp = req.ip ?? 'unknown';
+      const rateLimit = syncRateLimiter.check(`${clientIp}:${token?.slice(0, 8) ?? 'unknown'}`);
+      if (!rateLimit.allowed) {
+        res.set('Retry-After', String(Math.max(1, Math.ceil(rateLimit.retryAfterMs / 1000))));
+        res.status(429).json({ error: 'Too many sync attempts. Please wait and try again.' });
+        return;
+      }
+
       const catalog = PublicSearchCatalogSchema.parse(req.body);
       const counts = replacePublicCatalog(db, catalog);
 

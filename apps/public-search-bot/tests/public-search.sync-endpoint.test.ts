@@ -401,6 +401,29 @@ describe('public search sync endpoint', () => {
     }
   });
 
+  it('does not count valid-token malformed JSON against the valid sync quota', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      for (let index = 0; index < 6; index += 1) {
+        const response = await request(app)
+          .post('/api/sync')
+          .set('Authorization', 'Bearer sync-token')
+          .set('Content-Type', 'application/json')
+          .send('{"generatedAt":');
+
+        expect(response.status).toBe(400);
+        expect(response.body).toEqual({ error: 'Invalid request body' });
+      }
+
+      await request(app).post('/api/sync').set('Authorization', 'Bearer sync-token').send(validCatalog()).expect(200);
+    } finally {
+      db.close();
+    }
+  });
+
   it('returns 400 for empty nested arrays and preserves old data', async () => {
     const db = createMigratedDatabase();
 

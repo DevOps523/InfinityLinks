@@ -424,6 +424,31 @@ describe('public search sync endpoint', () => {
     }
   });
 
+  it('returns 413 for oversized valid-token JSON without counting against the valid sync quota', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const app = createPublicSearchApp({ db, config: createConfig() });
+      const oversizedBody = JSON.stringify({
+        ...validCatalog(),
+        padding: 'x'.repeat(5 * 1024 * 1024)
+      });
+
+      const response = await request(app)
+        .post('/api/sync')
+        .set('Authorization', 'Bearer sync-token')
+        .set('Content-Type', 'application/json')
+        .send(oversizedBody);
+
+      expect(response.status).toBe(413);
+      expect(response.body).toEqual({ error: 'Request body too large' });
+
+      await request(app).post('/api/sync').set('Authorization', 'Bearer sync-token').send(validCatalog()).expect(200);
+    } finally {
+      db.close();
+    }
+  });
+
   it('returns 400 for empty nested arrays and preserves old data', async () => {
     const db = createMigratedDatabase();
 

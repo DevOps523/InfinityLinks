@@ -21,7 +21,7 @@ export function createPublicSearchSyncRouter(
   const router = express.Router();
   const syncRateLimiter = createFixedWindowRateLimiter({ limit: 5, windowMs: 60_000 });
   const badAuthRateLimiter = createFixedWindowRateLimiter({ limit: 10, windowMs: 60_000 });
-  const parseSyncJson = express.json({ limit: '1mb' });
+  const parseSyncJson = express.json({ limit: '5mb' });
 
   router.post('/sync', (req, res, next) => {
     const token = extractBearerToken(req.header('authorization'));

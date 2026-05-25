@@ -463,7 +463,8 @@ async function runTelegramJob(client: TelegramClient, job: TelegramJobRow) {
     return;
   }
 
-  await client.deleteMessage(payload as { messageId: number });
+  const deletePayload = payload as TelegramDeleteJobPayload;
+  await client.deleteMessage({ messageId: deletePayload.messageId });
 }
 
 export async function processNextTelegramJob(db: AppDatabase, client: TelegramClient): Promise<boolean> {
@@ -576,6 +577,26 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
       const latestPayload = getLatestActiveSendPayload(db, job);
 
       db.transaction(() => {
+        if (latestPayload.messageThreadId !== sentPayload.messageThreadId) {
+          updateEntityPostStatus(db, job.entity_type, job.entity_id, {
+            messageId: null,
+            postStatus: 'pending'
+          });
+          db.prepare(
+            `UPDATE telegram_jobs
+             SET status = 'succeeded',
+                 last_error = NULL,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`
+          ).run(job.id);
+          enqueueTelegramJob(db, 'delete', job.entity_type, job.entity_id, {
+            messageId: result.messageId,
+            retainEntityState: true
+          });
+          enqueueTelegramJob(db, 'send', job.entity_type, job.entity_id, latestPayload);
+          return;
+        }
+
         updateEntityPostStatus(db, job.entity_type, job.entity_id, {
           messageId: result.messageId,
           postStatus: 'posted'

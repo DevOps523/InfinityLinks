@@ -35,10 +35,11 @@ const TOPIC_ROUTES: Record<MediaTopicKey, { chatId: string; messageThreadId: num
 
 export function getTopicRoute(topicKey: MediaTopicKey | string | undefined, mediaType: 'movie' | 'tv') {
   const fallbackTopicKey = mediaType === 'movie' ? DEFAULT_MOVIE_TOPIC_KEY : DEFAULT_TV_TOPIC_KEY;
-  const route = TOPIC_ROUTES[(topicKey ?? fallbackTopicKey) as MediaTopicKey] ?? TOPIC_ROUTES[fallbackTopicKey];
+  const requestedTopicKey = typeof topicKey === 'string' && topicKey.trim().length > 0 ? topicKey : fallbackTopicKey;
+  const route = TOPIC_ROUTES[requestedTopicKey as MediaTopicKey];
 
   if (!route) {
-    throw new Error(`Telegram topic route is not configured for ${topicKey ?? fallbackTopicKey}`);
+    throw new Error(`Telegram topic route is not configured for ${requestedTopicKey}`);
   }
 
   return route;

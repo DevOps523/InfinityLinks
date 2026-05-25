@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDatabase, type AppDatabase } from '../../src/server/db/database.js';
 import { migrate } from '../../src/server/db/migrate.js';
+import { getTopicRoute } from '../../src/server/media/topics.js';
 import { createTelegramClient, TelegramRateLimitError } from '../../src/server/telegram/telegram.client.js';
 import { enqueueTelegramJob, processNextTelegramJob, upsertActiveTelegramSendJob } from '../../src/server/telegram/telegram.queue.js';
 
@@ -540,6 +541,73 @@ describe('telegram queue', () => {
     db.close();
   });
 
+  it('deletes and resends when a running send payload moves to another topic', async () => {
+    const db = setupDb();
+    const client = {
+      sendPhotoPost: vi.fn(async () => {
+        upsertActiveTelegramSendJob(db, 'movie', 7, {
+          posterUrl: 'https://example.com/follow-up.jpg',
+          caption: 'Follow-up caption',
+          messageThreadId: 27
+        });
+        return { messageId: 888 };
+      }),
+      editPhotoCaption: vi.fn(async () => undefined),
+      deleteMessage: vi.fn(async () => undefined)
+    };
+
+    createMovieRow(db, 7, 'Running Movie');
+    enqueueTelegramJob(db, 'send', 'movie', 7, {
+      posterUrl: 'https://example.com/running.jpg',
+      caption: 'Running caption',
+      messageThreadId: 20
+    });
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
+
+    expect(client.sendPhotoPost).toHaveBeenCalledTimes(1);
+    expect(client.sendPhotoPost).toHaveBeenCalledWith({
+      posterUrl: 'https://example.com/running.jpg',
+      caption: 'Running caption',
+      messageThreadId: 20
+    });
+    expect(client.editPhotoCaption).not.toHaveBeenCalled();
+    expect(getMoviePostState(db, 7)).toEqual({
+      telegram_message_id: null,
+      post_status: 'pending'
+    });
+
+    const replacementJobs = getJobs(db).slice(1);
+    expect(replacementJobs.map((job) => job.job_type)).toEqual(['delete', 'send']);
+    expect(JSON.parse(replacementJobs[0].payload)).toEqual({
+      messageId: 888,
+      retainEntityState: true
+    });
+    expect(JSON.parse(replacementJobs[1].payload)).toEqual({
+      posterUrl: 'https://example.com/follow-up.jpg',
+      caption: 'Follow-up caption',
+      messageThreadId: 27
+    });
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
+    expect(client.deleteMessage).toHaveBeenCalledWith({ messageId: 888 });
+
+    client.sendPhotoPost.mockResolvedValueOnce({ messageId: 999 });
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
+
+    expect(client.sendPhotoPost).toHaveBeenLastCalledWith({
+      posterUrl: 'https://example.com/follow-up.jpg',
+      caption: 'Follow-up caption',
+      messageThreadId: 27
+    });
+    expect(getMoviePostState(db, 7)).toEqual({
+      telegram_message_id: 999,
+      post_status: 'posted'
+    });
+
+    db.close();
+  });
+
   it('deletes the just-sent Telegram message when a movie is deleted while the send is running', async () => {
     const db = setupDb();
     const client = {
@@ -643,6 +711,16 @@ describe('telegram queue', () => {
     });
 
     db.close();
+  });
+});
+
+describe('telegram topic routes', () => {
+  it('falls back for missing legacy topic keys and rejects invalid non-empty keys', () => {
+    expect(getTopicRoute(undefined, 'movie')).toMatchObject({ messageThreadId: 20 });
+    expect(getTopicRoute('', 'tv')).toMatchObject({ messageThreadId: 22 });
+    expect(() => getTopicRoute('NOT_A_TOPIC', 'movie')).toThrow(
+      'Telegram topic route is not configured for NOT_A_TOPIC'
+    );
   });
 });
 

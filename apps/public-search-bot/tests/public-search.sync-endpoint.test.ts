@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+import type { Request, Response } from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createPublicSearchApp } from '../src/app.js';
@@ -6,6 +8,7 @@ import type { PublicSearchConfig } from '../src/config.js';
 import { createPublicSearchDatabase, type PublicSearchDatabase } from '../src/db/database.js';
 import { migratePublicSearchDatabase } from '../src/db/migrate.js';
 import { createPublicSearchStatusTracker } from '../src/status-tracker.js';
+import { createPublicSearchSyncRouter } from '../src/sync.routes.js';
 
 function createMigratedDatabase() {
   const db = createPublicSearchDatabase(':memory:');
@@ -175,17 +178,56 @@ describe('public search sync endpoint', () => {
     const db = createMigratedDatabase();
 
     try {
-      const app = createPublicSearchApp({ db, config: createConfig() });
-      const oversizedInvalidBody = `${' '.repeat(1024 * 1024)}{`;
+      const config = createConfig();
+      const router = createPublicSearchSyncRouter(db, config, createTracker());
+      let bodyConsumed = false;
+      const req = new Readable({
+        read() {
+          bodyConsumed = true;
+          this.push('{');
+          this.push(null);
+        }
+      }) as Request;
+      const response = {
+        body: undefined as unknown,
+        statusCode: 200,
+        headers: {} as Record<string, string>,
+        json(body: unknown) {
+          this.body = body;
+          return this;
+        },
+        set(name: string, value: string) {
+          this.headers[name.toLowerCase()] = value;
+          return this;
+        },
+        status(statusCode: number) {
+          this.statusCode = statusCode;
+          return this;
+        }
+      } as Response & { body: unknown; statusCode: number; headers: Record<string, string> };
 
-      const response = await request(app)
-        .post('/api/sync')
-        .set('Authorization', 'Bearer wrong-token')
-        .set('Content-Type', 'application/json')
-        .send(oversizedInvalidBody);
+      req.method = 'POST';
+      req.url = '/sync';
+      req.headers = {
+        authorization: 'Bearer wrong-token',
+        'content-length': String(1024 * 1024 + 1),
+        'content-type': 'application/json'
+      };
+      req.ip = '127.0.0.1';
+      req.header = (name: string) => req.headers[name.toLowerCase()] as string | undefined;
+      req.resume = () => {
+        bodyConsumed = true;
+        return req;
+      };
 
-      expect(response.status).toBe(401);
+      await new Promise<void>((resolve, reject) => {
+        router.handle(req, response, reject);
+        setImmediate(resolve);
+      });
+
+      expect(response.statusCode).toBe(401);
       expect(response.body).toEqual({ error: 'Unauthorized' });
+      expect(bodyConsumed).toBe(false);
     } finally {
       db.close();
     }

@@ -13,16 +13,6 @@ function extractBearerToken(authorization: string | undefined) {
   return match?.[1];
 }
 
-function afterRequestBodyDiscarded(req: express.Request, callback: () => void) {
-  if (req.readableEnded) {
-    callback();
-    return;
-  }
-
-  req.once('end', callback);
-  req.resume();
-}
-
 export function createPublicSearchSyncRouter(
   db: PublicSearchDatabase,
   config: PublicSearchConfig,
@@ -40,16 +30,12 @@ export function createPublicSearchSyncRouter(
     if (token !== config.publicSearchSyncToken) {
       const badAuthLimit = badAuthRateLimiter.check(clientIp);
       if (!badAuthLimit.allowed) {
-        afterRequestBodyDiscarded(req, () => {
-          res.set('Retry-After', String(Math.max(1, Math.ceil(badAuthLimit.retryAfterMs / 1000))));
-          res.status(429).json({ error: 'Too many unauthorized sync attempts. Please wait and try again.' });
-        });
+        res.set('Retry-After', String(Math.max(1, Math.ceil(badAuthLimit.retryAfterMs / 1000))));
+        res.status(429).json({ error: 'Too many unauthorized sync attempts. Please wait and try again.' });
         return;
       }
 
-      afterRequestBodyDiscarded(req, () => {
-        res.status(401).json({ error: 'Unauthorized' });
-      });
+      res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 

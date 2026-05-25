@@ -34,6 +34,10 @@ export type HandlerDeps = {
 };
 
 const JOINED_STATUSES = new Set(['creator', 'administrator', 'member']);
+const firstStartUsers = new Set<number | string>();
+const waitMessageUsers = new Set<string>();
+const replyLimiterIds = new WeakMap<HandlerDeps['rateLimiter'], number>();
+let nextReplyLimiterId = 1;
 
 export async function handleTelegramUpdate(deps: HandlerDeps, update: TelegramUpdate): Promise<void> {
   if (update.message) {
@@ -54,11 +58,20 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
   }
 
   if (isCommand(text, 'start')) {
+    const userId = message.from?.id;
+    if (!shouldAllowFirstStart(userId) && !(await checkMessageReplyAllowed(deps, message.chat.id, userId))) {
+      return;
+    }
+
     await sendBotMessage(deps, message.chat.id, formatStartMessage(getHandles(deps)));
     return;
   }
 
   if (isCommand(text, 'clear')) {
+    if (!(await checkMessageReplyAllowed(deps, message.chat.id, message.from?.id))) {
+      return;
+    }
+
     await sendBotMessage(deps, message.chat.id, formatClearMessage());
     return;
   }
@@ -67,17 +80,16 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
     const query = getCommandArgument(text);
 
     if (!query) {
+      if (!(await checkMessageReplyAllowed(deps, message.chat.id, message.from?.id))) {
+        return;
+      }
+
       await sendBotMessage(deps, message.chat.id, formatSearchValidationMessage());
       return;
     }
 
     const userId = message.from?.id;
-    const rateLimit = checkRateLimit(deps, userId, 'message');
-    if (!rateLimit.allowed) {
-      await deps.replies.enqueueSendMessage({
-        chatId: message.chat.id,
-        text: formatWaitMessage(rateLimit.retryAfterMs)
-      });
+    if (!(await checkMessageReplyAllowed(deps, message.chat.id, userId))) {
       return;
     }
 
@@ -86,6 +98,10 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
   }
 
   if (text.startsWith('/')) {
+    if (!(await checkMessageReplyAllowed(deps, message.chat.id, message.from?.id))) {
+      return;
+    }
+
     await sendBotMessage(deps, message.chat.id, formatStartMessage(getHandles(deps)));
   }
 }
@@ -119,7 +135,7 @@ async function handleSearch(deps: HandlerDeps, chatId: number, userId: number | 
 
 async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable<TelegramUpdate['callback_query']>) {
   const callbackQueryId = callbackQuery.id;
-  const rateLimit = checkRateLimit(deps, callbackQuery.from.id, 'callback');
+  const rateLimit = checkReplyRateLimit(deps, callbackQuery.from.id, 'callback');
   if (!rateLimit.allowed) {
     await deps.replies.enqueueAnswerCallbackQuery({
       callbackQueryId,
@@ -220,8 +236,62 @@ async function checkMembership(
   return JOINED_STATUSES.has(member.status) ? 'joined' : 'not-joined';
 }
 
-function checkRateLimit(deps: HandlerDeps, userId: number | undefined, interactionType: 'message' | 'callback') {
-  return deps.rateLimiter.check(`${interactionType}:${userId ?? 'unknown'}`);
+function getUserKey(userId: number | undefined) {
+  return userId ?? 'unknown';
+}
+
+function checkReplyRateLimit(deps: HandlerDeps, userId: number | undefined, interactionType: 'message' | 'callback') {
+  return deps.rateLimiter.check(`${interactionType}:${getUserKey(userId)}`);
+}
+
+function shouldAllowFirstStart(userId: number | undefined) {
+  const key = getUserKey(userId);
+  if (firstStartUsers.has(key)) {
+    return false;
+  }
+
+  firstStartUsers.add(key);
+  return true;
+}
+
+async function sendRateLimitMessage(deps: HandlerDeps, chatId: number, userId: number | undefined, retryAfterMs: number) {
+  const key = getWaitMessageKey(deps, userId);
+  if (waitMessageUsers.has(key)) {
+    return;
+  }
+
+  waitMessageUsers.add(key);
+  await deps.replies.enqueueSendMessage({
+    chatId,
+    text: formatWaitMessage(retryAfterMs)
+  });
+}
+
+async function checkMessageReplyAllowed(deps: HandlerDeps, chatId: number, userId: number | undefined) {
+  const rateLimit = checkReplyRateLimit(deps, userId, 'message');
+  if (rateLimit.allowed) {
+    waitMessageUsers.delete(getWaitMessageKey(deps, userId));
+    return true;
+  }
+
+  await sendRateLimitMessage(deps, chatId, userId, rateLimit.retryAfterMs);
+  return false;
+}
+
+function getWaitMessageKey(deps: HandlerDeps, userId: number | undefined) {
+  return `${getReplyLimiterId(deps.rateLimiter)}:message:${getUserKey(userId)}`;
+}
+
+function getReplyLimiterId(rateLimiter: HandlerDeps['rateLimiter']) {
+  const existingId = replyLimiterIds.get(rateLimiter);
+  if (existingId !== undefined) {
+    return existingId;
+  }
+
+  const id = nextReplyLimiterId;
+  nextReplyLimiterId += 1;
+  replyLimiterIds.set(rateLimiter, id);
+  return id;
 }
 
 function isCommand(text: string, command: string) {

@@ -7,6 +7,7 @@ import { MovieForm } from './pages/MovieForm';
 import { MoviesPage } from './pages/MoviesPage';
 import { PublicSearchPage } from './pages/PublicSearchPage';
 import { SeasonPage } from './pages/SeasonPage';
+import { TelegramJobsPage } from './pages/TelegramJobsPage';
 import { TvShowForm } from './pages/TvShowForm';
 import { TvShowsPage } from './pages/TvShowsPage';
 
@@ -27,7 +28,15 @@ type AppActions = {
   setOpenSeasonDialogOnEntry: (open: boolean) => void;
 };
 
-const refreshSafePages = new Set<PageKey>(['dashboard', 'movies', 'add-movie', 'tv-shows', 'add-tv-show', 'public-search']);
+const refreshSafePages = new Set<PageKey>([
+  'dashboard',
+  'movies',
+  'add-movie',
+  'tv-shows',
+  'add-tv-show',
+  'public-search',
+  'telegram-jobs'
+]);
 
 function pageFromHash(hash: string): PageKey {
   const page = hash.replace(/^#\/?/, '') as PageKey;
@@ -106,6 +115,10 @@ function renderPage(page: PageKey, state: AppState, actions: AppActions) {
     return <PublicSearchPage />;
   }
 
+  if (page === 'telegram-jobs') {
+    return <TelegramJobsPage />;
+  }
+
   return (
     <MoviesPage
       onAddMovie={() => {
@@ -165,7 +178,8 @@ export function App() {
               nextPage === 'movies' ||
               nextPage === 'tv-shows' ||
               nextPage === 'add-tv-show' ||
-              nextPage === 'public-search'
+              nextPage === 'public-search' ||
+              nextPage === 'telegram-jobs'
             ) {
               setSelectedSeasonId(null);
             }
@@ -175,7 +189,8 @@ export function App() {
               nextPage === 'add-movie' ||
               nextPage === 'tv-shows' ||
               nextPage === 'add-tv-show' ||
-              nextPage === 'public-search'
+              nextPage === 'public-search' ||
+              nextPage === 'telegram-jobs'
             ) {
               setSelectedTvShowId(null);
             }

@@ -100,6 +100,7 @@ describe('App', () => {
     expect(within(navigation).getByRole('button', { name: /^tv shows$/i })).toBeInTheDocument();
     expect(within(navigation).getByRole('button', { name: /^add tv show$/i })).toBeInTheDocument();
     expect(within(navigation).getByRole('button', { name: /^public search$/i })).toBeInTheDocument();
+    expect(within(navigation).getByRole('button', { name: /^telegram jobs$/i })).toBeInTheDocument();
   });
 
   it('renders the dashboard with local admin counts', async () => {
@@ -241,6 +242,87 @@ describe('App', () => {
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     expect(within(navigation).getByRole('button', { name: /^public search$/i })).toHaveAttribute('aria-current', 'page');
     expect(await screen.findByText('1 movie ready to sync')).toBeInTheDocument();
+  });
+
+  it('renders failed Telegram jobs and retries one', async () => {
+    let failedJobsRequests = 0;
+
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/telegram/jobs/failed') {
+        failedJobsRequests += 1;
+
+        return {
+          ok: true,
+          json: async () => ({
+            jobs: failedJobsRequests > 1
+              ? []
+              : [
+                  {
+                    id: 7,
+                    jobType: 'send',
+                    entityType: 'movie',
+                    entityId: 42,
+                    attempts: 3,
+                    lastError: 'Telegram failed',
+                    updatedAt: '2026-05-26 10:30:00'
+                  }
+                ]
+          })
+        };
+      }
+
+      if (url === '/api/telegram/jobs/7/retry') {
+        return {
+          ok: true,
+          json: async () => ({ ok: true })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^telegram jobs$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^telegram jobs$/i })).toBeInTheDocument();
+    expect(await screen.findByText('Telegram failed')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^retry$/i }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/telegram/jobs/7/retry', expect.objectContaining({ method: 'POST' }))
+    );
+    expect(await screen.findByText('Telegram job queued for retry.')).toBeInTheDocument();
+    expect(await screen.findByText('No failed Telegram jobs.')).toBeInTheDocument();
+    expect(failedJobsRequests).toBe(2);
+  });
+
+  it('keeps the Telegram jobs page after reload through the URL hash', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/telegram/jobs/failed') {
+        return {
+          ok: true,
+          json: async () => ({ jobs: [] })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+    window.history.replaceState(null, '', '/#/telegram-jobs');
+
+    render(<App />);
+
+    expect(screen.getByRole('heading', { name: /^telegram jobs$/i })).toBeInTheDocument();
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    expect(within(navigation).getByRole('button', { name: /^telegram jobs$/i })).toHaveAttribute('aria-current', 'page');
+    expect(await screen.findByText('No failed Telegram jobs.')).toBeInTheDocument();
   });
 
   it('updates the URL hash when navigating between top-level pages', async () => {

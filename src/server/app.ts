@@ -9,6 +9,7 @@ import { createMediaRouter } from './media/media.routes.js';
 import { createPublicSearchRouter } from './public-search/public-search.routes.js';
 import { createAdminApiRequestGuard } from './security/api-request-guard.js';
 import type { PublicSearchStatusServiceOptions } from './public-search/status.service.js';
+import { createTelegramAdminRouter } from './telegram/telegram.admin.routes.js';
 import { createTmdbRouter, type TmdbRouterOptions } from './tmdb/tmdb.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -39,6 +40,7 @@ export function createApp(options: CreateAppOptions = {}) {
   if (options.db && options.config) {
     app.use('/api', createAdminRouter(options.db, options.config));
     app.use('/api', createMediaRouter(options.db));
+    app.use('/api', createTelegramAdminRouter(options.db));
     app.use('/api/tmdb', createTmdbRouter(options.db, options.config, options.tmdbOptions));
     app.use('/api', createPublicSearchRouter(options.db, options.config, options.fetcher, options.publicSearchStatusOptions));
   }

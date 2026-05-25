@@ -47,6 +47,26 @@ type TelegramJobRow = {
   payload: string;
 };
 
+export type FailedTelegramJob = {
+  id: number;
+  jobType: TelegramJobType;
+  entityType: TelegramEntityType;
+  entityId: number;
+  attempts: number;
+  lastError: string | null;
+  updatedAt: string;
+};
+
+type FailedTelegramJobRow = {
+  id: number;
+  job_type: TelegramJobType;
+  entity_type: TelegramEntityType;
+  entity_id: number;
+  attempts: number;
+  last_error: string | null;
+  updated_at: string;
+};
+
 type EntityPostStatusUpdate = {
   messageId?: number | null;
   postStatus: string;
@@ -330,6 +350,42 @@ export function enqueueTelegramJob(
        VALUES (?, ?, ?, ?, 'queued')`
     )
     .run(jobType, entityType, entityId, JSON.stringify(payload));
+}
+
+export function listFailedTelegramJobs(db: AppDatabase): FailedTelegramJob[] {
+  const rows = db
+    .prepare(
+      `SELECT id, job_type, entity_type, entity_id, attempts, last_error, updated_at
+       FROM telegram_jobs
+       WHERE status = 'failed'
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 50`
+    )
+    .all() as FailedTelegramJobRow[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    jobType: row.job_type,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    attempts: row.attempts,
+    lastError: row.last_error,
+    updatedAt: row.updated_at
+  }));
+}
+
+export function retryFailedTelegramJob(db: AppDatabase, id: number) {
+  return db
+    .prepare(
+      `UPDATE telegram_jobs
+       SET status = 'queued',
+           next_run_at = CURRENT_TIMESTAMP,
+           last_error = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+         AND status = 'failed'`
+    )
+    .run(id);
 }
 
 export function upsertActiveTelegramSendJob(

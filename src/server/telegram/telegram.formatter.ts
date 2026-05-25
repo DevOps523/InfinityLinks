@@ -1,5 +1,4 @@
 const TELEGRAM_PHOTO_CAPTION_LIMIT = 1024;
-const GROUP_CHANNEL_HANDLE = '@infinitylinks69';
 const SEARCH_BOT_HANDLE = '@dlhubcatalog_bot';
 
 type NullableValue = number | string | null | undefined;
@@ -121,7 +120,7 @@ function formatLink(link: TelegramLinkInput): string {
 }
 
 function formatFooter(): CaptionBlock {
-  return [`👥 Group Channel Link: ${GROUP_CHANNEL_HANDLE}`, `🔎 Search Movies and Series: ${SEARCH_BOT_HANDLE}`];
+  return [`🔎 Search Movies and Series: ${SEARCH_BOT_HANDLE}`];
 }
 
 function fitCaption(input: {

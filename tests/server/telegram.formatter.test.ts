@@ -36,7 +36,6 @@ describe('telegram caption formatter', () => {
         '🔗 StreamHub - https://example.com/inception',
         '🔗 Mirror - https://mirror.example.com/inception',
         '',
-        '👥 Group Channel Link: @infinitylinks69',
         '🔎 Search Movies and Series: @dlhubcatalog_bot'
       ].join('\n')
     );
@@ -104,7 +103,6 @@ describe('telegram caption formatter', () => {
         '📥 Download Links:',
         '🔗 Archive - https://example.com/chronos/s02e03',
         '',
-        '👥 Group Channel Link: @infinitylinks69',
         '🔎 Search Movies and Series: @dlhubcatalog_bot'
       ].join('\n')
     );
@@ -142,7 +140,6 @@ describe('telegram caption formatter', () => {
     expect(caption).toContain('🎥 Quality: 4K');
     expect(caption).toContain('🔗 Primary - https://example.com/archive/primary');
     expect(caption).toContain('🔗 Backup - https://example.com/archive/backup');
-    expect(caption).toContain('👥 Group Channel Link: @infinitylinks69');
     expect(caption).toContain('🔎 Search Movies and Series: @dlhubcatalog_bot');
     expect(caption).toContain('Opening description');
     expect(caption).toContain('...');
@@ -166,7 +163,6 @@ describe('telegram caption formatter', () => {
         '',
         'Nullable database values should not leak into captions.',
         '',
-        '👥 Group Channel Link: @infinitylinks69',
         '🔎 Search Movies and Series: @dlhubcatalog_bot'
       ].join('\n')
     );

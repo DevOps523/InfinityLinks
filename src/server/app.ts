@@ -6,6 +6,7 @@ import type { AppConfig } from './config.js';
 import type { AppDatabase } from './db/database.js';
 import { createMediaRouter } from './media/media.routes.js';
 import { createPublicSearchRouter } from './public-search/public-search.routes.js';
+import { createAdminApiRequestGuard } from './security/api-request-guard.js';
 import type { PublicSearchStatusServiceOptions } from './public-search/status.service.js';
 import { createTmdbRouter } from './tmdb/tmdb.routes.js';
 
@@ -30,6 +31,8 @@ export function createApp(options: CreateAppOptions = {}) {
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true });
   });
+
+  app.use('/api', createAdminApiRequestGuard());
 
   if (options.db && options.config) {
     app.use('/api', createMediaRouter(options.db));

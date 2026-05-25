@@ -1,29 +1,23 @@
 # Public Search Bot
 
-Standalone VPS app for the public InfinityLinks Telegram search bot. This app serves the public search bot only; it does not run the private InfinityLinks admin UI.
+Standalone VPS app for the public InfinityLinks Telegram search bot. This app runs only the public bot and sync API. The private InfinityLinks admin app stays on your local machine.
+
+The public bot uses Telegram long polling, so you do not need to configure a Telegram webhook. The VPS only needs to expose the HTTP API used by the local admin app for catalog sync and status checks.
 
 ## Requirements
 
-- Node >=22 <24
-- npm
-- A VPS behind a reverse proxy
-- The public bot must be an admin in `@infinitylinks69`
+- Ubuntu or another Linux VPS with SSH access
+- Node.js 22.x and npm
+- Nginx or another reverse proxy
+- HTTPS certificate for the public VPS domain
+- A public Telegram bot token
+- The public bot added as an admin in `@infinitylinks69`
 
-IMPORTANT: deploy with Node 22.x, not Node 24. The standalone package engines require Node >=22 <24, and `better-sqlite3` is native; Node 24 caused local install failure.
+Deploy with Node 22.x, not Node 24. This package requires Node `>=22 <24`, and `better-sqlite3` is a native dependency.
 
-## Quick Local Setup
+## Environment Variables
 
-```bash
-npm install
-cp .env.example .env
-nano .env
-npm run build
-npm start
-```
-
-Before building, configure `.env`. `PUBLIC_BOT_TOKEN`, `PUBLIC_SEARCH_SYNC_TOKEN`, and `PUBLIC_SEARCH_STATUS_TOKEN` are required; keep the status token read-only and separate from the sync token.
-
-## Environment
+Create `apps/public-search-bot/.env` on the VPS from `.env.example`:
 
 ```env
 PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
@@ -35,29 +29,55 @@ PUBLIC_SEARCH_HOST=127.0.0.1
 PUBLIC_SEARCH_PORT=3001
 ```
 
-`PUBLIC_SEARCH_STATUS_TOKEN` is read-only and is used only for status checks. Keep it separate from `PUBLIC_SEARCH_SYNC_TOKEN`, which authorizes catalog sync writes.
-Keep `PUBLIC_SEARCH_HOST=127.0.0.1` for normal VPS deployments so the Node service is reachable only through the local reverse proxy.
-The `data/` folder is included as an empty placeholder; the SQLite database file is created there at runtime and is ignored by git.
+`PUBLIC_BOT_TOKEN` is the Telegram bot token for the public search bot.
+`PUBLIC_SEARCH_SYNC_TOKEN` authorizes local admin app writes to `/api/sync`.
+`PUBLIC_SEARCH_STATUS_TOKEN` is read-only and is used by `/api/status`.
+`PUBLIC_SEARCH_GROUP_HANDLE` is the public group users must join before search results are shown.
 
-## VPS Deployment
+Use different long random values for `PUBLIC_SEARCH_SYNC_TOKEN` and `PUBLIC_SEARCH_STATUS_TOKEN`.
 
-These steps deploy only this standalone app. The private InfinityLinks admin app stays on your local machine.
+## Step By Step VPS Deployment
 
-### 1. Prepare The Standalone Folder Locally
+### 1. Prepare The Public Bot Folder On Your PC
 
-From the full InfinityLinks repo on your PC, package or copy only this folder:
+From the full InfinityLinks repo, deploy only this folder:
 
 ```text
 apps/public-search-bot/
 ```
 
-That folder contains its own `package.json`, lockfile, source, tests, deploy examples, and env example. The VPS does not need the root admin app.
+The VPS does not need the root admin app. The standalone folder contains its own `package.json`, `package-lock.json`, source files, tests, deploy examples, and `.env.example`.
 
-### 2. Install Node 22 On The VPS
+### 2. Upload The Folder To The VPS
 
-Use Node 22.x. Do not use Node 24 for this app.
+Example using `scp` from your PC:
 
-Check the version:
+```bash
+scp -r apps/public-search-bot root@your-vps-ip:/opt/infinitylinks-public-search-bot
+```
+
+Or upload it with your preferred SFTP/SSH tool. On the VPS, the folder should look like this:
+
+```text
+/opt/infinitylinks-public-search-bot/
+  package.json
+  package-lock.json
+  .env.example
+  src/
+  data/
+  deploy/
+```
+
+### 3. Install Node.js 22 And Nginx On The VPS
+
+Use your preferred Node installer. On Ubuntu, install Node 22 from NodeSource, nvm, or another trusted source, then install Nginx:
+
+```bash
+sudo apt update
+sudo apt install -y nginx
+```
+
+Check the installed version:
 
 ```bash
 node -v
@@ -70,27 +90,9 @@ Expected Node version:
 v22.x.x
 ```
 
-### 3. Upload The Bot Folder
+If Node is missing or the version is wrong, install Node 22 before continuing.
 
-Copy the standalone folder to the VPS, for example:
-
-```bash
-/opt/infinitylinks-public-search-bot
-```
-
-After upload, the VPS folder should look like:
-
-```text
-/opt/infinitylinks-public-search-bot/
-  package.json
-  package-lock.json
-  .env.example
-  src/
-  data/
-  deploy/
-```
-
-### 4. Install Dependencies
+### 4. Install App Dependencies
 
 Run these commands on the VPS:
 
@@ -99,35 +101,33 @@ cd /opt/infinitylinks-public-search-bot
 npm ci
 ```
 
-Use `npm ci` for production because it installs from `package-lock.json`.
+Use `npm ci` on the VPS because it installs exactly from `package-lock.json`.
 
-### 5. Configure `.env`
-
-Create the runtime env file:
+### 5. Create The VPS `.env`
 
 ```bash
+cd /opt/infinitylinks-public-search-bot
 cp .env.example .env
 nano .env
 ```
 
-Set these values:
+Set the real values:
 
 ```env
-PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
+PUBLIC_BOT_TOKEN=1234567890:replace_with_real_bot_token
 PUBLIC_SEARCH_SYNC_TOKEN=replace_with_a_long_random_secret
-PUBLIC_SEARCH_STATUS_TOKEN=replace_with_a_different_read_only_secret
+PUBLIC_SEARCH_STATUS_TOKEN=replace_with_a_different_long_random_secret
 PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
 PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
 PUBLIC_SEARCH_HOST=127.0.0.1
 PUBLIC_SEARCH_PORT=3001
 ```
 
-Use a long random value for `PUBLIC_SEARCH_SYNC_TOKEN`. The local admin app must use the same token.
-Use a separate long random value for `PUBLIC_SEARCH_STATUS_TOKEN`. This token is read-only and must not match `PUBLIC_SEARCH_SYNC_TOKEN`.
+Keep `PUBLIC_SEARCH_HOST=127.0.0.1` so the Node app is only reachable through Nginx.
 
 ### 6. Prepare The Data Directory
 
-Keep app files owned by your deploy user or root as appropriate. Only the SQLite data directory needs write access for the systemd service user.
+The SQLite database is created at runtime. Give the systemd service user write access to `data/` only:
 
 ```bash
 sudo install -d -o www-data -g www-data /opt/infinitylinks-public-search-bot/data
@@ -136,17 +136,11 @@ sudo chown -R www-data:www-data /opt/infinitylinks-public-search-bot/data
 
 Do not make source files, `node_modules`, `dist`, or `.env` writable by `www-data`.
 
-### 7. Build And Smoke Test
-
-Build the app:
+### 7. Build And Test The App Manually
 
 ```bash
+cd /opt/infinitylinks-public-search-bot
 npm run build
-```
-
-Start it manually once:
-
-```bash
 npm start
 ```
 
@@ -156,23 +150,34 @@ Expected startup log:
 Public search sync API listening on http://127.0.0.1:3001
 ```
 
-Stop the manual process with `Ctrl+C` before setting up systemd.
+In another SSH terminal, test the local status endpoint:
+
+```bash
+cd /opt/infinitylinks-public-search-bot
+set -a; . ./.env; set +a
+curl -H "Authorization: Bearer $PUBLIC_SEARCH_STATUS_TOKEN" http://127.0.0.1:3001/api/status
+```
+
+Stop the manual app process with `Ctrl+C` before setting up systemd.
 
 ### 8. Install The systemd Service
 
-Copy the example service:
-
 ```bash
-sudo cp deploy/public-search-bot.service.example /etc/systemd/system/public-search-bot.service
-```
-
-Review the paths:
-
-```bash
+sudo cp /opt/infinitylinks-public-search-bot/deploy/public-search-bot.service.example /etc/systemd/system/public-search-bot.service
 sudo nano /etc/systemd/system/public-search-bot.service
 ```
 
-Enable and start it:
+Confirm these values match your VPS path and runtime user:
+
+```ini
+WorkingDirectory=/opt/infinitylinks-public-search-bot
+EnvironmentFile=/opt/infinitylinks-public-search-bot/.env
+ExecStart=/usr/bin/npm start
+User=www-data
+Group=www-data
+```
+
+Enable and start the service:
 
 ```bash
 sudo systemctl daemon-reload
@@ -184,120 +189,138 @@ sudo systemctl status public-search-bot
 View logs:
 
 ```bash
+sudo journalctl -u public-search-bot -n 100 --no-pager
 sudo journalctl -u public-search-bot -f
 ```
 
-From your local machine, you can inspect full VPS logs over SSH:
+### 9. Configure Nginx
+
+Copy the example config:
 
 ```bash
-ssh root@your-vps-ip "journalctl -u public-search-bot -n 100 --no-pager"
-ssh root@your-vps-ip "journalctl -u public-search-bot -f"
-```
-
-### 9. Configure Nginx And HTTPS
-
-Install Nginx and copy the example config:
-
-```bash
-sudo cp deploy/nginx.conf.example /etc/nginx/sites-available/public-search-bot
-sudo ln -s /etc/nginx/sites-available/public-search-bot /etc/nginx/sites-enabled/public-search-bot
-```
-
-Edit the domain and certificate paths:
-
-```bash
+sudo cp /opt/infinitylinks-public-search-bot/deploy/nginx.conf.example /etc/nginx/sites-available/public-search-bot
 sudo nano /etc/nginx/sites-available/public-search-bot
 ```
 
-The proxy target should remain:
+Change every `your-vps.example.com` value to your real domain. The proxy target should stay:
 
 ```nginx
 proxy_pass http://127.0.0.1:3001;
-proxy_set_header X-Forwarded-For $remote_addr;
 ```
 
-Use Certbot or your preferred TLS setup so the public sync URL is HTTPS. The sync endpoint uses a bearer-style token, so do not expose it over plain HTTP.
-
-The Node app authenticates `/api/sync` before parsing JSON, but nginx should still cap sync request bodies as defense in depth. Set `client_max_body_size 5m` on the `/api/sync` location so it matches the Node sync parser limit, and keep overwriting `X-Forwarded-For` with `$remote_addr` so app-level rate limits use the real client IP.
-
-Check and reload Nginx:
+Enable the site:
 
 ```bash
+sudo ln -s /etc/nginx/sites-available/public-search-bot /etc/nginx/sites-enabled/public-search-bot
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### 10. Configure The Local Admin App
+Use Certbot or your preferred TLS setup for HTTPS. On Ubuntu with Certbot, a common flow is:
 
-On your private local InfinityLinks admin app, set:
-
-```env
-PUBLIC_SEARCH_SYNC_URL=https://your-vps.example.com/api/sync
-PUBLIC_SEARCH_SYNC_TOKEN=replace_with_the_same_long_random_secret
-PUBLIC_SEARCH_STATUS_URL=https://your-vps.example.com/api/status
-PUBLIC_SEARCH_STATUS_TOKEN=replace_with_the_different_read_only_secret
-PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d your-vps.example.com
 ```
 
-The local admin app does not need to be public. It sends catalog sync requests to the VPS, and the status URL/token enable only the safe status panel; full logs remain available through `journalctl`.
+Do not expose `/api/sync` over plain HTTP because it uses a bearer token.
 
-### 11. Sync And Test In Telegram
+The provided Nginx example caps `/api/sync` at `5m` and overwrites `X-Forwarded-For` with the real client IP. Keep both settings.
 
-In the local admin app:
+### 10. Test The Public VPS API
 
-1. Open `Public Search`.
-2. Click `Sync Public Search`.
-3. Open the public Telegram bot.
-4. Send `/start`.
-5. Send `/search <Movie or TV Show>`.
-
-The bot should require group membership, then return matching posts and provider buttons.
-
-### 12. Updating The VPS Bot Later
-
-When you change the standalone bot:
+From the VPS:
 
 ```bash
 cd /opt/infinitylinks-public-search-bot
-# replace the app files with the new standalone folder contents
+set -a; . ./.env; set +a
+curl -H "Authorization: Bearer $PUBLIC_SEARCH_STATUS_TOKEN" http://127.0.0.1:3001/api/status
+```
+
+From your PC:
+
+```bash
+curl -H "Authorization: Bearer replace_with_status_token" https://your-vps.example.com/api/status
+```
+
+If the public HTTPS status check works, the local admin app can reach the VPS.
+
+### 11. Configure The Local Admin App
+
+In the root InfinityLinks `.env` on your PC, set:
+
+```env
+PUBLIC_SEARCH_SYNC_URL=https://your-vps.example.com/api/sync
+PUBLIC_SEARCH_SYNC_TOKEN=replace_with_the_same_sync_token_from_the_vps
+PUBLIC_SEARCH_STATUS_URL=https://your-vps.example.com/api/status
+PUBLIC_SEARCH_STATUS_TOKEN=replace_with_the_same_status_token_from_the_vps
+PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
+```
+
+The local admin app only needs the public search sync/status settings and the group handle.
+
+### 12. Sync The Catalog
+
+On your PC:
+
+1. Start the local InfinityLinks admin app.
+2. Open `Public Search`.
+3. Click `Sync Public Search`.
+4. Confirm the sync succeeds.
+
+The VPS bot database starts empty. The public bot will not return results until the first sync completes.
+
+### 13. Test In Telegram
+
+1. Open the public Telegram bot.
+2. Send `/start`.
+3. Join `@infinitylinks69` if prompted.
+4. Send `/search <movie or tv show name>`.
+
+The bot should require group membership, then return matching original posts and provider links.
+
+## Updating The VPS Bot Later
+
+When code changes are ready:
+
+```bash
+cd /opt/infinitylinks-public-search-bot
+# replace the app files with the new apps/public-search-bot folder contents
 npm ci
 npm run build
 sudo systemctl restart public-search-bot
 sudo journalctl -u public-search-bot -n 100 --no-pager
 ```
 
-## Sync From Local Admin
+After restarting, run a status check and sync again from the local admin app if catalog behavior changed.
 
-The local admin app remains private. Configure it with:
-
-```env
-PUBLIC_SEARCH_SYNC_URL=https://your-vps.example.com/api/sync
-PUBLIC_SEARCH_SYNC_TOKEN=replace_with_secret_sync_token
-PUBLIC_SEARCH_STATUS_URL=https://your-vps.example.com/api/status
-PUBLIC_SEARCH_STATUS_TOKEN=replace_with_read_only_status_token
-```
-
-Use the same `PUBLIC_SEARCH_SYNC_TOKEN` value on both the local admin app and this VPS app, then click Sync Public Search in the local admin app.
-Use the same read-only `PUBLIC_SEARCH_STATUS_TOKEN` value on both sides for safe status checks. Do not reuse `PUBLIC_SEARCH_SYNC_TOKEN` as the status token.
-
-Safe status test command:
-
-```bash
-set -a; . ./.env; set +a
-curl -H "Authorization: Bearer $PUBLIC_SEARCH_STATUS_TOKEN" http://127.0.0.1:3001/api/status
-```
-
-## Commands
+## Useful Commands
 
 ```bash
 npm run dev
 npm run build
 npm start
 npm test
+npm run db:migrate
 ```
 
-## Deployment Notes
+## Troubleshooting
 
-Run this VPS app behind a TLS reverse proxy such as nginx. The sync endpoint uses a bearer-style secret token, so serve it over HTTPS; certbot can manage the certificate paths shown in the nginx example. The proxy must overwrite or sanitize `X-Forwarded-For` so clients cannot spoof the originating IP chain.
+If `npm ci` fails, confirm the VPS is using Node 22.x.
 
-Example nginx and systemd unit files are available in `deploy/`.
+If the service starts but Telegram commands do not respond, check:
+
+```bash
+sudo journalctl -u public-search-bot -n 100 --no-pager
+```
+
+If `/api/status` returns unauthorized, confirm the status token in your curl command matches `PUBLIC_SEARCH_STATUS_TOKEN`.
+
+If `Sync Public Search` fails from the local admin app, confirm:
+
+- `PUBLIC_SEARCH_SYNC_URL` points to `https://your-vps.example.com/api/sync`
+- the local sync token matches the VPS `PUBLIC_SEARCH_SYNC_TOKEN`
+- Nginx is forwarding to `127.0.0.1:3001`
+- `sudo systemctl status public-search-bot` shows the service running
+
+If users are always blocked from search, confirm the public bot is an admin in `@infinitylinks69`.

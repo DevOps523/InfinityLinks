@@ -220,6 +220,8 @@ proxy_set_header X-Forwarded-For $remote_addr;
 
 Use Certbot or your preferred TLS setup so the public sync URL is HTTPS. The sync endpoint uses a bearer-style token, so do not expose it over plain HTTP.
 
+The Node app authenticates `/api/sync` before parsing JSON, but nginx should still cap sync request bodies as defense in depth. Set `client_max_body_size 1m` on the `/api/sync` location and keep overwriting `X-Forwarded-For` with `$remote_addr` so app-level rate limits use the real client IP.
+
 Check and reload Nginx:
 
 ```bash

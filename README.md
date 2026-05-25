@@ -17,11 +17,13 @@ InfinityLinks is a local admin app for saving movie and TV streaming links and p
    ```env
    TMDB_API_KEY=replace_with_regenerated_tmdb_api_key
    TELEGRAM_BOT_TOKEN=replace_with_regenerated_telegram_bot_token
-   TELEGRAM_CHANNEL_ID=-1003976784492
+   TELEGRAM_CHANNEL_ID=-1003963665033
    HOST=127.0.0.1
    PORT=3000
    DATABASE_PATH=./data/infinitylinks.sqlite
    ```
+
+   `TELEGRAM_CHANNEL_ID` is the public group chat id. New media posts are routed to configured Telegram topic thread ids based on the Movie or TV Show topic dropdown.
 
 3. Build the frontend assets served by the local Express app:
 
@@ -123,7 +125,7 @@ Use this split when deploying from your private local admin app to the public VP
    ```env
    TMDB_API_KEY=replace_with_your_tmdb_api_key
    TELEGRAM_BOT_TOKEN=replace_with_your_private_channel_posting_bot_token
-   TELEGRAM_CHANNEL_ID=-1003976784492
+   TELEGRAM_CHANNEL_ID=-1003963665033
    HOST=127.0.0.1
    PORT=3000
    DATABASE_PATH=./data/infinitylinks.sqlite

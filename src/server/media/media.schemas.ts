@@ -1,7 +1,10 @@
 import { z } from 'zod';
+import { DEFAULT_MOVIE_TOPIC_KEY, DEFAULT_TV_TOPIC_KEY, MOVIE_TOPIC_KEYS, TV_TOPIC_KEYS } from './topics.js';
 
 export const QualitySchema = z.enum(['SD', 'HD', 'Full HD', '2K', '4K']);
 export const LinkStatusSchema = z.enum(['active', 'inactive']);
+export const MovieTopicKeySchema = z.enum(MOVIE_TOPIC_KEYS);
+export const TvTopicKeySchema = z.enum(TV_TOPIC_KEYS);
 
 export const LinkInputSchema = z.object({
   providerName: z.string().trim().min(1),
@@ -21,10 +24,13 @@ const MediaInputBaseSchema = z.object({
 });
 
 export const MovieInputSchema = MediaInputBaseSchema.extend({
+  topicKey: MovieTopicKeySchema.default(DEFAULT_MOVIE_TOPIC_KEY),
   links: z.array(LinkInputSchema).default([])
 });
 
-export const TvShowInputSchema = MediaInputBaseSchema;
+export const TvShowInputSchema = MediaInputBaseSchema.extend({
+  topicKey: TvTopicKeySchema.default(DEFAULT_TV_TOPIC_KEY)
+});
 
 export const SeasonInputSchema = z.object({
   seasonNumber: z.number().int().positive()

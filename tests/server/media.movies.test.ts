@@ -56,6 +56,7 @@ describe('movie media API', () => {
         posterUrl: 'https://example.com/inception.jpg',
         rating: 8.8,
         quality: 'Full HD',
+        topicKey: 'PINOY_MOVIES',
         description: 'A thief steals corporate secrets through dream-sharing technology.',
         links: [
           {
@@ -82,6 +83,7 @@ describe('movie media API', () => {
       posterUrl: 'https://example.com/inception.jpg',
       rating: 8.8,
       quality: 'Full HD',
+      topicKey: 'PINOY_MOVIES',
       description: 'A thief steals corporate secrets through dream-sharing technology.',
       links: [
         {
@@ -142,6 +144,40 @@ describe('movie media API', () => {
         expect.objectContaining({
           path: 'quality',
           message: expect.any(String)
+        })
+      ])
+    });
+  });
+
+  it('defaults movie topic and rejects TV-only movie topics', async () => {
+    const defaultResponse = await request(app())
+      .post('/api/movies')
+      .send({
+        title: 'Default Topic Movie',
+        quality: 'HD',
+        description: '',
+        links: []
+      })
+      .expect(201);
+
+    expect(defaultResponse.body.movie.topicKey).toBe('FOREIGN_MOVIES');
+
+    const invalidResponse = await request(app())
+      .post('/api/movies')
+      .send({
+        title: 'Invalid Topic Movie',
+        quality: 'HD',
+        topicKey: 'FOREIGN_TV_SERIES',
+        description: '',
+        links: []
+      })
+      .expect(400);
+
+    expect(invalidResponse.body).toMatchObject({
+      error: 'Validation failed',
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          path: 'topicKey'
         })
       ])
     });

@@ -35,6 +35,7 @@ export type Movie = {
   description: string;
   rating?: number;
   quality: string;
+  topicKey: string;
   telegramMessageId?: number;
   postStatus: string;
   createdAt: string;
@@ -59,6 +60,7 @@ export type TvShow = {
   description: string;
   rating?: number;
   quality: string;
+  topicKey: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -132,6 +134,7 @@ export type SeasonPostData = {
   description: string;
   rating?: number;
   quality: string;
+  topicKey: string;
   episodes: Array<Episode & { links: EpisodeLink[] }>;
 };
 
@@ -144,6 +147,7 @@ type MovieRow = {
   description: string;
   rating: number | null;
   quality: string;
+  topic_key: string;
   telegram_message_id: number | null;
   post_status: string;
   created_at: string;
@@ -171,6 +175,7 @@ type TvShowRow = {
   description: string;
   rating: number | null;
   quality: string;
+  topic_key: string;
   created_at: string;
   updated_at: string;
 };
@@ -214,6 +219,7 @@ type SeasonPostRow = SeasonRow & {
   description: string;
   rating: number | null;
   quality: string;
+  topic_key: string;
 };
 
 function mapMovie(row: MovieRow): Movie {
@@ -226,6 +232,7 @@ function mapMovie(row: MovieRow): Movie {
     description: row.description,
     rating: row.rating ?? undefined,
     quality: row.quality,
+    topicKey: row.topic_key,
     telegramMessageId: row.telegram_message_id ?? undefined,
     postStatus: row.post_status,
     createdAt: row.created_at,
@@ -257,6 +264,7 @@ function mapTvShow(row: TvShowRow): TvShow {
     description: row.description,
     rating: row.rating ?? undefined,
     quality: row.quality,
+    topicKey: row.topic_key,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -332,7 +340,7 @@ export function listMovies(db: AppDatabase, filters: MovieFilters = {}) {
   return (
     db
       .prepare(
-        `SELECT id, tmdb_id, title, year, poster_url, description, rating, quality,
+        `SELECT id, tmdb_id, title, year, poster_url, description, rating, quality, topic_key,
                 telegram_message_id, post_status, created_at, updated_at
          FROM movies
          ${whereSql}
@@ -345,7 +353,7 @@ export function listMovies(db: AppDatabase, filters: MovieFilters = {}) {
 export function getMovieWithLinks(db: AppDatabase, id: number): MovieWithLinks | undefined {
   const movie = db
     .prepare(
-      `SELECT id, tmdb_id, title, year, poster_url, description, rating, quality,
+      `SELECT id, tmdb_id, title, year, poster_url, description, rating, quality, topic_key,
               telegram_message_id, post_status, created_at, updated_at
        FROM movies
        WHERE id = ?`
@@ -373,8 +381,8 @@ export function createMovieWithLinks(db: AppDatabase, input: MovieInput): MovieW
   return db.transaction(() => {
     const result = db
       .prepare(
-        `INSERT INTO movies (tmdb_id, title, year, poster_url, description, rating, quality)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO movies (tmdb_id, title, year, poster_url, description, rating, quality, topic_key)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.tmdbId ?? null,
@@ -383,7 +391,8 @@ export function createMovieWithLinks(db: AppDatabase, input: MovieInput): MovieW
         input.posterUrl ? input.posterUrl : null,
         input.description,
         input.rating ?? null,
-        input.quality
+        input.quality,
+        input.topicKey
       );
 
     const movieId = Number(result.lastInsertRowid);
@@ -418,6 +427,7 @@ export function updateMovieWithLinks(db: AppDatabase, id: number, input: MovieIn
            description = ?,
            rating = ?,
            quality = ?,
+           topic_key = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`
     ).run(
@@ -428,6 +438,7 @@ export function updateMovieWithLinks(db: AppDatabase, id: number, input: MovieIn
       input.description,
       input.rating ?? null,
       input.quality,
+      input.topicKey,
       id
     );
 
@@ -472,7 +483,7 @@ export function listTvShows(db: AppDatabase, filters: TvShowFilters = {}) {
   return (
     db
       .prepare(
-        `SELECT id, tmdb_id, title, year, poster_url, description, rating, quality, created_at, updated_at
+        `SELECT id, tmdb_id, title, year, poster_url, description, rating, quality, topic_key, created_at, updated_at
          FROM tv_shows
          ${whereSql}
          ORDER BY created_at DESC, id DESC`
@@ -484,8 +495,8 @@ export function listTvShows(db: AppDatabase, filters: TvShowFilters = {}) {
 export function createTvShow(db: AppDatabase, input: TvShowInput): TvShow {
   const result = db
     .prepare(
-      `INSERT INTO tv_shows (tmdb_id, title, year, poster_url, description, rating, quality)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO tv_shows (tmdb_id, title, year, poster_url, description, rating, quality, topic_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       input.tmdbId ?? null,
@@ -494,7 +505,8 @@ export function createTvShow(db: AppDatabase, input: TvShowInput): TvShow {
       input.posterUrl ? input.posterUrl : null,
       input.description,
       input.rating ?? null,
-      input.quality
+      input.quality,
+      input.topicKey
     );
 
   const tvShow = getTvShow(db, Number(result.lastInsertRowid));
@@ -508,7 +520,7 @@ export function createTvShow(db: AppDatabase, input: TvShowInput): TvShow {
 export function getTvShow(db: AppDatabase, id: number): TvShow | undefined {
   const row = db
     .prepare(
-      `SELECT id, tmdb_id, title, year, poster_url, description, rating, quality, created_at, updated_at
+      `SELECT id, tmdb_id, title, year, poster_url, description, rating, quality, topic_key, created_at, updated_at
        FROM tv_shows
        WHERE id = ?`
     )
@@ -532,6 +544,7 @@ export function updateTvShow(db: AppDatabase, id: number, input: TvShowInput): T
            description = ?,
            rating = ?,
            quality = ?,
+           topic_key = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`
     ).run(
@@ -542,6 +555,7 @@ export function updateTvShow(db: AppDatabase, id: number, input: TvShowInput): T
       input.description,
       input.rating ?? null,
       input.quality,
+      input.topicKey,
       id
     );
 
@@ -1003,7 +1017,8 @@ export function getSeasonPostData(db: AppDatabase, seasonId: number): SeasonPost
               tv_shows.poster_url,
               tv_shows.description,
               tv_shows.rating,
-              tv_shows.quality
+              tv_shows.quality,
+              tv_shows.topic_key
        FROM seasons
        INNER JOIN tv_shows ON tv_shows.id = seasons.tv_show_id
        WHERE seasons.id = ?`
@@ -1026,6 +1041,7 @@ export function getSeasonPostData(db: AppDatabase, seasonId: number): SeasonPost
     description: row.description,
     rating: row.rating ?? undefined,
     quality: row.quality,
+    topicKey: row.topic_key,
     episodes: listEpisodes(db, seasonId)
       .map((episode) => ({
         ...episode,

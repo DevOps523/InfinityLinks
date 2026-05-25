@@ -89,6 +89,7 @@ describe('tv media API', () => {
         posterUrl: 'https://example.com/got.jpg',
         rating: 8.4,
         quality: 'Full HD',
+        topicKey: 'PINOY_TV_SERIES',
         description: 'Noble families fight for control.'
       })
       .expect(201);
@@ -101,10 +102,43 @@ describe('tv media API', () => {
       posterUrl: 'https://example.com/got.jpg',
       rating: 8.4,
       quality: 'Full HD',
+      topicKey: 'PINOY_TV_SERIES',
       description: 'Noble families fight for control.'
     });
     expect(db.prepare('SELECT COUNT(*) AS count FROM tv_shows WHERE id = ?').get(response.body.tvShow.id)).toEqual({
       count: 1
+    });
+  });
+
+  it('defaults TV topic and rejects movie-only TV topics', async () => {
+    const defaultResponse = await request(app())
+      .post('/api/tv-shows')
+      .send({
+        title: 'Default Topic Show',
+        quality: 'HD',
+        description: ''
+      })
+      .expect(201);
+
+    expect(defaultResponse.body.tvShow.topicKey).toBe('FOREIGN_TV_SERIES');
+
+    const invalidResponse = await request(app())
+      .post('/api/tv-shows')
+      .send({
+        title: 'Invalid Topic Show',
+        quality: 'HD',
+        topicKey: 'PINOY_MOVIES',
+        description: ''
+      })
+      .expect(400);
+
+    expect(invalidResponse.body).toMatchObject({
+      error: 'Validation failed',
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          path: 'topicKey'
+        })
+      ])
     });
   });
 

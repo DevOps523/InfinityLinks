@@ -14,7 +14,6 @@ const handles = {
 const membershipVerificationMessage = [
   'We could not verify your channel membership right now. Please join the channel and try again.',
   '',
-  '📢 Channel: @infinitylinks65',
   '👥 Group: @infinitylinks69'
 ].join('\n');
 
@@ -484,7 +483,7 @@ describe('public search bot handlers', () => {
       expect(sentMessages[0].text).toContain('📁 FileMoon 4K - https://providers.example/inception-4k');
       expect(sentMessages[0].text).toContain('📌 Original Post:');
       expect(sentMessages[0].text).toContain('https://t.me/infinitylinks65/101');
-      expect(sentMessages[0].text).toContain('📢 Channel: @infinitylinks65');
+      expect(sentMessages[0].text).not.toContain('📢 Channel: @infinitylinks65');
       expect(sentMessages[0].text).toContain('👥 Group: @infinitylinks69');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
     } finally {
@@ -743,7 +742,7 @@ describe('public search bot handlers', () => {
       expect(sentMessages[0].text).toContain('📁 MixDrop HD - https://providers.example/breaking-s1e2');
       expect(sentMessages[0].text).toContain('📌 Original Post:');
       expect(sentMessages[0].text).toContain('https://t.me/infinitylinks65/301');
-      expect(sentMessages[0].text).toContain('📢 Channel: @infinitylinks65');
+      expect(sentMessages[0].text).not.toContain('📢 Channel: @infinitylinks65');
       expect(sentMessages[0].text).toContain('👥 Group: @infinitylinks69');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
       expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1' }]);

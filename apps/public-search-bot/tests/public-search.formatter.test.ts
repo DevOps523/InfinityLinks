@@ -33,7 +33,6 @@ describe('public search bot formatter', () => {
         '/search inception',
         '/search breaking bad',
         '',
-        '📢 Channel: @infinitylinks65',
         '👥 Group: @infinitylinks69'
       ].join('\n')
     );
@@ -51,7 +50,6 @@ describe('public search bot formatter', () => {
       [
         'We could not verify your channel membership right now. Please join the channel and try again.',
         '',
-        '📢 Channel: @infinitylinks65',
         '👥 Group: @infinitylinks69'
       ].join('\n')
     );
@@ -61,7 +59,6 @@ describe('public search bot formatter', () => {
       [
         'No results found. Try checking the spelling or using fewer words.',
         '',
-        '📢 Channel: @infinitylinks65',
         '👥 Group: @infinitylinks69'
       ].join('\n')
     );
@@ -109,7 +106,6 @@ describe('public search bot formatter', () => {
         '📌 Original Post:',
         'https://t.me/infinitylinks65/101',
         '',
-        '📢 Channel: @infinitylinks65',
         '👥 Group: @infinitylinks69'
       ].join('\n')
     );
@@ -197,7 +193,6 @@ describe('public search bot formatter', () => {
         '',
         '📂 Choose a season:',
         '',
-        '📢 Channel: @infinitylinks65',
         '👥 Group: @infinitylinks69'
       ].join('\n')
     );
@@ -328,7 +323,6 @@ describe('public search bot formatter', () => {
         '📌 Original Post:',
         'https://t.me/infinitylinks65/301',
         '',
-        '📢 Channel: @infinitylinks65',
         '👥 Group: @infinitylinks69'
       ].join('\n')
     );

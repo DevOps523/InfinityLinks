@@ -142,7 +142,7 @@ function formatHandles(handles: PublicBotHandles) {
 }
 
 function formatHandleLines(handles: PublicBotHandles) {
-  return [`📢 Channel: ${handles.channelHandle}`, `👥 Group: ${handles.groupHandle}`];
+  return [`👥 Group: ${handles.groupHandle}`];
 }
 
 function formatProviderLine(provider: PublicProvider) {

@@ -6,8 +6,9 @@ import type { AppConfig } from './config.js';
 import type { AppDatabase } from './db/database.js';
 import { createMediaRouter } from './media/media.routes.js';
 import { createPublicSearchRouter } from './public-search/public-search.routes.js';
+import { createAdminApiRequestGuard } from './security/api-request-guard.js';
 import type { PublicSearchStatusServiceOptions } from './public-search/status.service.js';
-import { createTmdbRouter } from './tmdb/tmdb.routes.js';
+import { createTmdbRouter, type TmdbRouterOptions } from './tmdb/tmdb.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,6 +18,7 @@ type CreateAppOptions = {
   config?: AppConfig;
   fetcher?: typeof fetch;
   publicSearchStatusOptions?: PublicSearchStatusServiceOptions;
+  tmdbOptions?: TmdbRouterOptions;
 };
 
 function formatZodPath(path: Array<number | string>) {
@@ -31,9 +33,11 @@ export function createApp(options: CreateAppOptions = {}) {
     res.json({ ok: true });
   });
 
+  app.use('/api', createAdminApiRequestGuard());
+
   if (options.db && options.config) {
     app.use('/api', createMediaRouter(options.db));
-    app.use('/api/tmdb', createTmdbRouter(options.db, options.config));
+    app.use('/api/tmdb', createTmdbRouter(options.db, options.config, options.tmdbOptions));
     app.use('/api', createPublicSearchRouter(options.db, options.config, options.fetcher, options.publicSearchStatusOptions));
   }
 

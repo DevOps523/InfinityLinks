@@ -1,6 +1,8 @@
 export async function apiJson<T>(url: string, init: RequestInit = {}): Promise<T | undefined> {
   const headers = new Headers(init.headers);
 
+  headers.set('X-InfinityLinks-Request', 'fetch');
+
   if (init.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }

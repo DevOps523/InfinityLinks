@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { replacePublicCatalog } from '../src/catalog.repository.js';
 import { createPublicSearchDatabase, type PublicSearchDatabase } from '../src/db/database.js';
 import { migratePublicSearchDatabase } from '../src/db/migrate.js';
-import { handleTelegramUpdate, type HandlerDeps } from '../src/bot/handlers.js';
+import { createReplyThrottleState, handleTelegramUpdate, type HandlerDeps } from '../src/bot/handlers.js';
 import type { PublicSearchCatalog } from '../src/catalog.schema.js';
 import type { InlineKeyboardMarkup, TelegramUpdate } from '../src/telegram.client.js';
 
@@ -194,6 +194,7 @@ function createDeps(db: PublicSearchDatabase, overrides: Partial<HandlerDeps> = 
     rateLimiter: {
       check: vi.fn(() => ({ allowed: true as const }))
     },
+    replyThrottleState: createReplyThrottleState(),
     ...handles,
     ...overrides
   };
@@ -251,6 +252,190 @@ describe('public search bot handlers', () => {
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0].text).toBe('🧹 Cleared. Search anytime with /search movie or tv show name.');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('allows the first /start response even when the shared reply limiter would block', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const { deps, sentMessages } = createDeps(db, {
+        rateLimiter: {
+          check: vi.fn(() => ({ allowed: false as const, retryAfterMs: 60_000 }))
+        }
+      });
+
+      await handleTelegramUpdate(deps, messageUpdate('/start', { from: { id: 99 } }));
+
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0].text).toContain('Welcome to InfinityLinks Search.');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('uses isolated first-start state per handler dependency object', async () => {
+    const firstDb = createMigratedDatabase();
+    const secondDb = createMigratedDatabase();
+
+    try {
+      const blockedLimiter = () => ({
+        check: vi.fn(() => ({ allowed: false as const, retryAfterMs: 60_000 }))
+      });
+      const first = createDeps(firstDb, { rateLimiter: blockedLimiter() });
+      const second = createDeps(secondDb, { rateLimiter: blockedLimiter() });
+
+      await handleTelegramUpdate(first.deps, messageUpdate('/start', { from: { id: 99 } }));
+      await handleTelegramUpdate(second.deps, messageUpdate('/start', { from: { id: 99 } }));
+
+      expect(first.sentMessages).toHaveLength(1);
+      expect(first.sentMessages[0].text).toContain('Welcome to InfinityLinks Search.');
+      expect(second.sentMessages).toHaveLength(1);
+      expect(second.sentMessages[0].text).toContain('Welcome to InfinityLinks Search.');
+    } finally {
+      firstDb.close();
+      secondDb.close();
+    }
+  });
+
+  it('uses the normal reply limiter for repeated /start commands', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const { deps, sentMessages } = createDeps(db, {
+        rateLimiter: {
+          check: vi.fn(() => ({ allowed: false as const, retryAfterMs: 60_000 }))
+        }
+      });
+
+      await handleTelegramUpdate(deps, messageUpdate('/start', { from: { id: 99 } }));
+      await handleTelegramUpdate(deps, messageUpdate('/start', { from: { id: 99 } }));
+
+      expect(sentMessages).toHaveLength(2);
+      expect(sentMessages[0].text).toContain('Welcome to InfinityLinks Search.');
+      expect(sentMessages[1].text).toBe('Please wait 60 seconds before trying again.');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rate limits repeated low-value message replies before enqueueing them', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const { deps, sentMessages } = createDeps(db, {
+        rateLimiter: {
+          check: vi
+            .fn()
+            .mockReturnValueOnce({ allowed: true as const })
+            .mockReturnValueOnce({ allowed: false as const, retryAfterMs: 30_000 })
+        }
+      });
+
+      await handleTelegramUpdate(deps, messageUpdate('/clear'));
+      await handleTelegramUpdate(deps, messageUpdate('/clear'));
+
+      expect(sentMessages).toHaveLength(2);
+      expect(sentMessages[0].text).toContain('Cleared');
+      expect(sentMessages[1].text).toBe('Please wait 30 seconds before trying again.');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rate limits repeated unknown slash commands without requiring membership', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const { deps, sentMessages } = createDeps(db, {
+        rateLimiter: {
+          check: vi
+            .fn()
+            .mockReturnValueOnce({ allowed: true as const })
+            .mockReturnValueOnce({ allowed: false as const, retryAfterMs: 30_000 })
+        }
+      });
+
+      await handleTelegramUpdate(deps, messageUpdate('/wat'));
+      await handleTelegramUpdate(deps, messageUpdate('/wat'));
+
+      expect(deps.telegram.getChatMember).not.toHaveBeenCalled();
+      expect(sentMessages).toHaveLength(2);
+      expect(sentMessages[0].text).toContain('Welcome to InfinityLinks Search.');
+      expect(sentMessages[1].text).toBe('Please wait 30 seconds before trying again.');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not enqueue repeated wait messages for already throttled users', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const { deps, sentMessages } = createDeps(db, {
+        rateLimiter: {
+          check: vi.fn(() => ({ allowed: false as const, retryAfterMs: 30_000 }))
+        }
+      });
+
+      await handleTelegramUpdate(deps, messageUpdate('/clear'));
+      await handleTelegramUpdate(deps, messageUpdate('/clear'));
+
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0].text).toBe('Please wait 30 seconds before trying again.');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('allows another wait message after the retry window expires', async () => {
+    const db = createMigratedDatabase();
+    let now = 1_000;
+
+    try {
+      const { deps, sentMessages } = createDeps(db, {
+        rateLimiter: {
+          check: vi.fn(() => ({ allowed: false as const, retryAfterMs: 30_000 }))
+        },
+        replyThrottleState: createReplyThrottleState({ now: () => now })
+      });
+
+      await handleTelegramUpdate(deps, messageUpdate('/clear'));
+      await handleTelegramUpdate(deps, messageUpdate('/clear'));
+      now += 30_000;
+      await handleTelegramUpdate(deps, messageUpdate('/clear'));
+
+      expect(sentMessages).toHaveLength(2);
+      expect(sentMessages[0].text).toBe('Please wait 30 seconds before trying again.');
+      expect(sentMessages[1].text).toBe('Please wait 30 seconds before trying again.');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rate limits callback replies before catalog details are loaded', async () => {
+    const db = createMigratedDatabase();
+    seedCatalog(db);
+
+    try {
+      const { deps, callbackAnswers, sentMessages } = createDeps(db, {
+        rateLimiter: {
+          check: vi.fn(() => ({ allowed: false as const, retryAfterMs: 10_000 }))
+        }
+      });
+
+      await handleTelegramUpdate(deps, callbackUpdate('season:30'));
+
+      expect(callbackAnswers).toEqual([
+        {
+          callbackQueryId: 'callback-1',
+          text: 'Please wait 10 seconds before trying again.'
+        }
+      ]);
+      expect(sentMessages).toHaveLength(0);
+      expect(deps.telegram.getChatMember).not.toHaveBeenCalled();
     } finally {
       db.close();
     }

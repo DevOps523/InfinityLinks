@@ -20,22 +20,37 @@ export function createPublicSearchSyncRouter(
 ) {
   const router = express.Router();
   const syncRateLimiter = createFixedWindowRateLimiter({ limit: 5, windowMs: 60_000 });
+  const badAuthRateLimiter = createFixedWindowRateLimiter({ limit: 10, windowMs: 60_000 });
+  const parseSyncJson = express.json({ limit: '5mb' });
 
-  router.post('/sync', (req, res) => {
+  router.post('/sync', (req, res, next) => {
     const token = extractBearerToken(req.header('authorization'));
+    const clientIp = req.ip ?? 'unknown';
+
     if (token !== config.publicSearchSyncToken) {
+      const badAuthLimit = badAuthRateLimiter.check(clientIp);
+      if (!badAuthLimit.allowed) {
+        res.set('Retry-After', String(Math.max(1, Math.ceil(badAuthLimit.retryAfterMs / 1000))));
+        res.status(429).json({ error: 'Too many unauthorized sync attempts. Please wait and try again.' });
+        return;
+      }
+
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
-    const rateLimit = syncRateLimiter.check(`${req.ip}:${token.slice(0, 8)}`);
-    if (!rateLimit.allowed) {
-      res.set('Retry-After', String(Math.max(1, Math.ceil(rateLimit.retryAfterMs / 1000))));
-      res.status(429).json({ error: 'Too many sync attempts. Please wait and try again.' });
-      return;
-    }
-
+    parseSyncJson(req, res, next);
+  }, (req, res) => {
     try {
+      const token = extractBearerToken(req.header('authorization'));
+      const clientIp = req.ip ?? 'unknown';
+      const rateLimit = syncRateLimiter.check(`${clientIp}:${token?.slice(0, 8) ?? 'unknown'}`);
+      if (!rateLimit.allowed) {
+        res.set('Retry-After', String(Math.max(1, Math.ceil(rateLimit.retryAfterMs / 1000))));
+        res.status(429).json({ error: 'Too many sync attempts. Please wait and try again.' });
+        return;
+      }
+
       const catalog = PublicSearchCatalogSchema.parse(req.body);
       const counts = replacePublicCatalog(db, catalog);
 

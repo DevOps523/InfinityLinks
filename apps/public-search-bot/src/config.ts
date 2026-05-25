@@ -20,7 +20,6 @@ const PublicSearchEnvSchema = z.object({
   PUBLIC_BOT_TOKEN: requiredSecret('PUBLIC_BOT_TOKEN'),
   PUBLIC_SEARCH_SYNC_TOKEN: requiredSecret('PUBLIC_SEARCH_SYNC_TOKEN'),
   PUBLIC_SEARCH_STATUS_TOKEN: requiredSecret('PUBLIC_SEARCH_STATUS_TOKEN'),
-  PUBLIC_SEARCH_CHANNEL_HANDLE: trimmedStringWithDefault('@infinitylinks65'),
   PUBLIC_SEARCH_GROUP_HANDLE: trimmedStringWithDefault('@infinitylinks69'),
   PUBLIC_SEARCH_DATABASE_PATH: trimmedStringWithDefault('./data/public-search.sqlite'),
   PUBLIC_SEARCH_HOST: trimmedStringWithDefault('127.0.0.1'),
@@ -34,7 +33,6 @@ export type PublicSearchConfig = {
   publicBotToken: string;
   publicSearchSyncToken: string;
   publicSearchStatusToken: string;
-  publicSearchChannelHandle: string;
   publicSearchGroupHandle: string;
   publicSearchDatabasePath: string;
   publicSearchHost: string;
@@ -48,7 +46,6 @@ export function loadPublicSearchConfig(env: NodeJS.ProcessEnv): PublicSearchConf
     publicBotToken: parsed.PUBLIC_BOT_TOKEN,
     publicSearchSyncToken: parsed.PUBLIC_SEARCH_SYNC_TOKEN,
     publicSearchStatusToken: parsed.PUBLIC_SEARCH_STATUS_TOKEN,
-    publicSearchChannelHandle: parsed.PUBLIC_SEARCH_CHANNEL_HANDLE,
     publicSearchGroupHandle: parsed.PUBLIC_SEARCH_GROUP_HANDLE,
     publicSearchDatabasePath: parsed.PUBLIC_SEARCH_DATABASE_PATH,
     publicSearchHost: parsed.PUBLIC_SEARCH_HOST,

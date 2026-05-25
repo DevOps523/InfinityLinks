@@ -13,7 +13,6 @@ const config: AppConfig = {
   host: '127.0.0.1',
   port: 0,
   databasePath: ':memory:',
-  publicSearchChannelHandle: '@infinitylinks65',
   publicSearchGroupHandle: '@infinitylinks69'
 };
 

@@ -9,7 +9,6 @@ export const MAX_INLINE_KEYBOARD_BUTTONS = 40;
 const TV_SEASON_BUTTONS_PER_ROW = 3;
 
 export type PublicBotHandles = {
-  channelHandle: string;
   groupHandle: string;
 };
 
@@ -21,7 +20,7 @@ export type PublicBotMessage = {
 export function formatStartMessage(handles: PublicBotHandles): PublicBotMessage {
   return {
     text: [
-      '🎬 Welcome to InfinityLinks Search.',
+      '🎬 Welcome to DownloadHub Search.',
       '',
       '🔎 Use:',
       '/search movie or tv show name',
@@ -50,7 +49,7 @@ export function formatClearMessage(): PublicBotMessage {
 export function formatJoinRequiredMessage(handles: PublicBotHandles): PublicBotMessage {
   return {
     text: [
-      'We could not verify your channel membership right now. Please join the channel and try again.',
+      'We could not verify your group membership right now. Please join the group and try again.',
       '',
       formatHandles(handles)
     ].join('\n')

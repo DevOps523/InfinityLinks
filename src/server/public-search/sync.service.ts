@@ -39,7 +39,7 @@ export async function syncPublicSearchCatalog(
   }
 
   const catalog = buildPublicSearchCatalog(db, {
-    channelHandle: config.publicSearchChannelHandle,
+    channelHandle: config.publicSearchGroupHandle,
     groupHandle: config.publicSearchGroupHandle
   });
   const catalogHash = createPublicSearchCatalogFingerprint(catalog);
@@ -81,7 +81,7 @@ export async function syncPublicSearchCatalog(
 
 export function getPublicSearchSyncStatus(db: AppDatabase, config: AppConfig): PublicSearchSyncStatus {
   const catalog = buildPublicSearchCatalog(db, {
-    channelHandle: config.publicSearchChannelHandle,
+    channelHandle: config.publicSearchGroupHandle,
     groupHandle: config.publicSearchGroupHandle
   });
   const catalogHash = createPublicSearchCatalogFingerprint(catalog);

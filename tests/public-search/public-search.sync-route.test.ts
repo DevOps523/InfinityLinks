@@ -12,7 +12,6 @@ const baseConfig: AppConfig = {
   host: '127.0.0.1',
   port: 0,
   databasePath: ':memory:',
-  publicSearchChannelHandle: '@infinitylinks65',
   publicSearchGroupHandle: '@infinitylinks69'
 };
 
@@ -108,7 +107,7 @@ describe('public search sync route', () => {
     expect(headers.get('authorization')).toBe('Bearer secret-token');
     expect(headers.get('content-type')).toBe('application/json');
     expect(JSON.parse(init?.body as string)).toMatchObject({
-      channelHandle: '@infinitylinks65',
+      channelHandle: '@infinitylinks69',
       groupHandle: '@infinitylinks69',
       movies: [
         {

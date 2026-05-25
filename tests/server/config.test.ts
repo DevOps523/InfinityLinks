@@ -23,7 +23,6 @@ describe('loadConfig', () => {
       publicSearchSyncToken: undefined,
       publicSearchStatusUrl: undefined,
       publicSearchStatusToken: undefined,
-      publicSearchChannelHandle: '@infinitylinks65',
       publicSearchGroupHandle: '@infinitylinks69'
     });
   });
@@ -36,13 +35,11 @@ describe('loadConfig', () => {
         TELEGRAM_CHANNEL_ID: '@channel',
         PUBLIC_SEARCH_SYNC_URL: 'https://search.example.com/api/sync',
         PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
-        PUBLIC_SEARCH_CHANNEL_HANDLE: '@infinitylinks65',
         PUBLIC_SEARCH_GROUP_HANDLE: '@infinitylinks69'
       })
     ).toMatchObject({
       publicSearchSyncUrl: 'https://search.example.com/api/sync',
       publicSearchSyncToken: 'sync-token',
-      publicSearchChannelHandle: '@infinitylinks65',
       publicSearchGroupHandle: '@infinitylinks69'
     });
   });
@@ -55,13 +52,11 @@ describe('loadConfig', () => {
         TELEGRAM_CHANNEL_ID: '@channel',
         PUBLIC_SEARCH_SYNC_URL: '   ',
         PUBLIC_SEARCH_SYNC_TOKEN: '',
-        PUBLIC_SEARCH_CHANNEL_HANDLE: '   ',
         PUBLIC_SEARCH_GROUP_HANDLE: ''
       })
     ).toMatchObject({
       publicSearchSyncUrl: undefined,
       publicSearchSyncToken: undefined,
-      publicSearchChannelHandle: '@infinitylinks65',
       publicSearchGroupHandle: '@infinitylinks69'
     });
   });

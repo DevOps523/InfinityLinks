@@ -48,7 +48,6 @@ async function main() {
             replies,
             rateLimiter,
             replyThrottleState,
-            channelHandle: config.publicSearchChannelHandle,
             groupHandle: config.publicSearchGroupHandle
           },
           update

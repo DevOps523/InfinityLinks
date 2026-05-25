@@ -1,6 +1,6 @@
 # InfinityLinks
 
-InfinityLinks is a local admin app for saving movie and TV streaming links and publishing MVP updates to a Telegram channel.
+InfinityLinks is a local admin app for saving movie and TV streaming links and publishing MVP updates to a Telegram group.
 
 ## Local Setup
 
@@ -43,11 +43,11 @@ InfinityLinks is a local admin app for saving movie and TV streaming links and p
 
 The InfinityLinks admin app should stay private on your local machine. For VPS deployment, use the standalone public search bot app in `apps/public-search-bot/`; the VPS does not need the full private admin app.
 
-Public Telegram users interact with the bot by sending `/start`, then `/search <Movie or TV Show>`. Before search results are shown, the bot checks whether the user joined [@infinitylinks65](https://t.me/infinitylinks65). If the user has not joined, the bot tells them to join the channel and come back before using `/search`. Add the public bot as an admin in [@infinitylinks65](https://t.me/infinitylinks65) so it can check membership.
+Public Telegram users interact with the bot by sending `/start`, then `/search <Movie or TV Show>`. Before search results are shown, the bot checks whether the user joined [@infinitylinks69](https://t.me/infinitylinks69). If the user has not joined, the bot tells them to join the group and come back before using `/search`. Add the public bot as an admin in [@infinitylinks69](https://t.me/infinitylinks69) so it can check membership.
 
-Search results link back to the original Telegram channel posts without exposing poster information. Movies show active provider links as inline URL buttons. TV results first show season selection buttons; after a season is selected, the bot shows that season's episodes with provider buttons for each episode.
+Search results link back to the original Telegram group posts without exposing poster information. Movies show active provider links as inline URL buttons. TV results first show season selection buttons; after a season is selected, the bot shows that season's episodes with provider buttons for each episode.
 
-Only active links and content that has already been posted to the Telegram channel are exported to the public search catalog. Bot replies also include active channel and group buttons for [@infinitylinks65](https://t.me/infinitylinks65) and [@infinitylinks69](https://t.me/infinitylinks69).
+Only active links and content that has already been posted to the Telegram group are exported to the public search catalog. Bot replies also include the active group link for [@infinitylinks69](https://t.me/infinitylinks69).
 
 Sync is triggered from the local admin app on the `Public Search` page. The `Sync Public Search` button exports the current public catalog from the private local database and posts it to the VPS sync endpoint. In the local admin app's `.env`, set `PUBLIC_SEARCH_SYNC_URL` to the VPS `/api/sync` URL and use the same `PUBLIC_SEARCH_SYNC_TOKEN` value that the VPS service uses.
 
@@ -82,14 +82,13 @@ Use this split when deploying from your private local admin app to the public VP
    PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
    PUBLIC_SEARCH_SYNC_TOKEN=use_the_same_long_random_secret_as_local
    PUBLIC_SEARCH_STATUS_TOKEN=replace_with_read_only_status_token
-   PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
    PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
    PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
    PUBLIC_SEARCH_HOST=127.0.0.1
    PUBLIC_SEARCH_PORT=3001
    ```
 
-   `PUBLIC_BOT_TOKEN` is the token for the public search bot. Add that bot as an admin in [@infinitylinks65](https://t.me/infinitylinks65) so it can check whether users joined the channel.
+   `PUBLIC_BOT_TOKEN` is the token for the public search bot. Add that bot as an admin in [@infinitylinks69](https://t.me/infinitylinks69) so it can check whether users joined the group.
    `PUBLIC_SEARCH_STATUS_TOKEN` is a read-only token for status checks. Keep it separate from `PUBLIC_SEARCH_SYNC_TOKEN`, which authorizes catalog sync writes.
    Keep `PUBLIC_SEARCH_HOST=127.0.0.1` so the Node service is reachable only through the VPS reverse proxy.
 
@@ -124,7 +123,7 @@ Use this split when deploying from your private local admin app to the public VP
 
    ```env
    TMDB_API_KEY=replace_with_your_tmdb_api_key
-   TELEGRAM_BOT_TOKEN=replace_with_your_private_channel_posting_bot_token
+   TELEGRAM_BOT_TOKEN=replace_with_your_private_group_posting_bot_token
    TELEGRAM_CHANNEL_ID=-1003963665033
    HOST=127.0.0.1
    PORT=3000
@@ -134,7 +133,6 @@ Use this split when deploying from your private local admin app to the public VP
    PUBLIC_SEARCH_SYNC_TOKEN=use_the_same_long_random_secret_as_vps
    PUBLIC_SEARCH_STATUS_URL=https://your-vps-domain.example/api/status
    PUBLIC_SEARCH_STATUS_TOKEN=replace-with-read-only-status-token
-   PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
    PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
    ```
 
@@ -147,7 +145,7 @@ Use this split when deploying from your private local admin app to the public VP
    npm run dev
    ```
 
-   Open [http://127.0.0.1:3000](http://127.0.0.1:3000), go to `Public Search`, and click `Sync Public Search`. The local app exports only active links from content already posted to the Telegram channel, then sends that catalog to the VPS `/api/sync` endpoint.
+   Open [http://127.0.0.1:3000](http://127.0.0.1:3000), go to `Public Search`, and click `Sync Public Search`. The local app exports only active links from content already posted to the Telegram group, then sends that catalog to the VPS `/api/sync` endpoint.
 
 7. Quick checks for the standalone VPS app:
 
@@ -184,11 +182,11 @@ After resetting the public search bot database, open the local admin app and cli
 
 ## MVP Scope
 
-- Telegram channel posting only.
+- Telegram group posting only.
 - No login, roles, or user management.
 - Movies post to Telegram after saving with at least one link.
 - TV shows post one Telegram message per season after the first linked episode in that season is saved.
-- Telegram buttons are not used by the local channel-posting MVP.
+- Telegram buttons are not used by the local group-posting MVP.
 
 ## Verification
 

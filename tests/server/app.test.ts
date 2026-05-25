@@ -57,7 +57,6 @@ const guardConfig: AppConfig = {
   databasePath: ':memory:',
   publicSearchSyncUrl: 'https://search.example.com/api/sync',
   publicSearchSyncToken: 'secret-token',
-  publicSearchChannelHandle: '@infinitylinks65',
   publicSearchGroupHandle: '@infinitylinks69'
 };
 

@@ -37,7 +37,6 @@ export type HandlerDeps = {
   rateLimiter: {
     check(key: string): RateLimitResult;
   };
-  channelHandle: string;
   groupHandle: string;
   replyThrottleState?: ReplyThrottleState;
 };
@@ -206,7 +205,7 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
   if (membership === 'not-joined') {
     await deps.replies.enqueueAnswerCallbackQuery({
       callbackQueryId,
-      text: 'Please join the channel first.'
+      text: 'Please join the group first.'
     });
     if (chatId !== undefined) {
       await sendBotMessage(deps, chatId, formatJoinRequiredMessage(getHandles(deps)));
@@ -272,7 +271,7 @@ async function checkMembership(
   let member: TelegramChatMember;
   try {
     member = await deps.telegram.getChatMember({
-      chatId: deps.channelHandle,
+      chatId: deps.groupHandle,
       userId
     });
   } catch {
@@ -347,7 +346,6 @@ function getCommandArgument(text: string) {
 
 function getHandles(deps: HandlerDeps) {
   return {
-    channelHandle: deps.channelHandle,
     groupHandle: deps.groupHandle
   };
 }

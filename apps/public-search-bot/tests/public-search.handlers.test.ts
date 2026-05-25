@@ -7,12 +7,11 @@ import type { PublicSearchCatalog } from '../src/catalog.schema.js';
 import type { InlineKeyboardMarkup, TelegramUpdate } from '../src/telegram.client.js';
 
 const handles = {
-  channelHandle: '@infinitylinks65',
   groupHandle: '@infinitylinks69'
 };
 
 const membershipVerificationMessage = [
-  'We could not verify your channel membership right now. Please join the channel and try again.',
+  'We could not verify your group membership right now. Please join the group and try again.',
   '',
   '👥 Group: @infinitylinks69'
 ].join('\n');
@@ -44,7 +43,6 @@ function createMigratedDatabase() {
 function seedCatalog(db: PublicSearchDatabase) {
   replacePublicCatalog(db, {
     generatedAt: '2026-05-24T00:00:00.000Z',
-    channelHandle: handles.channelHandle,
     groupHandle: handles.groupHandle,
     movies: [
       {
@@ -212,7 +210,7 @@ describe('public search bot handlers', () => {
 
       expect(deps.telegram.getChatMember).not.toHaveBeenCalled();
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toContain('Welcome to InfinityLinks Search.');
+      expect(sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
       expect(sentMessages[0].text).toContain('/search movie or tv show name');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
     } finally {
@@ -269,7 +267,7 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(deps, messageUpdate('/start', { from: { id: 99 } }));
 
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toContain('Welcome to InfinityLinks Search.');
+      expect(sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
     } finally {
       db.close();
     }
@@ -290,9 +288,9 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(second.deps, messageUpdate('/start', { from: { id: 99 } }));
 
       expect(first.sentMessages).toHaveLength(1);
-      expect(first.sentMessages[0].text).toContain('Welcome to InfinityLinks Search.');
+      expect(first.sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
       expect(second.sentMessages).toHaveLength(1);
-      expect(second.sentMessages[0].text).toContain('Welcome to InfinityLinks Search.');
+      expect(second.sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
     } finally {
       firstDb.close();
       secondDb.close();
@@ -313,7 +311,7 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(deps, messageUpdate('/start', { from: { id: 99 } }));
 
       expect(sentMessages).toHaveLength(2);
-      expect(sentMessages[0].text).toContain('Welcome to InfinityLinks Search.');
+      expect(sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
       expect(sentMessages[1].text).toBe('Please wait 60 seconds before trying again.');
     } finally {
       db.close();
@@ -362,7 +360,7 @@ describe('public search bot handlers', () => {
 
       expect(deps.telegram.getChatMember).not.toHaveBeenCalled();
       expect(sentMessages).toHaveLength(2);
-      expect(sentMessages[0].text).toContain('Welcome to InfinityLinks Search.');
+      expect(sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
       expect(sentMessages[1].text).toBe('Please wait 30 seconds before trying again.');
     } finally {
       db.close();
@@ -440,7 +438,7 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('blocks /search when the user has left the channel', async () => {
+  it('blocks /search when the user has left the group', async () => {
     const db = createMigratedDatabase();
 
     try {
@@ -454,7 +452,7 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(deps, messageUpdate('/search inception'));
 
       expect(deps.telegram.getChatMember).toHaveBeenCalledWith({
-        chatId: '@infinitylinks65',
+        chatId: '@infinitylinks69',
         userId: 42
       });
       expect(sentMessages).toHaveLength(1);
@@ -466,7 +464,7 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('returns movie provider links as text for a channel member', async () => {
+  it('returns movie provider links as text for a group member', async () => {
     const db = createMigratedDatabase();
 
     try {
@@ -483,7 +481,7 @@ describe('public search bot handlers', () => {
       expect(sentMessages[0].text).toContain('📁 FileMoon 4K - https://providers.example/inception-4k');
       expect(sentMessages[0].text).toContain('📌 Original Post:');
       expect(sentMessages[0].text).toContain('https://t.me/infinitylinks65/101');
-      expect(sentMessages[0].text).not.toContain('📢 Channel: @infinitylinks65');
+      expect(sentMessages[0].text).not.toContain('📢 Channel:');
       expect(sentMessages[0].text).toContain('👥 Group: @infinitylinks69');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
     } finally {
@@ -491,7 +489,7 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('returns TV season callback buttons for a channel member', async () => {
+  it('returns TV season callback buttons for a group member', async () => {
     const db = createMigratedDatabase();
 
     try {
@@ -710,14 +708,14 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(deps, callbackUpdate('season:30'));
 
       expect(deps.telegram.getChatMember).toHaveBeenCalledWith({
-        chatId: '@infinitylinks65',
+        chatId: '@infinitylinks69',
         userId: 42
       });
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0].text).toBe(membershipVerificationMessage);
       expect(sentMessages[0].text).not.toContain('providers.example');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
-      expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'Please join the channel first.' }]);
+      expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'Please join the group first.' }]);
     } finally {
       db.close();
     }
@@ -742,7 +740,7 @@ describe('public search bot handlers', () => {
       expect(sentMessages[0].text).toContain('📁 MixDrop HD - https://providers.example/breaking-s1e2');
       expect(sentMessages[0].text).toContain('📌 Original Post:');
       expect(sentMessages[0].text).toContain('https://t.me/infinitylinks65/301');
-      expect(sentMessages[0].text).not.toContain('📢 Channel: @infinitylinks65');
+      expect(sentMessages[0].text).not.toContain('📢 Channel:');
       expect(sentMessages[0].text).toContain('👥 Group: @infinitylinks69');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
       expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1' }]);

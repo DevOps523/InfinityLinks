@@ -34,7 +34,6 @@ const EnvSchema = z.object({
   PUBLIC_SEARCH_SYNC_TOKEN: OptionalTrimmedString,
   PUBLIC_SEARCH_STATUS_URL: OptionalTrimmedString,
   PUBLIC_SEARCH_STATUS_TOKEN: OptionalTrimmedString,
-  PUBLIC_SEARCH_CHANNEL_HANDLE: trimmedStringWithDefault('@infinitylinks65'),
   PUBLIC_SEARCH_GROUP_HANDLE: trimmedStringWithDefault('@infinitylinks69')
 }).refine(
   (env) =>
@@ -58,7 +57,6 @@ export type AppConfig = {
   publicSearchSyncToken?: string;
   publicSearchStatusUrl?: string;
   publicSearchStatusToken?: string;
-  publicSearchChannelHandle: string;
   publicSearchGroupHandle: string;
 };
 
@@ -76,7 +74,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     publicSearchSyncToken: parsed.PUBLIC_SEARCH_SYNC_TOKEN,
     publicSearchStatusUrl: parsed.PUBLIC_SEARCH_STATUS_URL,
     publicSearchStatusToken: parsed.PUBLIC_SEARCH_STATUS_TOKEN,
-    publicSearchChannelHandle: parsed.PUBLIC_SEARCH_CHANNEL_HANDLE,
     publicSearchGroupHandle: parsed.PUBLIC_SEARCH_GROUP_HANDLE
   };
 }

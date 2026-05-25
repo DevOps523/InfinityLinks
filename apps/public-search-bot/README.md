@@ -7,7 +7,7 @@ Standalone VPS app for the public InfinityLinks Telegram search bot. This app se
 - Node >=22 <24
 - npm
 - A VPS behind a reverse proxy
-- The public bot must be an admin in `@infinitylinks65`
+- The public bot must be an admin in `@infinitylinks69`
 
 IMPORTANT: deploy with Node 22.x, not Node 24. The standalone package engines require Node >=22 <24, and `better-sqlite3` is native; Node 24 caused local install failure.
 
@@ -29,7 +29,6 @@ Before building, configure `.env`. `PUBLIC_BOT_TOKEN`, `PUBLIC_SEARCH_SYNC_TOKEN
 PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
 PUBLIC_SEARCH_SYNC_TOKEN=replace_with_secret_sync_token
 PUBLIC_SEARCH_STATUS_TOKEN=replace_with_read_only_status_token
-PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
 PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
 PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
 PUBLIC_SEARCH_HOST=127.0.0.1
@@ -117,7 +116,6 @@ Set these values:
 PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
 PUBLIC_SEARCH_SYNC_TOKEN=replace_with_a_long_random_secret
 PUBLIC_SEARCH_STATUS_TOKEN=replace_with_a_different_read_only_secret
-PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
 PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
 PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
 PUBLIC_SEARCH_HOST=127.0.0.1
@@ -238,7 +236,6 @@ PUBLIC_SEARCH_SYNC_URL=https://your-vps.example.com/api/sync
 PUBLIC_SEARCH_SYNC_TOKEN=replace_with_the_same_long_random_secret
 PUBLIC_SEARCH_STATUS_URL=https://your-vps.example.com/api/status
 PUBLIC_SEARCH_STATUS_TOKEN=replace_with_the_different_read_only_secret
-PUBLIC_SEARCH_CHANNEL_HANDLE=@infinitylinks65
 PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
 ```
 
@@ -254,7 +251,7 @@ In the local admin app:
 4. Send `/start`.
 5. Send `/search <Movie or TV Show>`.
 
-The bot should require channel membership, then return matching posts and provider buttons.
+The bot should require group membership, then return matching posts and provider buttons.
 
 ### 12. Updating The VPS Bot Later
 

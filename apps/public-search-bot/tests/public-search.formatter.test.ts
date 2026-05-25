@@ -16,7 +16,6 @@ import {
 import { decodeSeasonCallback, encodeSeasonCallback } from '../src/bot/callback-data.js';
 
 const handles = {
-  channelHandle: '@infinitylinks65',
   groupHandle: '@infinitylinks69'
 };
 
@@ -24,7 +23,7 @@ describe('public search bot formatter', () => {
   it('formats command and status messages', () => {
     expect(formatStartMessage(handles).text).toBe(
       [
-        '🎬 Welcome to InfinityLinks Search.',
+        '🎬 Welcome to DownloadHub Search.',
         '',
         '🔎 Use:',
         '/search movie or tv show name',
@@ -48,7 +47,7 @@ describe('public search bot formatter', () => {
 
     expect(formatJoinRequiredMessage(handles).text).toBe(
       [
-        'We could not verify your channel membership right now. Please join the channel and try again.',
+        'We could not verify your group membership right now. Please join the group and try again.',
         '',
         '👥 Group: @infinitylinks69'
       ].join('\n')

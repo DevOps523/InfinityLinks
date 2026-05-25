@@ -5,11 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server/index.ts",
-    "public-search:dev": "tsx watch src/public-search/index.ts",
-    "build": "tsc --noEmit && tsc -p tsconfig.server.json && tsc -p tsconfig.public-search.json && vite build",
-    "build:public-search": "tsc -p tsconfig.public-search.json",
+    "build": "tsc --noEmit && tsc -p tsconfig.server.json && vite build",
     "start": "node dist/server/index.js",
-    "public-search:start": "node dist/public-search/index.js",
     "standalone-public-search:install": "npm --prefix apps/public-search-bot install",
     "standalone-public-search:test": "npm --prefix apps/public-search-bot test",
     "standalone-public-search:build": "npm --prefix apps/public-search-bot run build",

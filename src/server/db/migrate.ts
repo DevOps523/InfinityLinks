@@ -25,7 +25,11 @@ export function resolveSchemaPath() {
 export function migrate(db: AppDatabase) {
   const schema = fs.readFileSync(resolveSchemaPath(), 'utf8');
   db.exec(schema);
+  ensureColumn(db, 'movies', 'topic_key', "TEXT NOT NULL DEFAULT 'FOREIGN_MOVIES' CHECK (topic_key IN ('FOREIGN_MOVIES', 'PINOY_MOVIES', 'ANIME', 'VIVAMAX'))");
+  ensureColumn(db, 'tv_shows', 'topic_key', "TEXT NOT NULL DEFAULT 'FOREIGN_TV_SERIES' CHECK (topic_key IN ('FOREIGN_TV_SERIES', 'PINOY_TV_SERIES', 'ANIME', 'VIVAMAX'))");
   ensureColumn(db, 'seasons', 'needs_repost', 'INTEGER NOT NULL DEFAULT 0 CHECK (needs_repost IN (0, 1))');
+  db.prepare("UPDATE movies SET topic_key = 'FOREIGN_MOVIES' WHERE topic_key IS NULL OR TRIM(topic_key) = ''").run();
+  db.prepare("UPDATE tv_shows SET topic_key = 'FOREIGN_TV_SERIES' WHERE topic_key IS NULL OR TRIM(topic_key) = ''").run();
 }
 
 function ensureColumn(db: AppDatabase, tableName: string, columnName: string, columnDefinition: string) {

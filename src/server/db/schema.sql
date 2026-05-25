@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS movies (
   description TEXT NOT NULL DEFAULT '',
   rating REAL,
   quality TEXT NOT NULL CHECK (quality IN ('SD', 'HD', 'Full HD', '2K', '4K')),
+  topic_key TEXT NOT NULL DEFAULT 'FOREIGN_MOVIES' CHECK (topic_key IN ('FOREIGN_MOVIES', 'PINOY_MOVIES', 'ANIME', 'VIVAMAX')),
   telegram_message_id INTEGER,
   post_status TEXT NOT NULL DEFAULT 'pending' CHECK (post_status IN ('pending', 'posted', 'failed', 'deleted')),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -36,6 +37,7 @@ CREATE TABLE IF NOT EXISTS tv_shows (
   description TEXT NOT NULL DEFAULT '',
   rating REAL,
   quality TEXT NOT NULL CHECK (quality IN ('SD', 'HD', 'Full HD', '2K', '4K')),
+  topic_key TEXT NOT NULL DEFAULT 'FOREIGN_TV_SERIES' CHECK (topic_key IN ('FOREIGN_TV_SERIES', 'PINOY_TV_SERIES', 'ANIME', 'VIVAMAX')),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

@@ -46,6 +46,65 @@ describe('database migration', () => {
     db.close();
   });
 
+  it('creates topic keys on movies and tv shows with media defaults', () => {
+    const db = createDatabase(':memory:');
+    migrate(db);
+
+    const movieColumns = db.prepare('PRAGMA table_info(movies)').all() as Array<{ name: string }>;
+    const tvColumns = db.prepare('PRAGMA table_info(tv_shows)').all() as Array<{ name: string }>;
+
+    expect(movieColumns.map((column) => column.name)).toContain('topic_key');
+    expect(tvColumns.map((column) => column.name)).toContain('topic_key');
+
+    const movie = db.prepare("INSERT INTO movies (title, quality) VALUES ('Movie', 'HD')").run();
+    const show = db.prepare("INSERT INTO tv_shows (title, quality) VALUES ('Show', 'HD')").run();
+
+    expect(db.prepare('SELECT topic_key FROM movies WHERE id = ?').get(movie.lastInsertRowid)).toEqual({
+      topic_key: 'FOREIGN_MOVIES'
+    });
+    expect(db.prepare('SELECT topic_key FROM tv_shows WHERE id = ?').get(show.lastInsertRowid)).toEqual({
+      topic_key: 'FOREIGN_TV_SERIES'
+    });
+
+    expect(() => {
+      db.prepare("INSERT INTO movies (title, quality, topic_key) VALUES ('Bad Movie', 'HD', 'FOREIGN_TV_SERIES')").run();
+    }).toThrow();
+    expect(() => {
+      db.prepare("INSERT INTO tv_shows (title, quality, topic_key) VALUES ('Bad Show', 'HD', 'PINOY_MOVIES')").run();
+    }).toThrow();
+
+    db.close();
+  });
+
+  it('adds and backfills topic keys on existing movie and tv show tables', () => {
+    const db = createDatabase(':memory:');
+    db.exec(`
+      CREATE TABLE movies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        quality TEXT NOT NULL
+      );
+      CREATE TABLE tv_shows (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        quality TEXT NOT NULL
+      );
+    `);
+    db.prepare("INSERT INTO movies (title, quality) VALUES ('Legacy Movie', 'HD')").run();
+    db.prepare("INSERT INTO tv_shows (title, quality) VALUES ('Legacy Show', 'HD')").run();
+
+    migrate(db);
+
+    expect(db.prepare("SELECT topic_key FROM movies WHERE title = 'Legacy Movie'").get()).toEqual({
+      topic_key: 'FOREIGN_MOVIES'
+    });
+    expect(db.prepare("SELECT topic_key FROM tv_shows WHERE title = 'Legacy Show'").get()).toEqual({
+      topic_key: 'FOREIGN_TV_SERIES'
+    });
+
+    db.close();
+  });
+
   it('uses autoincrement ids and indexes foreign key columns', () => {
     const db = createDatabase(':memory:');
     migrate(db);

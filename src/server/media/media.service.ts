@@ -20,6 +20,8 @@ import {
   deleteMovie,
   deleteSeason,
   deleteTvShow,
+  findDuplicateMovies,
+  findDuplicateTvShows,
   getEpisode,
   getEpisodeLink,
   getEpisodeWithLinks,
@@ -86,6 +88,34 @@ const SearchQuerySchema = z
 
         return Number(value);
       }, z.number().int().positive().optional())
+  })
+  .strict();
+
+const DuplicateQuerySchema = z
+  .object({
+    title: z.string().trim().min(1),
+    year: z.preprocess((value) => {
+      if (value === undefined || value === '') {
+        return undefined;
+      }
+
+      if (typeof value !== 'string' || !/^\d+$/.test(value.trim())) {
+        return value;
+      }
+
+      return Number(value);
+    }, z.number().int().positive().optional()),
+    excludeId: z.preprocess((value) => {
+      if (value === undefined || value === '') {
+        return undefined;
+      }
+
+      if (typeof value !== 'string' || !/^\d+$/.test(value.trim())) {
+        return value;
+      }
+
+      return Number(value);
+    }, z.number().int().positive().optional())
   })
   .strict();
 
@@ -246,6 +276,11 @@ export function searchMovies(db: AppDatabase, query: unknown) {
   });
 }
 
+export function findMovieDuplicates(db: AppDatabase, query: unknown) {
+  const filters = DuplicateQuerySchema.parse(query);
+  return findDuplicateMovies(db, filters);
+}
+
 export function getMovie(db: AppDatabase, id: number) {
   return getMovieWithLinks(db, id);
 }
@@ -290,6 +325,11 @@ export function searchTvShows(db: AppDatabase, query: unknown) {
     title: filters.title,
     year: filters.year
   });
+}
+
+export function findTvShowDuplicates(db: AppDatabase, query: unknown) {
+  const filters = DuplicateQuerySchema.parse(query);
+  return findDuplicateTvShows(db, filters);
 }
 
 export function createTvShow(db: AppDatabase, body: unknown) {

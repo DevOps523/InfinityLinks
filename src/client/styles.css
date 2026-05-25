@@ -253,6 +253,10 @@ td {
   color: #b91c1c;
 }
 
+.state-panel--warning {
+  color: #a16207;
+}
+
 .dashboard-state {
   border: 1px solid #d8e0ea;
   border-radius: 8px;

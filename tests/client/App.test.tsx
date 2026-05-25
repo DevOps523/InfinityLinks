@@ -173,6 +173,52 @@ describe('App', () => {
     );
   });
 
+  it('shows a duplicate movie warning while adding a similar title', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      if (url === '/api/movies/duplicates?title=Arrival&year=2016') {
+        return {
+          ok: true,
+          json: async () => ({ duplicates: [{ id: 1, title: 'Arrival', year: 2016 }] })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
+    fireEvent.change(screen.getByLabelText(/^title$/i), { target: { value: 'Arrival' } });
+    fireEvent.change(screen.getByLabelText(/^year$/i), { target: { value: '2016' } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(301);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/possible duplicate/i)).toHaveTextContent('Arrival (2016)');
+  });
+
   it('keeps the selected top-level page after reload through the URL hash', async () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (url === '/api/public-search/sync-status') {
@@ -291,6 +337,52 @@ describe('App', () => {
         topicKey: 'PINOY_TV_SERIES'
       })
     );
+  });
+
+  it('shows a duplicate TV show warning while adding a similar title', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      if (url === '/api/tv-shows/duplicates?title=Dark&year=2017') {
+        return {
+          ok: true,
+          json: async () => ({ duplicates: [{ id: 1, title: 'Dark', year: 2017 }] })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ tvShows: [] })
+      };
+    });
+
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
+    fireEvent.change(screen.getByLabelText(/^title$/i), { target: { value: 'Dark' } });
+    fireEvent.change(screen.getByLabelText(/^year$/i), { target: { value: '2017' } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(301);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/possible duplicate/i)).toHaveTextContent('Dark (2017)');
   });
 
   it('filters TV shows by title automatically while typing', async () => {

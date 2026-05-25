@@ -29,6 +29,12 @@ type TvShowPayload = {
   topicKey?: string;
 };
 
+type DuplicateCandidate = {
+  id: number;
+  title: string;
+  year?: number;
+};
+
 export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
   const { showToast } = useToast();
   const isEditMode = tvShowId !== undefined;
@@ -43,6 +49,7 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(isEditMode);
   const [isSaving, setIsSaving] = useState(false);
+  const [duplicates, setDuplicates] = useState<DuplicateCandidate[]>([]);
 
   useEffect(() => {
     if (isEditMode) {
@@ -58,6 +65,7 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
     setQuality('HD');
     setTopicKey('FOREIGN_TV_SERIES');
     setError('');
+    setDuplicates([]);
     setIsLoading(false);
   }, [isEditMode]);
 
@@ -102,6 +110,40 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
       controller.abort();
     };
   }, [isEditMode, tvShowId]);
+
+  useEffect(() => {
+    if (isEditMode || title.trim().length < 2) {
+      setDuplicates([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      const params = new URLSearchParams({ title: title.trim() });
+      if (year.trim()) {
+        params.set('year', year.trim());
+      }
+
+      apiJson<{ duplicates: DuplicateCandidate[] }>(`/api/tv-shows/duplicates?${params.toString()}`, {
+        signal: controller.signal
+      })
+        .then((payload) => {
+          if (!controller.signal.aborted) {
+            setDuplicates(payload?.duplicates ?? []);
+          }
+        })
+        .catch((lookupError: unknown) => {
+          if (!controller.signal.aborted && (lookupError as { name?: string }).name !== 'AbortError') {
+            setDuplicates([]);
+          }
+        });
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [isEditMode, title, year]);
 
   function applyTmdbResult(result: TmdbResult) {
     setTmdbId(String(result.tmdbId));
@@ -201,6 +243,13 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
                 <textarea rows={5} value={description} onChange={(event) => setDescription(event.target.value)} />
               </label>
             </div>
+
+            {duplicates.length > 0 ? (
+              <div className="state-panel state-panel--warning">
+                Possible duplicate:{' '}
+                {duplicates.map((duplicate) => `${duplicate.title}${duplicate.year ? ` (${duplicate.year})` : ''}`).join(', ')}
+              </div>
+            ) : null}
 
             {error ? <div className="state-panel state-panel--error">{error}</div> : null}
 

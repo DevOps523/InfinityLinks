@@ -51,6 +51,12 @@ export type MovieFilters = {
   year?: number;
 };
 
+export type DuplicateMediaCandidate = {
+  id: number;
+  title: string;
+  year?: number;
+};
+
 export type TvShow = {
   id: number;
   tmdbId?: number;
@@ -321,6 +327,10 @@ function listMovieLinks(db: AppDatabase, movieId: number) {
   ).map(mapMovieLink);
 }
 
+function normalizeDuplicateQuery(title: string) {
+  return title.trim().toLowerCase();
+}
+
 export function listMovies(db: AppDatabase, filters: MovieFilters = {}) {
   const where: string[] = [];
   const params: Array<number | string> = [];
@@ -348,6 +358,32 @@ export function listMovies(db: AppDatabase, filters: MovieFilters = {}) {
       )
       .all(...params) as MovieRow[]
   ).map(mapMovie);
+}
+
+export function findDuplicateMovies(db: AppDatabase, filters: { title: string; year?: number; excludeId?: number }) {
+  const rows = db
+    .prepare(
+      `SELECT id, title, year
+       FROM movies
+       WHERE lower(title) = ?
+         AND (? IS NULL OR year = ?)
+         AND (? IS NULL OR id <> ?)
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 5`
+    )
+    .all(
+      normalizeDuplicateQuery(filters.title),
+      filters.year ?? null,
+      filters.year ?? null,
+      filters.excludeId ?? null,
+      filters.excludeId ?? null
+    ) as Array<{ id: number; title: string; year: number | null }>;
+
+  return rows.map((row): DuplicateMediaCandidate => ({
+    id: row.id,
+    title: row.title,
+    year: row.year ?? undefined
+  }));
 }
 
 export function getMovieWithLinks(db: AppDatabase, id: number): MovieWithLinks | undefined {
@@ -490,6 +526,32 @@ export function listTvShows(db: AppDatabase, filters: TvShowFilters = {}) {
       )
       .all(...params) as TvShowRow[]
   ).map(mapTvShow);
+}
+
+export function findDuplicateTvShows(db: AppDatabase, filters: { title: string; year?: number; excludeId?: number }) {
+  const rows = db
+    .prepare(
+      `SELECT id, title, year
+       FROM tv_shows
+       WHERE lower(title) = ?
+         AND (? IS NULL OR year = ?)
+         AND (? IS NULL OR id <> ?)
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 5`
+    )
+    .all(
+      normalizeDuplicateQuery(filters.title),
+      filters.year ?? null,
+      filters.year ?? null,
+      filters.excludeId ?? null,
+      filters.excludeId ?? null
+    ) as Array<{ id: number; title: string; year: number | null }>;
+
+  return rows.map((row): DuplicateMediaCandidate => ({
+    id: row.id,
+    title: row.title,
+    year: row.year ?? undefined
+  }));
 }
 
 export function createTvShow(db: AppDatabase, input: TvShowInput): TvShow {

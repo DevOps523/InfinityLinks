@@ -141,6 +141,43 @@ describe('tv media API', () => {
     });
   });
 
+  it('finds possible duplicate TV shows by title and year', async () => {
+    await request(app())
+      .post('/api/tv-shows')
+      .send({
+        title: 'Dark',
+        year: 2017,
+        description: '',
+        quality: 'HD'
+      })
+      .expect(201);
+
+    await request(app())
+      .post('/api/tv-shows')
+      .send({
+        title: 'Dark',
+        year: 2026,
+        description: '',
+        quality: 'HD'
+      })
+      .expect(201);
+
+    const response = await request(app()).get('/api/tv-shows/duplicates?title=dark&year=2017').expect(200);
+
+    expect(response.body.duplicates).toEqual([
+      expect.objectContaining({
+        title: 'Dark',
+        year: 2017
+      })
+    ]);
+  });
+
+  it('validates duplicate TV show query filters', async () => {
+    await request(app()).get('/api/tv-shows/duplicates?title=').expect(400);
+    await request(app()).get('/api/tv-shows/duplicates?title=Dark&year=abc').expect(400);
+    await request(app()).get('/api/tv-shows/duplicates?title=Dark&excludeId=0').expect(400);
+  });
+
   it('creates a season for a TV show', async () => {
     const show = db
       .prepare(

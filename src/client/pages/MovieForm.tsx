@@ -31,6 +31,12 @@ type MoviePayload = {
   links: MovieLinkInput[];
 };
 
+type DuplicateCandidate = {
+  id: number;
+  title: string;
+  year?: number;
+};
+
 export function MovieForm({ movieId, onSaved }: MovieFormProps) {
   const { showToast } = useToast();
   const isEditMode = movieId !== undefined;
@@ -47,6 +53,7 @@ export function MovieForm({ movieId, onSaved }: MovieFormProps) {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(isEditMode);
   const [isSaving, setIsSaving] = useState(false);
+  const [duplicates, setDuplicates] = useState<DuplicateCandidate[]>([]);
 
   useEffect(() => {
     if (isEditMode) {
@@ -64,6 +71,7 @@ export function MovieForm({ movieId, onSaved }: MovieFormProps) {
     setLinks([]);
     setLinksOpen(false);
     setError('');
+    setDuplicates([]);
     setIsLoading(false);
   }, [isEditMode]);
 
@@ -109,6 +117,40 @@ export function MovieForm({ movieId, onSaved }: MovieFormProps) {
       controller.abort();
     };
   }, [isEditMode, movieId]);
+
+  useEffect(() => {
+    if (isEditMode || title.trim().length < 2) {
+      setDuplicates([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      const params = new URLSearchParams({ title: title.trim() });
+      if (year.trim()) {
+        params.set('year', year.trim());
+      }
+
+      apiJson<{ duplicates: DuplicateCandidate[] }>(`/api/movies/duplicates?${params.toString()}`, {
+        signal: controller.signal
+      })
+        .then((payload) => {
+          if (!controller.signal.aborted) {
+            setDuplicates(payload?.duplicates ?? []);
+          }
+        })
+        .catch((lookupError: unknown) => {
+          if (!controller.signal.aborted && (lookupError as { name?: string }).name !== 'AbortError') {
+            setDuplicates([]);
+          }
+        });
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [isEditMode, title, year]);
 
   function applyTmdbResult(result: TmdbResult) {
     setTmdbId(String(result.tmdbId));
@@ -210,6 +252,13 @@ export function MovieForm({ movieId, onSaved }: MovieFormProps) {
                   <textarea rows={5} value={description} onChange={(event) => setDescription(event.target.value)} />
                 </label>
               </div>
+
+              {duplicates.length > 0 ? (
+                <div className="state-panel state-panel--warning">
+                  Possible duplicate:{' '}
+                  {duplicates.map((duplicate) => `${duplicate.title}${duplicate.year ? ` (${duplicate.year})` : ''}`).join(', ')}
+                </div>
+              ) : null}
 
               <div className="inline-actions">
                 <button className="button button--secondary" type="button" onClick={() => setLinksOpen(true)}>

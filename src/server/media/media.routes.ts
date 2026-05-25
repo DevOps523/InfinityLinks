@@ -7,6 +7,8 @@ import {
   createEpisodes,
   createMovie,
   createTvShow,
+  findMovieDuplicates,
+  findTvShowDuplicates,
   getEpisodeById,
   getEpisodeLinkById,
   getEpisodesForSeason,
@@ -55,6 +57,15 @@ export function createMediaRouter(db: AppDatabase) {
     try {
       const movie = createMovie(db, req.body);
       res.status(201).json({ movie });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/movies/duplicates', (req, res, next) => {
+    try {
+      const duplicates = findMovieDuplicates(db, req.query);
+      res.json({ duplicates });
     } catch (error) {
       next(error);
     }
@@ -116,6 +127,15 @@ export function createMediaRouter(db: AppDatabase) {
     try {
       const tvShow = createTvShow(db, req.body);
       res.status(201).json({ tvShow });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/tv-shows/duplicates', (req, res, next) => {
+    try {
+      const duplicates = findTvShowDuplicates(db, req.query);
+      res.json({ duplicates });
     } catch (error) {
       next(error);
     }

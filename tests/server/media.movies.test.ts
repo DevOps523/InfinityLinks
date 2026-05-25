@@ -216,6 +216,45 @@ describe('movie media API', () => {
     expect(response.body.movies.map((movie: { title: string }) => movie.title)).toEqual(['Alien', 'Arrival']);
   });
 
+  it('finds possible duplicate movies by title and year', async () => {
+    await request(app())
+      .post('/api/movies')
+      .send({
+        title: 'Arrival',
+        year: 2016,
+        description: '',
+        quality: 'HD',
+        links: []
+      })
+      .expect(201);
+
+    await request(app())
+      .post('/api/movies')
+      .send({
+        title: 'Arrival',
+        year: 2017,
+        description: '',
+        quality: 'HD',
+        links: []
+      })
+      .expect(201);
+
+    const response = await request(app()).get('/api/movies/duplicates?title=arrival&year=2016').expect(200);
+
+    expect(response.body.duplicates).toEqual([
+      expect.objectContaining({
+        title: 'Arrival',
+        year: 2016
+      })
+    ]);
+  });
+
+  it('validates duplicate movie query filters', async () => {
+    await request(app()).get('/api/movies/duplicates?title=').expect(400);
+    await request(app()).get('/api/movies/duplicates?title=Arrival&year=abc').expect(400);
+    await request(app()).get('/api/movies/duplicates?title=Arrival&excludeId=0').expect(400);
+  });
+
   it('returns a movie with links by id', async () => {
     const movie = db
       .prepare(

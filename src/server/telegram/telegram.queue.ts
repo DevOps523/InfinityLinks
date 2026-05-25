@@ -683,7 +683,7 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
          WHERE id = ?`
       ).run(message, job.id);
 
-      if (isRetainedDelete && !(failedPayload as TelegramDeleteJobPayload).awaitReplacementSend) {
+      if (isRetainedDelete) {
         failOtherActiveSendJobs(db, job, message);
       }
     })();

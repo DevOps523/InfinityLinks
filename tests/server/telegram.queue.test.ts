@@ -646,7 +646,7 @@ describe('telegram queue', () => {
     db.close();
   });
 
-  it('keeps topic replacement pending and queued when cleanup delete fails', async () => {
+  it('keeps topic replacement pending and fails replacement send when cleanup delete fails', async () => {
     const db = setupDb();
     const client = {
       sendPhotoPost: vi.fn(async () => {
@@ -678,7 +678,48 @@ describe('telegram queue', () => {
       post_status: 'pending'
     });
     expect(getJobs(db).filter((job) => job.job_type === 'send').at(-1)).toMatchObject({
-      status: 'queued'
+      status: 'failed',
+      last_error: 'Telegram delete failed'
+    });
+
+    db.close();
+  });
+
+  it('fails topic replacement send after cleanup delete permanently fails', async () => {
+    const db = setupDb();
+    const client = {
+      sendPhotoPost: vi.fn(async () => {
+        upsertActiveTelegramSendJob(db, 'movie', 7, {
+          posterUrl: 'https://example.com/follow-up.jpg',
+          caption: 'Follow-up caption',
+          messageThreadId: 27
+        });
+        return { messageId: 888 };
+      }),
+      editPhotoCaption: vi.fn(async () => undefined),
+      deleteMessage: vi.fn(async () => {
+        throw new Error('Telegram delete failed');
+      })
+    };
+
+    createMovieRow(db, 7, 'Running Movie');
+    enqueueTelegramJob(db, 'send', 'movie', 7, {
+      posterUrl: 'https://example.com/running.jpg',
+      caption: 'Running caption',
+      messageThreadId: 20
+    });
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(false);
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(false);
+
+    expect(client.sendPhotoPost).toHaveBeenCalledTimes(1);
+    const replacementSend = getJobs(db)
+      .filter((job) => job.job_type === 'send')
+      .at(-1);
+    expect(replacementSend).toMatchObject({
+      status: 'failed',
+      last_error: 'Telegram delete failed'
     });
 
     db.close();

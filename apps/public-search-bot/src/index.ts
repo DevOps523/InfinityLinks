@@ -6,7 +6,7 @@ import { migratePublicSearchDatabase } from './db/migrate.js';
 import { createFixedWindowRateLimiter } from './rate-limit.js';
 import { createPublicTelegramClient } from './telegram.client.js';
 import { createTelegramReplyQueue } from './telegram.reply-queue.js';
-import { handleTelegramUpdate } from './bot/handlers.js';
+import { createReplyThrottleState, handleTelegramUpdate } from './bot/handlers.js';
 import { pollOnce, type PollState } from './poller.js';
 import { createPublicSearchStatusTracker } from './status-tracker.js';
 
@@ -35,6 +35,7 @@ async function main() {
     limit: 5,
     windowMs: 60_000
   });
+  const replyThrottleState = createReplyThrottleState();
   const pollState: PollState = {};
 
   while (true) {
@@ -46,6 +47,7 @@ async function main() {
             telegram,
             replies,
             rateLimiter,
+            replyThrottleState,
             channelHandle: config.publicSearchChannelHandle,
             groupHandle: config.publicSearchGroupHandle
           },

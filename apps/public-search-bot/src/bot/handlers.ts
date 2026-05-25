@@ -22,6 +22,14 @@ type ReplyQueue = Pick<
   'enqueueSendMessage' | 'enqueueAnswerCallbackQuery'
 >;
 
+type ReplyUserKey = number | string;
+
+export type ReplyThrottleState = {
+  shouldAllowFirstStart(userId: number | undefined): boolean;
+  shouldSendWaitMessage(userId: number | undefined, retryAfterMs: number): boolean;
+  clearWaitMessage(userId: number | undefined): void;
+};
+
 export type HandlerDeps = {
   db: AppDatabase;
   telegram: Pick<PublicTelegramClient, 'getChatMember'>;
@@ -31,13 +39,51 @@ export type HandlerDeps = {
   };
   channelHandle: string;
   groupHandle: string;
+  replyThrottleState?: ReplyThrottleState;
 };
 
 const JOINED_STATUSES = new Set(['creator', 'administrator', 'member']);
-const firstStartUsers = new Set<number | string>();
-const waitMessageUsers = new Set<string>();
-const replyLimiterIds = new WeakMap<HandlerDeps['rateLimiter'], number>();
-let nextReplyLimiterId = 1;
+const FIRST_START_EXEMPTION_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_REPLY_THROTTLE_STATE_LIMIT = 10_000;
+
+export function createReplyThrottleState(options: { now?: () => number; maxEntries?: number } = {}): ReplyThrottleState {
+  const now = options.now ?? Date.now;
+  const maxEntries = options.maxEntries ?? DEFAULT_REPLY_THROTTLE_STATE_LIMIT;
+  const firstStartUsers = new Map<ReplyUserKey, number>();
+  const waitMessageUsers = new Map<ReplyUserKey, number>();
+
+  return {
+    shouldAllowFirstStart(userId) {
+      const nowMs = now();
+      pruneExpired(firstStartUsers, nowMs);
+
+      const key = getUserKey(userId);
+      if (firstStartUsers.has(key)) {
+        return false;
+      }
+
+      rememberUntil(firstStartUsers, key, nowMs + FIRST_START_EXEMPTION_MS, maxEntries);
+      return true;
+    },
+    shouldSendWaitMessage(userId, retryAfterMs) {
+      const nowMs = now();
+      pruneExpired(waitMessageUsers, nowMs);
+
+      const key = getUserKey(userId);
+      if (waitMessageUsers.has(key)) {
+        return false;
+      }
+
+      rememberUntil(waitMessageUsers, key, nowMs + Math.max(1, retryAfterMs), maxEntries);
+      return true;
+    },
+    clearWaitMessage(userId) {
+      const nowMs = now();
+      pruneExpired(waitMessageUsers, nowMs);
+      waitMessageUsers.delete(getUserKey(userId));
+    }
+  };
+}
 
 export async function handleTelegramUpdate(deps: HandlerDeps, update: TelegramUpdate): Promise<void> {
   if (update.message) {
@@ -59,7 +105,7 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
 
   if (isCommand(text, 'start')) {
     const userId = message.from?.id;
-    if (!shouldAllowFirstStart(userId) && !(await checkMessageReplyAllowed(deps, message.chat.id, userId))) {
+    if (!getReplyThrottleState(deps).shouldAllowFirstStart(userId) && !(await replyIfAllowed(deps, message.chat.id, userId))) {
       return;
     }
 
@@ -68,7 +114,7 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
   }
 
   if (isCommand(text, 'clear')) {
-    if (!(await checkMessageReplyAllowed(deps, message.chat.id, message.from?.id))) {
+    if (!(await replyIfAllowed(deps, message.chat.id, message.from?.id))) {
       return;
     }
 
@@ -80,7 +126,7 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
     const query = getCommandArgument(text);
 
     if (!query) {
-      if (!(await checkMessageReplyAllowed(deps, message.chat.id, message.from?.id))) {
+      if (!(await replyIfAllowed(deps, message.chat.id, message.from?.id))) {
         return;
       }
 
@@ -89,7 +135,7 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
     }
 
     const userId = message.from?.id;
-    if (!(await checkMessageReplyAllowed(deps, message.chat.id, userId))) {
+    if (!(await replyIfAllowed(deps, message.chat.id, userId))) {
       return;
     }
 
@@ -98,7 +144,7 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
   }
 
   if (text.startsWith('/')) {
-    if (!(await checkMessageReplyAllowed(deps, message.chat.id, message.from?.id))) {
+    if (!(await replyIfAllowed(deps, message.chat.id, message.from?.id))) {
       return;
     }
 
@@ -244,33 +290,21 @@ function checkReplyRateLimit(deps: HandlerDeps, userId: number | undefined, inte
   return deps.rateLimiter.check(`${interactionType}:${getUserKey(userId)}`);
 }
 
-function shouldAllowFirstStart(userId: number | undefined) {
-  const key = getUserKey(userId);
-  if (firstStartUsers.has(key)) {
-    return false;
-  }
-
-  firstStartUsers.add(key);
-  return true;
-}
-
 async function sendRateLimitMessage(deps: HandlerDeps, chatId: number, userId: number | undefined, retryAfterMs: number) {
-  const key = getWaitMessageKey(deps, userId);
-  if (waitMessageUsers.has(key)) {
+  if (!getReplyThrottleState(deps).shouldSendWaitMessage(userId, retryAfterMs)) {
     return;
   }
 
-  waitMessageUsers.add(key);
   await deps.replies.enqueueSendMessage({
     chatId,
     text: formatWaitMessage(retryAfterMs)
   });
 }
 
-async function checkMessageReplyAllowed(deps: HandlerDeps, chatId: number, userId: number | undefined) {
+async function replyIfAllowed(deps: HandlerDeps, chatId: number, userId: number | undefined) {
   const rateLimit = checkReplyRateLimit(deps, userId, 'message');
   if (rateLimit.allowed) {
-    waitMessageUsers.delete(getWaitMessageKey(deps, userId));
+    getReplyThrottleState(deps).clearWaitMessage(userId);
     return true;
   }
 
@@ -278,20 +312,29 @@ async function checkMessageReplyAllowed(deps: HandlerDeps, chatId: number, userI
   return false;
 }
 
-function getWaitMessageKey(deps: HandlerDeps, userId: number | undefined) {
-  return `${getReplyLimiterId(deps.rateLimiter)}:message:${getUserKey(userId)}`;
+function getReplyThrottleState(deps: HandlerDeps) {
+  deps.replyThrottleState ??= createReplyThrottleState();
+  return deps.replyThrottleState;
 }
 
-function getReplyLimiterId(rateLimiter: HandlerDeps['rateLimiter']) {
-  const existingId = replyLimiterIds.get(rateLimiter);
-  if (existingId !== undefined) {
-    return existingId;
+function pruneExpired(entries: Map<ReplyUserKey, number>, nowMs: number) {
+  for (const [key, expiresAtMs] of entries) {
+    if (expiresAtMs <= nowMs) {
+      entries.delete(key);
+    }
   }
+}
 
-  const id = nextReplyLimiterId;
-  nextReplyLimiterId += 1;
-  replyLimiterIds.set(rateLimiter, id);
-  return id;
+function rememberUntil(entries: Map<ReplyUserKey, number>, key: ReplyUserKey, expiresAtMs: number, maxEntries: number) {
+  entries.set(key, expiresAtMs);
+
+  while (entries.size > maxEntries) {
+    const oldestKey = entries.keys().next().value;
+    if (oldestKey === undefined) {
+      return;
+    }
+    entries.delete(oldestKey);
+  }
 }
 
 function isCommand(text: string, command: string) {

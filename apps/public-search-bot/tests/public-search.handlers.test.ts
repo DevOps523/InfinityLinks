@@ -299,6 +299,31 @@ describe('public search bot handlers', () => {
     }
   });
 
+  it('rate limits repeated unknown slash commands without requiring membership', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const { deps, sentMessages } = createDeps(db, {
+        rateLimiter: {
+          check: vi
+            .fn()
+            .mockReturnValueOnce({ allowed: true as const })
+            .mockReturnValueOnce({ allowed: false as const, retryAfterMs: 30_000 })
+        }
+      });
+
+      await handleTelegramUpdate(deps, messageUpdate('/wat'));
+      await handleTelegramUpdate(deps, messageUpdate('/wat'));
+
+      expect(deps.telegram.getChatMember).not.toHaveBeenCalled();
+      expect(sentMessages).toHaveLength(2);
+      expect(sentMessages[0].text).toContain('Welcome to InfinityLinks Search.');
+      expect(sentMessages[1].text).toBe('Please wait 30 seconds before trying again.');
+    } finally {
+      db.close();
+    }
+  });
+
   it('does not enqueue repeated wait messages for already throttled users', async () => {
     const db = createMigratedDatabase();
 

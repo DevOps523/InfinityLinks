@@ -21,7 +21,8 @@ export function createTmdbRouter(db: AppDatabase, config: AppConfig, options: Tm
   const fetcher = withFetchTimeout(options.fetcher ?? fetch, options.timeoutMs ?? 10_000);
 
   router.get('/search', async (req, res, next) => {
-    const limit = rateLimiter.check(req.ip);
+    const clientKey = req.ip ?? 'unknown';
+    const limit = rateLimiter.check(clientKey);
     if (!limit.allowed) {
       res.set('Retry-After', String(Math.max(1, Math.ceil(limit.retryAfterMs / 1000))));
       res.status(429).json({ error: 'Too many TMDB searches. Please wait and try again.' });

@@ -2,11 +2,11 @@ import { Router } from 'express';
 import type { AppConfig } from '../config.js';
 import type { AppDatabase } from '../db/database.js';
 import { createFixedWindowRateLimiter } from '../security/fixed-window-rate-limit.js';
-import { withFetchTimeout } from './fetch-timeout.js';
+import { withFetchTimeout, type TmdbFetchWithInit } from './fetch-timeout.js';
 import { searchTmdb, type TmdbMediaType } from './tmdb.service.js';
 
 export type TmdbRouterOptions = {
-  fetcher?: typeof fetch;
+  fetcher?: TmdbFetchWithInit;
   rateLimit?: {
     limit: number;
     windowMs: number;

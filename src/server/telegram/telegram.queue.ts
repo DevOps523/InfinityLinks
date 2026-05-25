@@ -20,6 +20,7 @@ export type TelegramEditJobPayload = {
 export type TelegramDeleteJobPayload = {
   messageId: number;
   retainEntityState?: boolean;
+  awaitReplacementSend?: boolean;
 };
 
 export type TelegramJobInput =
@@ -591,7 +592,8 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
           ).run(job.id);
           enqueueTelegramJob(db, 'delete', job.entity_type, job.entity_id, {
             messageId: result.messageId,
-            retainEntityState: true
+            retainEntityState: true,
+            awaitReplacementSend: true
           });
           enqueueTelegramJob(db, 'send', job.entity_type, job.entity_id, latestPayload);
           return;
@@ -627,9 +629,10 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
         job.job_type === 'delete' && (completedPayload as TelegramDeleteJobPayload).retainEntityState;
 
       if (isRetainedDelete) {
+        const retainedPayload = completedPayload as TelegramDeleteJobPayload;
         updateEntityPostStatus(db, job.entity_type, job.entity_id, {
           messageId: null,
-          postStatus: 'posted'
+          postStatus: retainedPayload.awaitReplacementSend ? 'pending' : 'posted'
         });
       } else {
         updateEntityPostStatus(db, job.entity_type, job.entity_id, {
@@ -680,7 +683,7 @@ export async function processNextTelegramJob(db: AppDatabase, client: TelegramCl
          WHERE id = ?`
       ).run(message, job.id);
 
-      if (isRetainedDelete) {
+      if (isRetainedDelete && !(failedPayload as TelegramDeleteJobPayload).awaitReplacementSend) {
         failOtherActiveSendJobs(db, job, message);
       }
     })();

@@ -581,7 +581,8 @@ describe('telegram queue', () => {
     expect(replacementJobs.map((job) => job.job_type)).toEqual(['delete', 'send']);
     expect(JSON.parse(replacementJobs[0].payload)).toEqual({
       messageId: 888,
-      retainEntityState: true
+      retainEntityState: true,
+      awaitReplacementSend: true
     });
     expect(JSON.parse(replacementJobs[1].payload)).toEqual({
       posterUrl: 'https://example.com/follow-up.jpg',
@@ -603,6 +604,81 @@ describe('telegram queue', () => {
     expect(getMoviePostState(db, 7)).toEqual({
       telegram_message_id: 999,
       post_status: 'posted'
+    });
+
+    db.close();
+  });
+
+  it('keeps topic replacement pending after cleanup delete succeeds until replacement send succeeds', async () => {
+    const db = setupDb();
+    const client = {
+      sendPhotoPost: vi.fn(async () => {
+        upsertActiveTelegramSendJob(db, 'movie', 7, {
+          posterUrl: 'https://example.com/follow-up.jpg',
+          caption: 'Follow-up caption',
+          messageThreadId: 27
+        });
+        return { messageId: 888 };
+      }),
+      editPhotoCaption: vi.fn(async () => undefined),
+      deleteMessage: vi.fn(async () => undefined)
+    };
+
+    createMovieRow(db, 7, 'Running Movie');
+    enqueueTelegramJob(db, 'send', 'movie', 7, {
+      posterUrl: 'https://example.com/running.jpg',
+      caption: 'Running caption',
+      messageThreadId: 20
+    });
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
+
+    expect(client.deleteMessage).toHaveBeenCalledWith({ messageId: 888 });
+    expect(getMoviePostState(db, 7)).toEqual({
+      telegram_message_id: null,
+      post_status: 'pending'
+    });
+    expect(getJobs(db).filter((job) => job.job_type === 'send').at(-1)).toMatchObject({
+      status: 'queued'
+    });
+
+    db.close();
+  });
+
+  it('keeps topic replacement pending and queued when cleanup delete fails', async () => {
+    const db = setupDb();
+    const client = {
+      sendPhotoPost: vi.fn(async () => {
+        upsertActiveTelegramSendJob(db, 'movie', 7, {
+          posterUrl: 'https://example.com/follow-up.jpg',
+          caption: 'Follow-up caption',
+          messageThreadId: 27
+        });
+        return { messageId: 888 };
+      }),
+      editPhotoCaption: vi.fn(async () => undefined),
+      deleteMessage: vi.fn(async () => {
+        throw new Error('Telegram delete failed');
+      })
+    };
+
+    createMovieRow(db, 7, 'Running Movie');
+    enqueueTelegramJob(db, 'send', 'movie', 7, {
+      posterUrl: 'https://example.com/running.jpg',
+      caption: 'Running caption',
+      messageThreadId: 20
+    });
+
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
+    await expect(processNextTelegramJob(db, client)).resolves.toBe(false);
+
+    expect(getMoviePostState(db, 7)).toEqual({
+      telegram_message_id: null,
+      post_status: 'pending'
+    });
+    expect(getJobs(db).filter((job) => job.job_type === 'send').at(-1)).toMatchObject({
+      status: 'queued'
     });
 
     db.close();

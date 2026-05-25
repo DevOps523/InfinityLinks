@@ -52,6 +52,7 @@ import {
   SeasonInputSchema,
   TvShowInputSchema
 } from './media.schemas.js';
+import { getTopicRoute } from './topics.js';
 import { z } from 'zod';
 
 export class MediaHttpError extends Error {
@@ -106,9 +107,12 @@ function buildSeasonPayload(postData: SeasonPostData) {
     return undefined;
   }
 
+  const route = getTopicRoute(postData.topicKey, 'tv');
+
   return {
     posterUrl: postData.posterUrl,
-    caption: formatSeasonCaption(postData)
+    caption: formatSeasonCaption(postData),
+    messageThreadId: route.messageThreadId
   };
 }
 
@@ -142,7 +146,8 @@ function syncMoviePostAfterContentChange(db: AppDatabase, movie: MovieWithLinks)
 
   upsertActiveTelegramSendJob(db, 'movie', movie.id, {
     posterUrl: movie.posterUrl,
-    caption: formatMovieCaption(movie)
+    caption: formatMovieCaption(movie),
+    messageThreadId: getTopicRoute(movie.topicKey, 'movie').messageThreadId
   });
 }
 
@@ -223,7 +228,8 @@ export function createMovie(db: AppDatabase, body: unknown) {
     if (movie.links.length > 0 && movie.posterUrl) {
       enqueueTelegramJob(db, 'send', 'movie', movie.id, {
         posterUrl: movie.posterUrl,
-        caption: formatMovieCaption(movie)
+        caption: formatMovieCaption(movie),
+        messageThreadId: getTopicRoute(movie.topicKey, 'movie').messageThreadId
       });
     }
 

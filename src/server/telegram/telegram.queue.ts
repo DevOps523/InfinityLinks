@@ -9,6 +9,7 @@ export const TELEGRAM_JOB_LEASE_MS = 5 * 60 * 1000;
 export type TelegramSendJobPayload = {
   posterUrl: string;
   caption: string;
+  messageThreadId?: number;
 };
 
 export type TelegramEditJobPayload = {
@@ -454,7 +455,7 @@ async function runTelegramJob(client: TelegramClient, job: TelegramJobRow) {
   const payload = JSON.parse(job.payload) as TelegramJobPayload;
 
   if (job.job_type === 'send') {
-    return client.sendPhotoPost(payload as { posterUrl: string; caption: string });
+    return client.sendPhotoPost(payload as TelegramSendJobPayload);
   }
 
   if (job.job_type === 'edit') {

@@ -92,14 +92,16 @@ describe('telegram queue', () => {
     createMovieRow(db, 7, 'Inception');
     enqueueTelegramJob(db, 'send', 'movie', 7, {
       posterUrl: 'https://example.com/poster.jpg',
-      caption: 'Inception (2010)'
+      caption: 'Inception (2010)',
+      messageThreadId: 20
     });
 
     await expect(processNextTelegramJob(db, client)).resolves.toBe(true);
 
     expect(client.sendPhotoPost).toHaveBeenCalledWith({
       posterUrl: 'https://example.com/poster.jpg',
-      caption: 'Inception (2010)'
+      caption: 'Inception (2010)',
+      messageThreadId: 20
     });
     expect(client.editPhotoCaption).not.toHaveBeenCalled();
     expect(client.deleteMessage).not.toHaveBeenCalled();
@@ -645,6 +647,38 @@ describe('telegram queue', () => {
 });
 
 describe('telegram client', () => {
+  it('sends photo posts to a message thread when provided', async () => {
+    const fetcher = vi.fn(async () => Response.json({ ok: true, result: { message_id: 123 } }));
+    const client = createTelegramClient(
+      {
+        botToken: 'test-token',
+        channelId: '-1003963665033'
+      },
+      fetcher
+    );
+
+    await expect(
+      client.sendPhotoPost({
+        posterUrl: 'https://example.com/poster.jpg',
+        caption: 'Inception (2010)',
+        messageThreadId: 27
+      })
+    ).resolves.toEqual({ messageId: 123 });
+
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://api.telegram.org/bottest-token/sendPhoto',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          chat_id: '-1003963665033',
+          photo: 'https://example.com/poster.jpg',
+          caption: 'Inception (2010)',
+          message_thread_id: 27
+        })
+      })
+    );
+  });
+
   it('rejects invalid JSON responses with a meaningful error', async () => {
     const client = createTelegramClient(
       {

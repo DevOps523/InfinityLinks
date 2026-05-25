@@ -162,6 +162,42 @@ describe('tv media API', () => {
     });
   });
 
+  it('queues anime season sends to the anime topic', async () => {
+    const show = db
+      .prepare(
+        "INSERT INTO tv_shows (title, year, poster_url, quality, topic_key, description) VALUES ('Anime Show', 2026, 'https://example.com/anime.jpg', 'HD', 'ANIME', 'Animated adventure')"
+      )
+      .run();
+    const season = db
+      .prepare('INSERT INTO seasons (tv_show_id, season_number) VALUES (?, 1)')
+      .run(show.lastInsertRowid);
+    const episode = db
+      .prepare('INSERT INTO episodes (season_id, episode_number) VALUES (?, 1)')
+      .run(season.lastInsertRowid);
+
+    await request(app())
+      .post(`/api/episodes/${episode.lastInsertRowid}/links`)
+      .send({
+        links: [
+          {
+            providerName: 'Infinity Stream',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/anime/s1/e1'
+          }
+        ]
+      })
+      .expect(201);
+
+    const jobs = getTelegramJobs();
+    expect(jobs).toHaveLength(1);
+    expect(JSON.parse(jobs[0].payload)).toEqual({
+      posterUrl: 'https://example.com/anime.jpg',
+      caption: expect.stringContaining('Anime Show (2026) - Season 1'),
+      messageThreadId: 24
+    });
+  });
+
   it('returns and updates a TV show, then queues edits for posted seasons', async () => {
     const { showId, seasonId } = createPostedLinkedSeason();
 
@@ -399,7 +435,8 @@ describe('tv media API', () => {
     });
     expect(JSON.parse(jobs[0].payload)).toEqual({
       posterUrl: 'https://example.com/chronos.jpg',
-      caption: expect.stringContaining('Chronos (2025) - Season 2')
+      caption: expect.stringContaining('Chronos (2025) - Season 2'),
+      messageThreadId: 22
     });
     expect(JSON.parse(jobs[0].payload).caption).toContain('Episode 1');
   });

@@ -120,7 +120,8 @@ describe('movie media API', () => {
     });
     expect(JSON.parse(jobs[0].payload)).toEqual({
       posterUrl: 'https://example.com/inception.jpg',
-      caption: expect.stringContaining('Inception (2010)')
+      caption: expect.stringContaining('Inception (2010)'),
+      messageThreadId: 27
     });
   });
 
@@ -416,7 +417,8 @@ describe('movie media API', () => {
     });
     expect(JSON.parse(jobs[0].payload)).toEqual({
       posterUrl: 'https://example.com/new.jpg',
-      caption: expect.stringContaining('Queued Movie Updated (2025)')
+      caption: expect.stringContaining('Queued Movie Updated (2025)'),
+      messageThreadId: 20
     });
   });
 

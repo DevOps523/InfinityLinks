@@ -115,7 +115,7 @@ describe('public search catalog export', () => {
           title: 'Inception',
           year: 2010,
           telegramMessageId: 123,
-          channelPostUrl: 'https://t.me/infinitylinks65/123',
+          channelPostUrl: 'https://t.me/infinitylinks69/123',
           providers: [
             {
               providerName: 'MixDrop',
@@ -231,7 +231,7 @@ describe('public search catalog export', () => {
               id: 1,
               seasonNumber: 1,
               telegramMessageId: 201,
-              channelPostUrl: 'https://t.me/infinitylinks65/201',
+              channelPostUrl: 'https://t.me/infinitylinks69/201',
               episodes: [
                 {
                   episodeNumber: 1,

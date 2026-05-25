@@ -81,12 +81,12 @@ type TvShowAccumulator = {
   seasonsById: Map<number, SeasonAccumulator>;
 };
 
-function buildChannelPostUrl(channelHandle: string, messageId: number | null): string | undefined {
+function buildPublicPostUrl(groupHandle: string, messageId: number | null): string | undefined {
   if (messageId === null) {
     return undefined;
   }
 
-  const publicHandle = channelHandle.trim().replace(/^@+/, '');
+  const publicHandle = groupHandle.trim().replace(/^@+/, '');
   return `https://t.me/${publicHandle}/${messageId}`;
 }
 
@@ -110,8 +110,8 @@ export function buildPublicSearchCatalog(
     generatedAt: (options.now ?? (() => new Date()))().toISOString(),
     channelHandle,
     groupHandle,
-    movies: buildMovies(db, channelHandle),
-    tvShows: buildTvShows(db, channelHandle)
+    movies: buildMovies(db, groupHandle),
+    tvShows: buildTvShows(db, groupHandle)
   };
 }
 
@@ -140,7 +140,7 @@ function sortObjectKeys(value: unknown): unknown {
   );
 }
 
-function buildMovies(db: AppDatabase, channelHandle: string): PublicSearchMovie[] {
+function buildMovies(db: AppDatabase, groupHandle: string): PublicSearchMovie[] {
   const rows = db
     .prepare(
       `SELECT movies.id AS movie_id,
@@ -179,7 +179,7 @@ function buildMovies(db: AppDatabase, channelHandle: string): PublicSearchMovie[
       }
       if (row.telegram_message_id !== null) {
         movie.telegramMessageId = row.telegram_message_id;
-        movie.channelPostUrl = buildChannelPostUrl(channelHandle, row.telegram_message_id);
+        movie.channelPostUrl = buildPublicPostUrl(groupHandle, row.telegram_message_id);
       }
 
       moviesById.set(row.movie_id, movie);
@@ -191,7 +191,7 @@ function buildMovies(db: AppDatabase, channelHandle: string): PublicSearchMovie[
   return Array.from(moviesById.values());
 }
 
-function buildTvShows(db: AppDatabase, channelHandle: string): PublicSearchTvShow[] {
+function buildTvShows(db: AppDatabase, groupHandle: string): PublicSearchTvShow[] {
   const rows = db
     .prepare(
       `SELECT tv_shows.id AS tv_show_id,
@@ -254,7 +254,7 @@ function buildTvShows(db: AppDatabase, channelHandle: string): PublicSearchTvSho
 
       if (row.telegram_message_id !== null) {
         season.telegramMessageId = row.telegram_message_id;
-        season.channelPostUrl = buildChannelPostUrl(channelHandle, row.telegram_message_id);
+        season.channelPostUrl = buildPublicPostUrl(groupHandle, row.telegram_message_id);
       }
 
       seasonAccumulator = {

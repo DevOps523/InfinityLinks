@@ -93,6 +93,35 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: /^add movie$/i })).toBeInTheDocument();
   });
 
+  it('saves an Add Movie form with the selected topic', async () => {
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
+
+    fireEvent.change(screen.getByLabelText(/^title$/i), { target: { value: 'Topic Movie' } });
+    fireEvent.change(screen.getByLabelText(/^topic$/i), { target: { value: 'PINOY_MOVIES' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save movie$/i }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/movies',
+        expect.objectContaining({
+          body: expect.any(String),
+          method: 'POST'
+        })
+      )
+    );
+    const moviePost = fetchMock.mock.calls.find(([url, init]) => url === '/api/movies' && init?.method === 'POST');
+    expect(JSON.parse(moviePost?.[1]?.body as string)).toEqual(
+      expect.objectContaining({
+        title: 'Topic Movie',
+        quality: 'HD',
+        topicKey: 'PINOY_MOVIES'
+      })
+    );
+  });
+
   it('keeps the selected top-level page after reload through the URL hash', async () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (url === '/api/public-search/sync-status') {
@@ -176,6 +205,35 @@ describe('App', () => {
     expect(screen.getByLabelText(/tmdb search/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^quality$/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^save tv show$/i })).toBeInTheDocument();
+  });
+
+  it('saves an Add TV Show form with the selected topic', async () => {
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
+
+    fireEvent.change(screen.getByLabelText(/^title$/i), { target: { value: 'Topic Show' } });
+    fireEvent.change(screen.getByLabelText(/^topic$/i), { target: { value: 'PINOY_TV_SERIES' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save tv show$/i }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/tv-shows',
+        expect.objectContaining({
+          body: expect.any(String),
+          method: 'POST'
+        })
+      )
+    );
+    const tvShowPost = fetchMock.mock.calls.find(([url, init]) => url === '/api/tv-shows' && init?.method === 'POST');
+    expect(JSON.parse(tvShowPost?.[1]?.body as string)).toEqual(
+      expect.objectContaining({
+        title: 'Topic Show',
+        quality: 'HD',
+        topicKey: 'PINOY_TV_SERIES'
+      })
+    );
   });
 
   it('filters TV shows by title automatically while typing', async () => {

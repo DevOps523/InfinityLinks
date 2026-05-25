@@ -11,6 +11,12 @@ type MovieFormProps = {
 };
 
 const qualities = ['SD', 'HD', 'Full HD', '2K', '4K'];
+const movieTopics = [
+  { value: 'FOREIGN_MOVIES', label: 'Foreign Movies' },
+  { value: 'PINOY_MOVIES', label: 'Pinoy Movies' },
+  { value: 'ANIME', label: 'Anime' },
+  { value: 'VIVAMAX', label: 'Vivamax' }
+];
 
 type MoviePayload = {
   id: number;
@@ -21,6 +27,7 @@ type MoviePayload = {
   description: string;
   rating?: number;
   quality: string;
+  topicKey?: string;
   links: MovieLinkInput[];
 };
 
@@ -34,6 +41,7 @@ export function MovieForm({ movieId, onSaved }: MovieFormProps) {
   const [description, setDescription] = useState('');
   const [rating, setRating] = useState('');
   const [quality, setQuality] = useState('HD');
+  const [topicKey, setTopicKey] = useState('FOREIGN_MOVIES');
   const [links, setLinks] = useState<MovieLinkInput[]>([]);
   const [linksOpen, setLinksOpen] = useState(false);
   const [error, setError] = useState('');
@@ -52,6 +60,7 @@ export function MovieForm({ movieId, onSaved }: MovieFormProps) {
     setDescription('');
     setRating('');
     setQuality('HD');
+    setTopicKey('FOREIGN_MOVIES');
     setLinks([]);
     setLinksOpen(false);
     setError('');
@@ -81,6 +90,7 @@ export function MovieForm({ movieId, onSaved }: MovieFormProps) {
         setDescription(movie.description);
         setRating(movie.rating !== undefined ? String(movie.rating) : '');
         setQuality(movie.quality);
+        setTopicKey(movie.topicKey ?? 'FOREIGN_MOVIES');
         setLinks(movie.links ?? []);
       })
       .catch((loadError: unknown) => {
@@ -122,6 +132,7 @@ export function MovieForm({ movieId, onSaved }: MovieFormProps) {
       description,
       rating: rating.trim() ? Number(rating) : undefined,
       quality,
+      topicKey,
       links
     };
 
@@ -177,6 +188,16 @@ export function MovieForm({ movieId, onSaved }: MovieFormProps) {
                   <select value={quality} onChange={(event) => setQuality(event.target.value)}>
                     {qualities.map((qualityOption) => (
                       <option key={qualityOption}>{qualityOption}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Topic
+                  <select value={topicKey} onChange={(event) => setTopicKey(event.target.value)}>
+                    {movieTopics.map((topic) => (
+                      <option key={topic.value} value={topic.value}>
+                        {topic.label}
+                      </option>
                     ))}
                   </select>
                 </label>

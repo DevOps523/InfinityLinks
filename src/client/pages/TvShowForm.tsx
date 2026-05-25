@@ -10,6 +10,12 @@ type TvShowFormProps = {
 };
 
 const qualities = ['SD', 'HD', 'Full HD', '2K', '4K'];
+const tvTopics = [
+  { value: 'FOREIGN_TV_SERIES', label: 'Foreign TV Series' },
+  { value: 'PINOY_TV_SERIES', label: 'Pinoy TV Series' },
+  { value: 'ANIME', label: 'Anime' },
+  { value: 'VIVAMAX', label: 'Vivamax' }
+];
 
 type TvShowPayload = {
   id: number;
@@ -20,6 +26,7 @@ type TvShowPayload = {
   description: string;
   rating?: number;
   quality: string;
+  topicKey?: string;
 };
 
 export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
@@ -32,6 +39,7 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
   const [description, setDescription] = useState('');
   const [rating, setRating] = useState('');
   const [quality, setQuality] = useState('HD');
+  const [topicKey, setTopicKey] = useState('FOREIGN_TV_SERIES');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(isEditMode);
   const [isSaving, setIsSaving] = useState(false);
@@ -48,6 +56,7 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
     setDescription('');
     setRating('');
     setQuality('HD');
+    setTopicKey('FOREIGN_TV_SERIES');
     setError('');
     setIsLoading(false);
   }, [isEditMode]);
@@ -75,6 +84,7 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
         setDescription(tvShow.description);
         setRating(tvShow.rating !== undefined ? String(tvShow.rating) : '');
         setQuality(tvShow.quality);
+        setTopicKey(tvShow.topicKey ?? 'FOREIGN_TV_SERIES');
       })
       .catch((loadError: unknown) => {
         if ((loadError as { name?: string }).name === 'AbortError') {
@@ -114,7 +124,8 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
       posterUrl,
       description,
       rating: rating.trim() ? Number(rating) : undefined,
-      quality
+      quality,
+      topicKey
     };
 
     try {
@@ -168,6 +179,16 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
                 <select value={quality} onChange={(event) => setQuality(event.target.value)}>
                   {qualities.map((qualityOption) => (
                     <option key={qualityOption}>{qualityOption}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Topic
+                <select value={topicKey} onChange={(event) => setTopicKey(event.target.value)}>
+                  {tvTopics.map((topic) => (
+                    <option key={topic.value} value={topic.value}>
+                      {topic.label}
+                    </option>
                   ))}
                 </select>
               </label>

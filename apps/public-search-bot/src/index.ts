@@ -15,6 +15,7 @@ import { handleSubscriptionBotUpdate } from './subscriptions/bot.handlers.js';
 import { createGoogleSheetsClient } from './subscriptions/google-sheets.client.js';
 import { getSubscriptionJobHealth } from './subscriptions/job.repository.js';
 import { processNextSubscriptionJob } from './subscriptions/job.processor.js';
+import { createAsyncMutex } from './subscriptions/mutex.js';
 import { createSubscriptionRouter } from './subscriptions/routes.js';
 import { createDailySubscriptionRefreshRun, startDailySubscriptionRefreshLoop } from './subscriptions/scheduler.js';
 import { isKickStillDue, markSubscriptionUserKickedIfStillDue } from './subscriptions/repository.js';
@@ -39,6 +40,7 @@ async function main() {
     usersRange: config.googleSheetsUsersRange,
     historyRange: config.googleSheetsHistoryRange
   });
+  const subscriptionMutationMutex = createAsyncMutex();
 
   const refreshAlert = () =>
     refreshSubscriptionAlert(db, subscriptionTelegram, {
@@ -46,12 +48,14 @@ async function main() {
       messageThreadId: config.subscriptionAlertThreadId
     });
   const syncFromSheet = () =>
-    syncSubscriptionsFromSheet(db, sheets, {
-      usersRange: config.googleSheetsUsersRange,
-      historyRange: config.googleSheetsHistoryRange,
-      now: new Date(),
-      periodDays: config.subscriptionPeriodDays
-    });
+    subscriptionMutationMutex.run(() =>
+      syncSubscriptionsFromSheet(db, sheets, {
+        usersRange: config.googleSheetsUsersRange,
+        historyRange: config.googleSheetsHistoryRange,
+        now: new Date(),
+        periodDays: config.subscriptionPeriodDays
+      })
+    );
   const subscriptionRouter = createSubscriptionRouter({
     adminToken: config.subscriptionAdminToken,
     syncFromSheet,
@@ -142,37 +146,39 @@ async function main() {
             await syncFromSheet();
           },
           kickUser: async (telegramUserId) => {
-            const now = new Date();
-            if (
-              !isKickStillDue(
+            await subscriptionMutationMutex.run(async () => {
+              const now = new Date();
+              if (
+                !isKickStillDue(
+                  db,
+                  telegramUserId,
+                  todayDateString(now),
+                  config.subscriptionOverdueGraceDays
+                )
+              ) {
+                return;
+              }
+
+              await subscriptionTelegram.removeChatMember({
+                chatId: config.subscriptionGroupChatId,
+                userId: telegramUserId
+              });
+              const kicked = markSubscriptionUserKickedIfStillDue(
                 db,
                 telegramUserId,
+                now,
                 todayDateString(now),
                 config.subscriptionOverdueGraceDays
-              )
-            ) {
-              return;
-            }
+              );
+              if (!kicked) {
+                return;
+              }
 
-            await subscriptionTelegram.removeChatMember({
-              chatId: config.subscriptionGroupChatId,
-              userId: telegramUserId
-            });
-            const kicked = markSubscriptionUserKickedIfStillDue(
-              db,
-              telegramUserId,
-              now,
-              todayDateString(now),
-              config.subscriptionOverdueGraceDays
-            );
-            if (!kicked) {
-              return;
-            }
-
-            await moveKickedUsersToHistory(db, sheets, {
-              usersRange: config.googleSheetsUsersRange,
-              historyRange: config.googleSheetsHistoryRange,
-              users: [kicked]
+              await moveKickedUsersToHistory(db, sheets, {
+                usersRange: config.googleSheetsUsersRange,
+                historyRange: config.googleSheetsHistoryRange,
+                users: [kicked]
+              });
             });
           }
         });

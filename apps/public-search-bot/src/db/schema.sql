@@ -87,3 +87,17 @@ CREATE TABLE IF NOT EXISTS subscription_alert_state (
 
 CREATE INDEX IF NOT EXISTS idx_subscription_users_status ON subscription_users(status);
 CREATE INDEX IF NOT EXISTS idx_subscription_users_unpaid_since ON subscription_users(unpaid_since);
+
+CREATE TABLE IF NOT EXISTS subscription_jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT NOT NULL CHECK (type IN ('refresh-alert', 'kick-user', 'refresh-sheet')),
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'succeeded', 'failed')),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  run_after TEXT NOT NULL,
+  last_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_subscription_jobs_status_run_after ON subscription_jobs(status, run_after);

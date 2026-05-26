@@ -42,20 +42,20 @@ async function main() {
   });
   const subscriptionMutationMutex = createAsyncMutex();
 
-  const refreshAlert = () =>
+  const runRefreshAlert = () =>
     refreshSubscriptionAlert(db, subscriptionTelegram, {
       chatId: config.subscriptionGroupChatId,
       messageThreadId: config.subscriptionAlertThreadId
     });
-  const syncFromSheet = () =>
-    subscriptionMutationMutex.run(() =>
-      syncSubscriptionsFromSheet(db, sheets, {
-        usersRange: config.googleSheetsUsersRange,
-        historyRange: config.googleSheetsHistoryRange,
-        now: new Date(),
-        periodDays: config.subscriptionPeriodDays
-      })
-    );
+  const refreshAlert = () => subscriptionMutationMutex.run(runRefreshAlert);
+  const runSyncFromSheet = () =>
+    syncSubscriptionsFromSheet(db, sheets, {
+      usersRange: config.googleSheetsUsersRange,
+      historyRange: config.googleSheetsHistoryRange,
+      now: new Date(),
+      periodDays: config.subscriptionPeriodDays
+    });
+  const syncFromSheet = () => subscriptionMutationMutex.run(runSyncFromSheet);
   const subscriptionRouter = createSubscriptionRouter({
     adminToken: config.subscriptionAdminToken,
     syncFromSheet,
@@ -147,6 +147,7 @@ async function main() {
           },
           kickUser: async (telegramUserId) => {
             await subscriptionMutationMutex.run(async () => {
+              await runSyncFromSheet();
               const now = new Date();
               if (
                 !isKickStillDue(

@@ -44,7 +44,14 @@ export function createGoogleSheetsClient(config: GoogleSheetsClientConfig): Goog
   }
 
   async function replaceRows(range: string, rows: unknown[][]) {
-    await getSheets().spreadsheets.values.update({
+    const sheetsClient = getSheets();
+
+    await sheetsClient.spreadsheets.values.clear({
+      spreadsheetId: config.spreadsheetId,
+      range
+    });
+
+    await sheetsClient.spreadsheets.values.update({
       spreadsheetId: config.spreadsheetId,
       range,
       valueInputOption: 'RAW',

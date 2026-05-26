@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   HISTORY_HEADER,
   USERS_HEADER,
@@ -10,11 +10,13 @@ import { createGoogleSheetsClient } from '../src/subscriptions/google-sheets.cli
 
 const googleApiMock = vi.hoisted(() => {
   const get = vi.fn();
+  const clear = vi.fn();
   const update = vi.fn();
   const append = vi.fn();
   const sheets = vi.fn(() => ({
     spreadsheets: {
       values: {
+        clear,
         get,
         update,
         append
@@ -23,7 +25,7 @@ const googleApiMock = vi.hoisted(() => {
   }));
   const GoogleAuth = vi.fn();
 
-  return { append, get, GoogleAuth, sheets, update };
+  return { append, clear, get, GoogleAuth, sheets, update };
 });
 
 vi.mock('googleapis', () => ({
@@ -35,13 +37,17 @@ vi.mock('googleapis', () => ({
   }
 }));
 
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 describe('subscription sheet mapper', () => {
   it('parses user rows by permanent user id', () => {
     expect(
       parseUsersSheetRows([
         USERS_HEADER,
         ['42', '@paid_user', '2026-05-26', '2026-06-26', '31', 'Subscribe', '2026-05-26T00:00:00.000Z'],
-        ['', '@missing_id', '2026-05-26', '', '', '', '']
+        ['', '', '', '', '', '', '']
       ])
     ).toEqual([
       {
@@ -54,6 +60,43 @@ describe('subscription sheet mapper', () => {
         lastUpdated: '2026-05-26T00:00:00.000Z'
       }
     ]);
+  });
+
+  it('requires the expected Users sheet header', () => {
+    expect(() => parseUsersSheetRows([])).toThrow(/Users sheet header mismatch/);
+    expect(() =>
+      parseUsersSheetRows([
+        ['Username', 'User ID', 'Start Date', 'End Date', 'Days Remaining', 'Status', 'Last Updated'],
+        ['42', '@paid_user', '2026-05-26', '2026-06-26', '31', 'Subscribe', '2026-05-26T00:00:00.000Z']
+      ])
+    ).toThrow(/Users sheet header mismatch: expected User ID \| Username \| Start Date \| End Date \| Days Remaining \| Status \| Last Updated/);
+  });
+
+  it('ignores blank trailing rows but rejects nonblank invalid user ids', () => {
+    expect(
+      parseUsersSheetRows([
+        USERS_HEADER,
+        ['42', '@paid_user', '2026-05-26', '', '', 'Subscribe', '2026-05-26T00:00:00.000Z'],
+        [],
+        [' ', ' ', '', '', '', '', '']
+      ])
+    ).toEqual([
+      {
+        telegramUserId: 42,
+        username: 'paid_user',
+        startDate: '2026-05-26',
+        endDate: undefined,
+        daysRemaining: undefined,
+        status: 'Subscribe',
+        lastUpdated: '2026-05-26T00:00:00.000Z'
+      }
+    ]);
+
+    for (const invalidUserId of ['abc', '42.5', '0', '-1', '']) {
+      expect(() =>
+        parseUsersSheetRows([USERS_HEADER, [invalidUserId, '@paid_user', '2026-05-26', '', '', 'Subscribe', '']])
+      ).toThrow(/Invalid User ID in Users sheet row 2/);
+    }
   });
 
   it('allows empty start dates for trial and unpaid users', () => {
@@ -178,6 +221,7 @@ describe('Google Sheets subscription client', () => {
   });
 
   it('replaces users and appends history with raw values', async () => {
+    googleApiMock.clear.mockResolvedValueOnce({ data: {} });
     googleApiMock.update.mockResolvedValueOnce({ data: {} });
     googleApiMock.append.mockResolvedValueOnce({ data: {} });
 
@@ -204,6 +248,10 @@ describe('Google Sheets subscription client', () => {
     await client.appendHistory([user]);
     await client.appendHistory([]);
 
+    expect(googleApiMock.clear).toHaveBeenCalledWith({
+      spreadsheetId: 'sheet-id',
+      range: 'Users!A:G'
+    });
     expect(googleApiMock.update).toHaveBeenCalledWith({
       spreadsheetId: 'sheet-id',
       range: 'Users!A:G',
@@ -215,6 +263,7 @@ describe('Google Sheets subscription client', () => {
         ]
       }
     });
+    expect(googleApiMock.clear.mock.invocationCallOrder[0]).toBeLessThan(googleApiMock.update.mock.invocationCallOrder[0] ?? 0);
     expect(googleApiMock.append).toHaveBeenCalledTimes(1);
     expect(googleApiMock.append).toHaveBeenCalledWith({
       spreadsheetId: 'sheet-id',

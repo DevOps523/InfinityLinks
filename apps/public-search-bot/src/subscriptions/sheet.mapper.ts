@@ -38,7 +38,7 @@ function normalizeUsername(value: SheetCell) {
   return trimmed ? trimmed.replace(/^@+/, '') : undefined;
 }
 
-function normalizeDateOnly(value: SheetCell, columnName: string) {
+function normalizeDateOnly(value: SheetCell) {
   const trimmed = normalizeString(value);
   if (!trimmed) {
     return undefined;
@@ -94,19 +94,50 @@ function usernameCell(user: SubscriptionUser) {
   return user.username ? `@${user.username.replace(/^@+/, '')}` : '';
 }
 
+function isBlankRow(row: SheetCell[]) {
+  return row.every((cell) => normalizeString(cell) === undefined);
+}
+
+function validateUsersHeader(rows: SheetCell[][]) {
+  const header = rows[0];
+  if (!header) {
+    throw new Error(`Users sheet header mismatch: expected ${USERS_HEADER.join(' | ')}`);
+  }
+
+  const actualHeader = header.slice(0, USERS_HEADER.length).map((cell) => normalizeString(cell) ?? '');
+  const matches = USERS_HEADER.every((expected, index) => actualHeader[index] === expected);
+  if (!matches) {
+    throw new Error(`Users sheet header mismatch: expected ${USERS_HEADER.join(' | ')}, received ${actualHeader.join(' | ')}`);
+  }
+}
+
+function normalizeTelegramUserId(value: SheetCell, rowNumber: number) {
+  const trimmed = normalizeString(value);
+  const numericId = typeof value === 'number' ? value : trimmed && /^\d+$/.test(trimmed) ? Number(trimmed) : NaN;
+
+  if (!Number.isSafeInteger(numericId) || numericId <= 0) {
+    throw new Error(`Invalid User ID in Users sheet row ${rowNumber}: ${trimmed ?? ''}`);
+  }
+
+  return numericId;
+}
+
 export function parseUsersSheetRows(rows: SheetCell[][]): ParsedUsersSheetRow[] {
-  return rows.slice(1).flatMap((row) => {
-    const telegramUserId = Number(normalizeString(row[0]));
-    if (!Number.isSafeInteger(telegramUserId) || telegramUserId <= 0) {
+  validateUsersHeader(rows);
+
+  return rows.slice(1).flatMap((row, index) => {
+    if (isBlankRow(row)) {
       return [];
     }
+
+    const telegramUserId = normalizeTelegramUserId(row[0], index + 2);
 
     return [
       {
         telegramUserId,
         username: normalizeUsername(row[1]),
-        startDate: normalizeDateOnly(row[2], 'Start Date'),
-        endDate: normalizeDateOnly(row[3], 'End Date'),
+        startDate: normalizeDateOnly(row[2]),
+        endDate: normalizeDateOnly(row[3]),
         daysRemaining: normalizeDaysRemaining(row[4]),
         status: normalizeStatus(row[5]),
         lastUpdated: normalizeLastUpdated(row[6])

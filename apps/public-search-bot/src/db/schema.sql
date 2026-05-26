@@ -102,3 +102,4 @@ CREATE TABLE IF NOT EXISTS subscription_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_subscription_jobs_status_run_after ON subscription_jobs(status, run_after);
+CREATE INDEX IF NOT EXISTS idx_subscription_jobs_status_claimed_at ON subscription_jobs(status, claimed_at);

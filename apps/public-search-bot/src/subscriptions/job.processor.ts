@@ -14,6 +14,7 @@ export type SubscriptionJobHandlers = {
 };
 
 export type ProcessSubscriptionJobOptions = {
+  clock?: (() => Date) | undefined;
   maxAttempts?: number | undefined;
   staleAfterMs?: number | undefined;
 };
@@ -67,12 +68,14 @@ export async function processNextSubscriptionJob(
   }
 
   const claimedAt = requireClaimedAt(job);
+  const clock = options.clock ?? (() => new Date());
 
   try {
     await executeJob(job, handlers);
-    markSubscriptionJobSucceeded(db, job.id, claimedAt, now);
+    markSubscriptionJobSucceeded(db, job.id, claimedAt, clock());
   } catch (error) {
-    markSubscriptionJobFailed(db, job.id, claimedAt, error, retryAfterFor(error, job.attempts, now), now, {
+    const failedAt = clock();
+    markSubscriptionJobFailed(db, job.id, claimedAt, error, retryAfterFor(error, job.attempts, failedAt), failedAt, {
       maxAttempts: options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
     });
   }

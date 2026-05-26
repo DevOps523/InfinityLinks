@@ -239,7 +239,11 @@ describe('subscription jobs', () => {
         refreshSheet: vi.fn()
       };
 
-      await expect(processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:01.000Z'))).resolves.toBe(true);
+      await expect(
+        processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:01.000Z'), {
+          clock: () => new Date('2026-05-26T00:00:01.000Z')
+        })
+      ).resolves.toBe(true);
 
       expect(listSubscriptionJobs(db)[0]).toMatchObject({
         status: 'pending',
@@ -265,13 +269,46 @@ describe('subscription jobs', () => {
         refreshSheet: vi.fn()
       };
 
-      await expect(processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:01.000Z'))).resolves.toBe(true);
+      await expect(
+        processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:01.000Z'), {
+          clock: () => new Date('2026-05-26T00:00:01.000Z')
+        })
+      ).resolves.toBe(true);
 
       expect(listSubscriptionJobs(db)[0]).toMatchObject({
         status: 'pending',
         attempts: 1,
         runAfter: '2026-05-26T00:00:06.000Z',
         lastError: 'temporary failure'
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('schedules generic retries from failure time instead of claim time', async () => {
+    const db = createDb();
+    try {
+      enqueueSubscriptionJob(db, 'refresh-alert', {}, new Date('2026-05-26T00:00:00.000Z'));
+      const handlers = {
+        kickUser: vi.fn(),
+        refreshAlert: vi.fn(async () => {
+          throw new Error('slow failure');
+        }),
+        refreshSheet: vi.fn()
+      };
+
+      await expect(
+        processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:00.000Z'), {
+          clock: () => new Date('2026-05-26T00:01:00.000Z')
+        })
+      ).resolves.toBe(true);
+
+      expect(listSubscriptionJobs(db)[0]).toMatchObject({
+        status: 'pending',
+        attempts: 1,
+        runAfter: '2026-05-26T00:01:05.000Z',
+        lastError: 'slow failure'
       });
     } finally {
       db.close();
@@ -289,7 +326,10 @@ describe('subscription jobs', () => {
       };
 
       await expect(
-        processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:01.000Z'), { maxAttempts: 1 })
+        processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:01.000Z'), {
+          clock: () => new Date('2026-05-26T00:00:01.000Z'),
+          maxAttempts: 1
+        })
       ).resolves.toBe(true);
 
       expect(handlers.kickUser).not.toHaveBeenCalled();

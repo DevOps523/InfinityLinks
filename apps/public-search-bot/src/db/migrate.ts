@@ -125,7 +125,9 @@ function rebuildSubscriptionJobsLeaseShapeIfNeeded(db: PublicSearchDatabase) {
 
   const columns = db.pragma('table_info(subscription_jobs)') as Array<{ name: string }>;
   const hasClaimedAt = columns.some((column) => column.name === 'claimed_at');
-  const claimedAtSelect = hasClaimedAt ? 'claimed_at' : 'NULL AS claimed_at';
+  const claimedAtSelect = hasClaimedAt
+    ? 'claimed_at'
+    : "CASE WHEN status = 'running' THEN updated_at ELSE NULL END AS claimed_at";
   const previousForeignKeys = db.pragma('foreign_keys', { simple: true }) as number;
   db.pragma('foreign_keys = OFF');
 

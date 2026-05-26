@@ -88,6 +88,59 @@ describe('subscription jobs', () => {
     }
   });
 
+  it('makes legacy migrated running jobs reclaimable', () => {
+    const db = createPublicSearchDatabase(':memory:');
+    try {
+      db.exec(`
+        CREATE TABLE subscription_jobs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          type TEXT NOT NULL CHECK (type IN ('refresh-alert', 'kick-user', 'refresh-sheet')),
+          payload_json TEXT NOT NULL DEFAULT '{}',
+          status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'succeeded', 'failed')),
+          attempts INTEGER NOT NULL DEFAULT 0,
+          run_after TEXT NOT NULL,
+          last_error TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        INSERT INTO subscription_jobs (
+          type,
+          payload_json,
+          status,
+          attempts,
+          run_after,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'refresh-alert',
+          '{}',
+          'running',
+          0,
+          '2026-05-26T00:00:00.000Z',
+          '2026-05-26T00:00:00.000Z',
+          '2026-05-26T00:00:01.000Z'
+        );
+      `);
+
+      migratePublicSearchDatabase(db);
+
+      expect(listSubscriptionJobs(db)[0]).toMatchObject({
+        status: 'running',
+        claimedAt: '2026-05-26T00:00:01.000Z'
+      });
+      expect(
+        claimNextSubscriptionJob(db, new Date('2026-05-26T00:11:02.000Z'), { staleAfterMs: 10 * 60 * 1000 })
+      ).toMatchObject({
+        status: 'running',
+        claimedAt: '2026-05-26T00:11:02.000Z'
+      });
+    } finally {
+      db.close();
+    }
+  });
+
   it('does not let success or failure helpers overwrite non-running jobs', () => {
     const db = createDb();
     try {

@@ -50,6 +50,7 @@ export type TelegramChatMember = {
     id: number;
     username?: string;
     first_name?: string;
+    is_bot?: boolean;
   };
 };
 

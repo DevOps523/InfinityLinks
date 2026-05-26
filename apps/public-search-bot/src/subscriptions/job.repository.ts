@@ -182,7 +182,12 @@ export function claimNextSubscriptionJob(
   return claim();
 }
 
-export function markSubscriptionJobSucceeded(db: PublicSearchDatabase, id: number, now: Date): boolean {
+export function markSubscriptionJobSucceeded(
+  db: PublicSearchDatabase,
+  id: number,
+  claimedAt: string,
+  now: Date
+): boolean {
   const result = db
     .prepare(
       `UPDATE subscription_jobs
@@ -191,10 +196,12 @@ export function markSubscriptionJobSucceeded(db: PublicSearchDatabase, id: numbe
            last_error = NULL,
            updated_at = @nowIso
        WHERE id = @id
-         AND status = 'running'`
+         AND status = 'running'
+         AND claimed_at = @claimedAt`
     )
     .run({
       id,
+      claimedAt,
       nowIso: now.toISOString()
     });
 
@@ -204,6 +211,7 @@ export function markSubscriptionJobSucceeded(db: PublicSearchDatabase, id: numbe
 export function markSubscriptionJobFailed(
   db: PublicSearchDatabase,
   id: number,
+  claimedAt: string,
   error: unknown,
   runAfter: Date,
   now: Date,
@@ -212,7 +220,7 @@ export function markSubscriptionJobFailed(
   const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const job = getSubscriptionJob(db, id);
 
-  if (!job || job.status !== 'running') {
+  if (!job || job.status !== 'running' || job.claimedAt !== claimedAt) {
     return false;
   }
 
@@ -228,10 +236,12 @@ export function markSubscriptionJobFailed(
            last_error = @lastError,
            updated_at = @nowIso
        WHERE id = @id
-         AND status = 'running'`
+         AND status = 'running'
+         AND claimed_at = @claimedAt`
     )
     .run({
       id,
+      claimedAt,
       status: terminal ? 'failed' : 'pending',
       nextAttempts,
       runAfter: runAfter.toISOString(),

@@ -22,14 +22,15 @@ describe('subscription jobs', () => {
     const db = createDb();
     try {
       const job = enqueueSubscriptionJob(db, 'refresh-alert', {}, new Date('2026-05-26T00:00:00.000Z'));
-      expect(claimNextSubscriptionJob(db, new Date('2026-05-26T00:00:01.000Z'))).toMatchObject({
+      const claimed = claimNextSubscriptionJob(db, new Date('2026-05-26T00:00:01.000Z'));
+      expect(claimed).toMatchObject({
         id: job.id,
         type: 'refresh-alert',
         status: 'running',
         claimedAt: '2026-05-26T00:00:01.000Z'
       });
 
-      expect(markSubscriptionJobSucceeded(db, job.id, new Date('2026-05-26T00:00:02.000Z'))).toBe(true);
+      expect(markSubscriptionJobSucceeded(db, job.id, claimed?.claimedAt ?? '', new Date('2026-05-26T00:00:02.000Z'))).toBe(true);
       expect(listSubscriptionJobs(db)).toEqual([
         expect.objectContaining({ id: job.id, status: 'succeeded', claimedAt: undefined })
       ]);
@@ -146,11 +147,12 @@ describe('subscription jobs', () => {
     try {
       const pending = enqueueSubscriptionJob(db, 'refresh-alert', {}, new Date('2026-05-26T00:00:00.000Z'));
 
-      expect(markSubscriptionJobSucceeded(db, pending.id, new Date('2026-05-26T00:00:01.000Z'))).toBe(false);
+      expect(markSubscriptionJobSucceeded(db, pending.id, 'stale-lease', new Date('2026-05-26T00:00:01.000Z'))).toBe(false);
       expect(
         markSubscriptionJobFailed(
           db,
           pending.id,
+          'stale-lease',
           new Error('ignored'),
           new Date('2026-05-26T00:00:06.000Z'),
           new Date('2026-05-26T00:00:01.000Z')
@@ -162,6 +164,63 @@ describe('subscription jobs', () => {
         attempts: 0,
         runAfter: '2026-05-26T00:00:00.000Z',
         lastError: undefined
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('guards completion and failure by the claimed lease', () => {
+    const db = createDb();
+    try {
+      const job = enqueueSubscriptionJob(db, 'refresh-alert', {}, new Date('2026-05-26T00:00:00.000Z'));
+      const workerA = claimNextSubscriptionJob(db, new Date('2026-05-26T00:00:01.000Z'));
+      const workerALease = workerA?.claimedAt ?? '';
+      expect(workerA).toMatchObject({
+        id: job.id,
+        status: 'running',
+        claimedAt: '2026-05-26T00:00:01.000Z'
+      });
+
+      const workerB = claimNextSubscriptionJob(db, new Date('2026-05-26T00:11:02.000Z'), {
+        staleAfterMs: 10 * 60 * 1000
+      });
+      const workerBLease = workerB?.claimedAt ?? '';
+      expect(workerB).toMatchObject({
+        id: job.id,
+        status: 'running',
+        claimedAt: '2026-05-26T00:11:02.000Z'
+      });
+
+      expect(markSubscriptionJobSucceeded(db, job.id, workerALease, new Date('2026-05-26T00:11:03.000Z'))).toBe(false);
+      expect(listSubscriptionJobs(db)[0]).toMatchObject({
+        id: job.id,
+        status: 'running',
+        claimedAt: workerBLease
+      });
+
+      expect(
+        markSubscriptionJobFailed(
+          db,
+          job.id,
+          workerALease,
+          new Error('stale failure'),
+          new Date('2026-05-26T00:11:08.000Z'),
+          new Date('2026-05-26T00:11:03.000Z')
+        )
+      ).toBe(false);
+      expect(listSubscriptionJobs(db)[0]).toMatchObject({
+        id: job.id,
+        status: 'running',
+        claimedAt: workerBLease,
+        lastError: undefined
+      });
+
+      expect(markSubscriptionJobSucceeded(db, job.id, workerBLease, new Date('2026-05-26T00:11:04.000Z'))).toBe(true);
+      expect(listSubscriptionJobs(db)[0]).toMatchObject({
+        id: job.id,
+        status: 'succeeded',
+        claimedAt: undefined
       });
     } finally {
       db.close();

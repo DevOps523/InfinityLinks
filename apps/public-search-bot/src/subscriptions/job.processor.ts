@@ -47,6 +47,14 @@ async function executeJob(job: SubscriptionJob, handlers: SubscriptionJobHandler
   await handlers.kickUser(telegramUserId);
 }
 
+function requireClaimedAt(job: SubscriptionJob) {
+  if (!job.claimedAt) {
+    throw new Error(`Subscription job ${job.id} was claimed without a lease`);
+  }
+
+  return job.claimedAt;
+}
+
 export async function processNextSubscriptionJob(
   db: PublicSearchDatabase,
   handlers: SubscriptionJobHandlers,
@@ -58,11 +66,13 @@ export async function processNextSubscriptionJob(
     return false;
   }
 
+  const claimedAt = requireClaimedAt(job);
+
   try {
     await executeJob(job, handlers);
-    markSubscriptionJobSucceeded(db, job.id, now);
+    markSubscriptionJobSucceeded(db, job.id, claimedAt, now);
   } catch (error) {
-    markSubscriptionJobFailed(db, job.id, error, retryAfterFor(error, job.attempts, now), now, {
+    markSubscriptionJobFailed(db, job.id, claimedAt, error, retryAfterFor(error, job.attempts, now), now, {
       maxAttempts: options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
     });
   }

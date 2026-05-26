@@ -115,6 +115,95 @@ describe('subscription repository', () => {
     }
   });
 
+  it('rejects invalid recalculation dates before reading subscription rows', () => {
+    const db = createDb();
+    try {
+      expect(() => recalculateSubscriptions(db, '2026-02-31', 31)).toThrow(/Invalid date-only value/);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('enforces removed from group as a boolean on fresh migrated databases', () => {
+    const db = createDb();
+    try {
+      expect(() =>
+        db
+          .prepare(
+            `INSERT INTO subscription_users (
+               telegram_user_id,
+               status,
+               removed_from_group,
+               created_at,
+               updated_at
+             )
+             VALUES (42, 'Unpaid', 2, '2026-05-26T00:00:00.000Z', '2026-05-26T00:00:00.000Z')`
+          )
+          .run()
+      ).toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rebuilds legacy subscription users tables with the removed from group boolean constraint', () => {
+    const db = createPublicSearchDatabase(':memory:');
+    try {
+      db.exec(`
+        CREATE TABLE subscription_users (
+          telegram_user_id INTEGER PRIMARY KEY,
+          username TEXT,
+          trial_started_at TEXT,
+          trial_expires_at TEXT,
+          subscription_start_date TEXT,
+          subscription_end_date TEXT,
+          days_remaining INTEGER,
+          status TEXT NOT NULL DEFAULT 'Unpaid',
+          unpaid_since TEXT,
+          kicked_at TEXT,
+          removed_from_group INTEGER NOT NULL DEFAULT 0,
+          last_seen_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        INSERT INTO subscription_users (
+          telegram_user_id,
+          username,
+          status,
+          removed_from_group,
+          created_at,
+          updated_at
+        )
+        VALUES (42, 'legacy_user', 'Unpaid', 2, '2026-05-26T00:00:00.000Z', '2026-05-26T00:00:00.000Z');
+      `);
+
+      migratePublicSearchDatabase(db);
+
+      const row = db
+        .prepare('SELECT removed_from_group AS removedFromGroup FROM subscription_users WHERE telegram_user_id = 42')
+        .get() as { removedFromGroup: number };
+
+      expect(row.removedFromGroup).toBe(0);
+      expect(() =>
+        db
+          .prepare(
+            `INSERT INTO subscription_users (
+               telegram_user_id,
+               status,
+               removed_from_group,
+               created_at,
+               updated_at
+             )
+             VALUES (43, 'Unpaid', 2, '2026-05-26T00:00:00.000Z', '2026-05-26T00:00:00.000Z')`
+          )
+          .run()
+      ).toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
   it('marks kicked users without deleting permanent history', () => {
     const db = createDb();
     try {

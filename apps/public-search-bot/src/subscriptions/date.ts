@@ -27,6 +27,10 @@ export function todayDateString(now: Date = new Date()) {
   return now.toISOString().slice(0, 10);
 }
 
+export function validateDateOnly(value: string) {
+  parseDateOnly(value);
+}
+
 export function addDateDays(dateOnly: string, days: number) {
   const date = new Date(parseDateOnly(dateOnly) + days * DAY_MS);
   return date.toISOString().slice(0, 10);

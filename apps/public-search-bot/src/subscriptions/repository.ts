@@ -1,5 +1,5 @@
 import type { PublicSearchDatabase } from '../db/database.js';
-import { addDateDays, calculateDaysRemaining, dateDifferenceDays, todayDateString } from './date.js';
+import { addDateDays, calculateDaysRemaining, dateDifferenceDays, todayDateString, validateDateOnly } from './date.js';
 
 export type SubscriptionStatus = 'Trial' | 'Subscribe' | 'Needs Attention' | 'Unpaid' | 'Kicked';
 
@@ -178,6 +178,7 @@ export function applySubscriptionStartDate(
 }
 
 export function recalculateSubscriptions(db: PublicSearchDatabase, today: string, periodDays: number): void {
+  validateDateOnly(today);
   validateSubscriptionPeriodDays(periodDays);
 
   const updatedAt = `${today}T00:00:00.000Z`;

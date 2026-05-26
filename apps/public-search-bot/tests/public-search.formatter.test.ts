@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { PublicSearchResult, PublicSeasonDetails } from '../src/search.repository.js';
 import {
   formatClearMessage,
-  formatJoinRequiredMessage,
   formatNoResultsMessage,
   formatSearchResults,
   formatSearchValidationMessage,
   formatSeasonDetails,
   formatStartMessage,
+  formatSubscriptionRequiredMessage,
   formatUnavailableMessage,
   MAX_INLINE_KEYBOARD_BUTTONS,
   MAX_INLINE_KEYBOARD_ROWS,
@@ -32,6 +32,9 @@ describe('public search bot formatter', () => {
         '/search inception',
         '/search breaking bad',
         '',
+        'You have 1 day free trial access when you search.',
+        'After the trial, subscription is required to view download links.',
+        '',
         '👥 Group: @infinitylinks69'
       ].join('\n')
     );
@@ -45,14 +48,9 @@ describe('public search bot formatter', () => {
     expect(formatClearMessage().text).toBe('🧹 Cleared. Search anytime with /search movie or tv show name.');
     expect(formatClearMessage().replyMarkup).toBeUndefined();
 
-    expect(formatJoinRequiredMessage(handles).text).toBe(
-      [
-        'We could not verify your group membership right now. Please join the group and try again.',
-        '',
-        '👥 Group: @infinitylinks69'
-      ].join('\n')
+    expect(formatSubscriptionRequiredMessage('@seinen_illuminatiks').text).toBe(
+      'You need a subscription to view and access download links. Contact @seinen_illuminatiks to keep you going.'
     );
-    expect(formatJoinRequiredMessage(handles).replyMarkup).toBeUndefined();
 
     expect(formatNoResultsMessage(handles).text).toBe(
       [

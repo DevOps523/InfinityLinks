@@ -10,8 +10,10 @@ The public bot uses Telegram long polling, so you do not need to configure a Tel
 - Node.js 22.x and npm
 - Nginx or another reverse proxy
 - HTTPS certificate for the public VPS domain
-- A public Telegram bot token
-- The public bot added as an admin in `@infinitylinks69`
+- A public Telegram bot token for search
+- A subscription Telegram bot token for alerts and overdue removals
+- The public bot and subscription bot added as admins in `@infinitylinks69`
+- A Google Cloud service account JSON key with access to the subscription workbook
 
 Deploy with Node 22.x, not Node 24. This package requires Node `>=22 <24`, and `better-sqlite3` is a native dependency.
 
@@ -27,14 +29,67 @@ PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
 PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
 PUBLIC_SEARCH_HOST=127.0.0.1
 PUBLIC_SEARCH_PORT=3001
+SUBSCRIPTION_BOT_TOKEN=replace_with_subscription_bot_token
+SUBSCRIPTION_GROUP_CHAT_ID=-1003963665033
+SUBSCRIPTION_ALERT_THREAD_ID=46
+SUBSCRIPTION_ADMIN_CONTACT=@seinen_illuminatiks
+SUBSCRIPTION_TRIAL_HOURS=24
+SUBSCRIPTION_PERIOD_DAYS=31
+SUBSCRIPTION_OVERDUE_GRACE_DAYS=1
+SUBSCRIPTION_ADMIN_TOKEN=replace_with_subscription_admin_secret
+GOOGLE_SHEETS_SPREADSHEET_ID=replace_with_google_sheet_id
+GOOGLE_SHEETS_USERS_RANGE=Users!A:G
+GOOGLE_SHEETS_HISTORY_RANGE=History!A:G
+GOOGLE_SERVICE_ACCOUNT_KEY_FILE=/opt/infinitylinks-public-search-bot/google-service-account.json
 ```
 
 `PUBLIC_BOT_TOKEN` is the Telegram bot token for the public search bot.
 `PUBLIC_SEARCH_SYNC_TOKEN` authorizes local admin app writes to `/api/sync`.
 `PUBLIC_SEARCH_STATUS_TOKEN` is read-only and is used by `/api/status`.
-`PUBLIC_SEARCH_GROUP_HANDLE` is the public group users must join before search results are shown.
+`PUBLIC_SEARCH_GROUP_HANDLE` is the public group shown in bot replies.
+`SUBSCRIPTION_BOT_TOKEN` is the separate Telegram bot token used for subscription alerts and overdue removals.
+`SUBSCRIPTION_ADMIN_TOKEN` authorizes `/api/subscriptions/update` and `/api/subscriptions/send-alert`.
+`GOOGLE_SERVICE_ACCOUNT_KEY_FILE` points to the Google Cloud service account JSON key on the VPS.
 
-Use different long random values for `PUBLIC_SEARCH_SYNC_TOKEN` and `PUBLIC_SEARCH_STATUS_TOKEN`.
+Use different long random values for `PUBLIC_SEARCH_SYNC_TOKEN`, `PUBLIC_SEARCH_STATUS_TOKEN`, and `SUBSCRIPTION_ADMIN_TOKEN`.
+
+## Subscription Access
+
+The standalone service now runs two Telegram bot tokens:
+
+- `PUBLIC_BOT_TOKEN` handles `/start`, `/search`, and search result callbacks.
+- `SUBSCRIPTION_BOT_TOKEN` posts subscription alerts and removes overdue users from the group.
+
+Public search access is backed by the standalone SQLite subscription database. A user's first search starts a 1-day trial. Paid access lasts 31 days from the current subscription start date. Users whose subscription is expired, unpaid, kicked, or otherwise inactive are blocked from download links.
+
+Create a Google Sheets workbook with these tabs and headers:
+
+```text
+Users: User ID | Username | Start Date | End Date | Days Remaining | Status | Last Updated
+History: User ID | Username | Last Status | Kicked At | Last Start Date | Last End Date | Notes
+```
+
+The `Users` tab is the current operating view. The `History` tab records previous status and kick activity so operators can audit what changed. Share the workbook with the Google Cloud service account email from the JSON key, then copy that JSON key to the VPS path configured in `GOOGLE_SERVICE_ACCOUNT_KEY_FILE`.
+
+Copy `apps/public-search-bot/google-apps-script/Code.gs` into the workbook's Apps Script project. In Apps Script, set Script Properties:
+
+```text
+SUBSCRIPTION_API_BASE_URL=https://your-vps.example.com
+SUBSCRIPTION_ADMIN_TOKEN=same value as VPS SUBSCRIPTION_ADMIN_TOKEN
+```
+
+Reload the spreadsheet. The `Subscriptions` menu will include `Update Subscription` and `Send Alert`:
+
+- `Update Subscription` POSTs to `/api/subscriptions/update`, synchronizing the sheet and subscription database.
+- `Send Alert` POSTs to `/api/subscriptions/send-alert`, refreshing the alert message in the configured Telegram topic.
+
+Operational notes:
+
+- Keep the public search bot token and subscription bot token separate. Both bots need the Telegram permissions required for their jobs in `@infinitylinks69`.
+- Run `Update Subscription` after manually changing subscription rows so the VPS database is refreshed from the sheet.
+- Use `Send Alert` after updates when you want the alert topic to reflect current subscription state immediately.
+- The default trial is 1 day, the default paid period is 31 days, and overdue users have a 1-day grace period before removal jobs are queued.
+- Overdue kicks are performed by the subscription bot from persisted jobs with retry/backoff. Check systemd logs before manually intervening.
 
 ## Step By Step VPS Deployment
 
@@ -274,10 +329,10 @@ The VPS bot database starts empty. The public bot will not return results until 
 
 1. Open the public Telegram bot.
 2. Send `/start`.
-3. Join `@infinitylinks69` if prompted.
+3. Confirm the trial or subscription message is shown.
 4. Send `/search <movie or tv show name>`.
 
-The bot should require group membership, then return matching original posts and provider links.
+The bot should start or validate subscription access, then return matching original posts and provider links for active users.
 
 ## Updating The VPS Bot Later
 

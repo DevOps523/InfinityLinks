@@ -40,6 +40,8 @@ export type TelegramUpdate = {
   update_id: number;
   message?: TelegramMessage;
   callback_query?: TelegramCallbackQuery;
+  chat_member?: TelegramChatMemberUpdated;
+  my_chat_member?: TelegramChatMemberUpdated;
 };
 
 export type TelegramChatMember = {
@@ -48,7 +50,17 @@ export type TelegramChatMember = {
     id: number;
     username?: string;
     first_name?: string;
+    is_bot?: boolean;
   };
+  is_member?: boolean;
+};
+
+export type TelegramChatMemberUpdated = {
+  chat: { id: number; type?: string; username?: string };
+  from: { id: number; username?: string; first_name?: string };
+  date: number;
+  old_chat_member: TelegramChatMember;
+  new_chat_member: TelegramChatMember;
 };
 
 type TelegramApiResponse<TResult> = {
@@ -68,6 +80,21 @@ export class TelegramRateLimitError extends Error {
     super(message);
     this.name = 'TelegramRateLimitError';
     this.retryAfter = retryAfter;
+  }
+}
+
+export class TelegramRemoveChatMemberError extends Error {
+  chatId: number;
+  userId: number;
+
+  constructor(input: { chatId: number; userId: number; cause: unknown }) {
+    super(
+      `Telegram removeChatMember failed after banning user ${input.userId} from chat ${input.chatId}; user may still be banned`,
+      { cause: input.cause }
+    );
+    this.name = 'TelegramRemoveChatMemberError';
+    this.chatId = input.chatId;
+    this.userId = input.userId;
   }
 }
 
@@ -122,23 +149,79 @@ export function createPublicTelegramClient(
     return payload.result;
   }
 
+  async function unbanChatMember(input: { chatId: number; userId: number; onlyIfBanned?: boolean }): Promise<void> {
+    await post('unbanChatMember', {
+      chat_id: input.chatId,
+      user_id: input.userId,
+      only_if_banned: input.onlyIfBanned
+    });
+  }
+
   return {
-    async getUpdates(input: { offset?: number | undefined; timeout?: number | undefined }): Promise<TelegramUpdate[]> {
+    async getUpdates(input: {
+      offset?: number | undefined;
+      timeout?: number | undefined;
+      allowedUpdates?: string[] | undefined;
+    }): Promise<TelegramUpdate[]> {
       const result = await post<TelegramUpdate[]>('getUpdates', {
         offset: input.offset,
-        timeout: input.timeout
+        timeout: input.timeout,
+        allowed_updates: input.allowedUpdates
       });
 
       return result ?? [];
     },
 
-    async sendMessage(input: { chatId: number; text: string; replyMarkup?: InlineKeyboardMarkup | undefined }): Promise<void> {
-      await post('sendMessage', {
+    async sendMessage(input: {
+      chatId: number;
+      messageThreadId?: number | undefined;
+      text: string;
+      replyMarkup?: InlineKeyboardMarkup | undefined;
+    }): Promise<{ messageId: number | undefined }> {
+      const result = await post<{ message_id?: number }>('sendMessage', {
         chat_id: input.chatId,
+        message_thread_id: input.messageThreadId,
         text: input.text,
         reply_markup: input.replyMarkup
       });
+
+      return { messageId: result?.message_id };
     },
+
+    async editMessageText(input: { chatId: number; messageId: number; text: string }): Promise<void> {
+      await post('editMessageText', {
+        chat_id: input.chatId,
+        message_id: input.messageId,
+        text: input.text
+      });
+    },
+
+    async deleteMessage(input: { chatId: number; messageId: number }): Promise<void> {
+      await post('deleteMessage', {
+        chat_id: input.chatId,
+        message_id: input.messageId
+      });
+    },
+
+    async removeChatMember(input: { chatId: number; userId: number }): Promise<void> {
+      await post('banChatMember', {
+        chat_id: input.chatId,
+        user_id: input.userId,
+        revoke_messages: false
+      });
+
+      try {
+        await unbanChatMember({
+          chatId: input.chatId,
+          userId: input.userId,
+          onlyIfBanned: true
+        });
+      } catch (cause) {
+        throw new TelegramRemoveChatMemberError({ ...input, cause });
+      }
+    },
+
+    unbanChatMember,
 
     async answerCallbackQuery(input: { callbackQueryId: string; text?: string }): Promise<void> {
       await post('answerCallbackQuery', {

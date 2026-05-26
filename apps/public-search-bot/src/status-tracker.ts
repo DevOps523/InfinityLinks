@@ -1,4 +1,12 @@
-export type PublicSearchErrorSource = 'startup' | 'telegram_poll' | 'sync' | 'status_api' | 'unknown';
+export type PublicSearchErrorSource =
+  | 'startup'
+  | 'telegram_poll'
+  | 'subscription_telegram_poll'
+  | 'subscription_jobs'
+  | 'subscription_daily_refresh'
+  | 'sync'
+  | 'status_api'
+  | 'unknown';
 
 export type PublicSearchStatusState = 'ok' | 'error';
 
@@ -24,6 +32,9 @@ type PublicSearchStatusTrackerOptions = {
 const ERROR_SOURCES = new Set<PublicSearchErrorSource>([
   'startup',
   'telegram_poll',
+  'subscription_telegram_poll',
+  'subscription_jobs',
+  'subscription_daily_refresh',
   'sync',
   'status_api',
   'unknown'

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createPublicTelegramClient,
+  TelegramRemoveChatMemberError,
   TelegramRateLimitError
 } from '../src/telegram.client.js';
 
@@ -33,6 +34,84 @@ describe('public Telegram client', () => {
         text: 'Hello',
         reply_markup: replyMarkup
       })
+    });
+  });
+
+  it('sendMessage supports message threads and returns the message id', async () => {
+    const fetchMock = vi.fn(async () => Response.json({ ok: true, result: { message_id: 777 } }));
+    const client = createPublicTelegramClient({ botToken: 'bot-token' }, fetchMock);
+
+    await expect(client.sendMessage({
+      chatId: -1003963665033,
+      messageThreadId: 46,
+      text: 'Alert'
+    })).resolves.toEqual({ messageId: 777 });
+
+    expect(getJsonBody(fetchMock)).toEqual({
+      chat_id: -1003963665033,
+      message_thread_id: 46,
+      text: 'Alert'
+    });
+  });
+
+  it('edits and deletes messages', async () => {
+    const fetchMock = vi.fn(async () => Response.json({ ok: true, result: true }));
+    const client = createPublicTelegramClient({ botToken: 'bot-token' }, fetchMock);
+
+    await client.editMessageText({ chatId: -1003963665033, messageId: 777, text: 'Updated' });
+    await client.deleteMessage({ chatId: -1003963665033, messageId: 777 });
+
+    expect(getJsonBody(fetchMock, 0)).toEqual({ chat_id: -1003963665033, message_id: 777, text: 'Updated' });
+    expect(getJsonBody(fetchMock, 1)).toEqual({ chat_id: -1003963665033, message_id: 777 });
+  });
+
+  it('removes a chat member with ban then unban so admin can add them again later', async () => {
+    const fetchMock = vi.fn(async () => Response.json({ ok: true, result: true }));
+    const client = createPublicTelegramClient({ botToken: 'bot-token' }, fetchMock);
+
+    await client.removeChatMember({ chatId: -1003963665033, userId: 42 });
+
+    expect(getJsonBody(fetchMock, 0)).toEqual({ chat_id: -1003963665033, user_id: 42, revoke_messages: false });
+    expect(getJsonBody(fetchMock, 1)).toEqual({ chat_id: -1003963665033, user_id: 42, only_if_banned: true });
+  });
+
+  it('throws a recoverable remove error when unban fails after ban succeeds', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ ok: true, result: true }))
+      .mockResolvedValueOnce(Response.json({ ok: false, description: 'Telegram unbanChatMember failed' }, { status: 400 }));
+    const client = createPublicTelegramClient({ botToken: 'bot-token' }, fetchMock);
+
+    let error: unknown;
+    try {
+      await client.removeChatMember({ chatId: -1003963665033, userId: 42 });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(TelegramRemoveChatMemberError);
+    expect(error).toMatchObject({
+      name: 'TelegramRemoveChatMemberError',
+      message: expect.stringContaining('user may still be banned'),
+      chatId: -1003963665033,
+      userId: 42
+    });
+    expect((error as Error).cause).toBeInstanceOf(Error);
+
+    expect(getJsonBody(fetchMock, 0)).toEqual({ chat_id: -1003963665033, user_id: 42, revoke_messages: false });
+    expect(getJsonBody(fetchMock, 1)).toEqual({ chat_id: -1003963665033, user_id: 42, only_if_banned: true });
+  });
+
+  it('unbanChatMember sends the unban payload', async () => {
+    const fetchMock = vi.fn(async () => Response.json({ ok: true, result: true }));
+    const client = createPublicTelegramClient({ botToken: 'bot-token' }, fetchMock);
+
+    await client.unbanChatMember({ chatId: -1003963665033, userId: 42, onlyIfBanned: true });
+
+    expect(getJsonBody(fetchMock)).toEqual({
+      chat_id: -1003963665033,
+      user_id: 42,
+      only_if_banned: true
     });
   });
 
@@ -95,7 +174,20 @@ describe('public Telegram client', () => {
     ]);
   });
 
-  it('getChatMember returns membership status', async () => {
+  it('getUpdates can request allowed update types', async () => {
+    const fetchMock = vi.fn(async () => Response.json({ ok: true, result: [] }));
+    const client = createPublicTelegramClient({ botToken: 'bot-token' }, fetchMock);
+
+    await client.getUpdates({ offset: 101, timeout: 30, allowedUpdates: ['message', 'chat_member'] });
+
+    expect(getJsonBody(fetchMock)).toEqual({
+      offset: 101,
+      timeout: 30,
+      allowed_updates: ['message', 'chat_member']
+    });
+  });
+
+  it('getChatMember returns chat member status', async () => {
     const fetchMock = vi.fn(async () =>
       Response.json({
         ok: true,

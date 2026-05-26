@@ -43,11 +43,11 @@ InfinityLinks is a local admin app for saving movie and TV streaming links and p
 
 The InfinityLinks admin app should stay private on your local machine. For VPS deployment, use the standalone public search bot app in `apps/public-search-bot/`; the VPS does not need the full private admin app.
 
-Public Telegram users interact with the bot by sending `/start`, then `/search <Movie or TV Show>`. Before search results are shown, the bot checks whether the user joined [@infinitylinks69](https://t.me/infinitylinks69). If the user has not joined, the bot tells them to join the group and come back before using `/search`. Add the public bot as an admin in [@infinitylinks69](https://t.me/infinitylinks69) so it can check membership.
+Public Telegram users interact with the bot by sending `/start`, then `/search <Movie or TV Show>`. The public search bot no longer uses group membership as the final search access gate. It uses the standalone bot's subscription database: first search starts a one-day free trial, active paid users can search, and expired, unpaid, or kicked users are blocked from download links.
 
 Search results link back to the original Telegram group posts without exposing poster information. Movies show active provider links as inline URL buttons. TV results first show season selection buttons; after a season is selected, the bot shows that season's episodes with provider buttons for each episode.
 
-Only active links and content that has already been posted to the Telegram group are exported to the public search catalog. Bot replies also include the active group link for [@infinitylinks69](https://t.me/infinitylinks69).
+Only active links and content that has already been posted to the Telegram group are exported to the public search catalog. Bot replies also include the active group link for [@infinitylinks69](https://t.me/infinitylinks69). Add the public search bot and subscription bot as admins in [@infinitylinks69](https://t.me/infinitylinks69) so the standalone service can serve searches, post alerts, and remove overdue users.
 
 Sync is triggered from the local admin app on the `Public Search` page. The `Sync Public Search` button exports the current public catalog from the private local database and posts it to the VPS sync endpoint. In the local admin app's `.env`, set `PUBLIC_SEARCH_SYNC_URL` to the VPS `/api/sync` URL and use the same `PUBLIC_SEARCH_SYNC_TOKEN` value that the VPS service uses.
 
@@ -86,10 +86,15 @@ Use this split when deploying from your private local admin app to the public VP
    PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
    PUBLIC_SEARCH_HOST=127.0.0.1
    PUBLIC_SEARCH_PORT=3001
+   SUBSCRIPTION_BOT_TOKEN=replace_with_subscription_bot_token
+   SUBSCRIPTION_ADMIN_TOKEN=replace_with_subscription_admin_secret
+   GOOGLE_SHEETS_SPREADSHEET_ID=replace_with_google_sheet_id
+   GOOGLE_SERVICE_ACCOUNT_KEY_FILE=/opt/infinitylinks-public-search-bot/google-service-account.json
    ```
 
-   `PUBLIC_BOT_TOKEN` is the token for the public search bot. Add that bot as an admin in [@infinitylinks69](https://t.me/infinitylinks69) so it can check whether users joined the group.
+   `PUBLIC_BOT_TOKEN` is the token for the public search bot. Add the public search bot and the `SUBSCRIPTION_BOT_TOKEN` bot as admins in [@infinitylinks69](https://t.me/infinitylinks69).
    `PUBLIC_SEARCH_STATUS_TOKEN` is a read-only token for status checks. Keep it separate from `PUBLIC_SEARCH_SYNC_TOKEN`, which authorizes catalog sync writes.
+   `SUBSCRIPTION_ADMIN_TOKEN` protects the subscription update and alert endpoints used by Google Apps Script.
    Keep `PUBLIC_SEARCH_HOST=127.0.0.1` so the Node service is reachable only through the VPS reverse proxy.
 
 3. Build and run the VPS service:

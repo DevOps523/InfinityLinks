@@ -20,8 +20,22 @@ describe('public search poller', () => {
 
     await pollOnce(state, client, handleUpdate);
 
-    expect(client.getUpdates).toHaveBeenCalledWith({ offset: 101, timeout: 30 });
+    expect(client.getUpdates).toHaveBeenCalledWith({ offset: 101, timeout: 30, allowedUpdates: undefined });
     expect(state.nextOffset).toBe(106);
+  });
+
+  it('passes allowed updates to getUpdates when provided', async () => {
+    const state: PollState = {};
+    const client = createClient([]);
+    const handleUpdate = vi.fn<UpdateHandler>(async () => {});
+
+    await pollOnce(state, client, handleUpdate, { allowedUpdates: ['message', 'chat_member'] });
+
+    expect(client.getUpdates).toHaveBeenCalledWith({
+      offset: undefined,
+      timeout: 30,
+      allowedUpdates: ['message', 'chat_member']
+    });
   });
 
   it('passes each update to the update handler in order', async () => {

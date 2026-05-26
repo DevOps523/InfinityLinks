@@ -4,6 +4,7 @@ import { migratePublicSearchDatabase } from '../src/db/migrate.js';
 import { syncSubscriptionsFromSheet, moveKickedUsersToHistory } from '../src/subscriptions/sync.service.js';
 import { HISTORY_HEADER, USERS_HEADER } from '../src/subscriptions/sheet.mapper.js';
 import { getSubscriptionUser, markSubscriptionUserKicked } from '../src/subscriptions/repository.js';
+import { runDailySubscriptionRefresh } from '../src/subscriptions/scheduler.js';
 
 function createDb() {
   const db = createPublicSearchDatabase(':memory:');
@@ -12,6 +13,35 @@ function createDb() {
 }
 
 describe('subscription sync service', () => {
+  it('queues overdue kicks and refreshes alerts during daily refresh', async () => {
+    const db = createDb();
+    try {
+      db.prepare(
+        `INSERT INTO subscription_users (
+           telegram_user_id, username, subscription_start_date, subscription_end_date, days_remaining,
+           status, unpaid_since, removed_from_group, created_at, updated_at
+         )
+         VALUES (42, 'late_user', '2026-05-26', '2026-06-26', 0, 'Unpaid', '2026-06-26', 0, '2026-05-26T00:00:00.000Z', '2026-06-26T00:00:00.000Z')`
+      ).run();
+
+      const result = await runDailySubscriptionRefresh(db, {
+        today: '2026-06-27',
+        periodDays: 31,
+        overdueGraceDays: 1,
+        enqueueAt: new Date('2026-06-27T00:00:00.000Z')
+      });
+
+      expect(result).toEqual({ queuedKicks: 1 });
+      expect(db.prepare('SELECT type, payload_json FROM subscription_jobs').all()).toEqual([
+        { type: 'kick-user', payload_json: '{"telegramUserId":42}' },
+        { type: 'refresh-alert', payload_json: '{}' },
+        { type: 'refresh-sheet', payload_json: '{}' }
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
   it('applies manual start dates and writes refreshed active rows', async () => {
     const db = createDb();
     try {

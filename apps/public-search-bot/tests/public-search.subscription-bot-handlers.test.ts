@@ -16,6 +16,7 @@ type FakeUserRow = {
 
 function createFakeDb(seed: FakeUserRow[] = []) {
   const users = new Map(seed.map((user) => [user.telegramUserId, { ...user }]));
+  const preparedSql: string[] = [];
   const updateRemovedFromGroup = vi.fn(
     (input: { telegramUserId: number; removedFromGroup: 0 | 1; updatedAt: string }) => {
       const user = users.get(input.telegramUserId);
@@ -28,11 +29,15 @@ function createFakeDb(seed: FakeUserRow[] = []) {
 
   return {
     users,
+    preparedSql,
     updateRemovedFromGroup,
     db: {
-      prepare: vi.fn(() => ({
-        run: updateRemovedFromGroup
-      }))
+      prepare: vi.fn((sql: string) => {
+        preparedSql.push(sql);
+        return {
+          run: updateRemovedFromGroup
+        };
+      })
     }
   };
 }
@@ -132,6 +137,61 @@ describe('subscription bot handlers', () => {
     );
 
     expect(fake.users.get(42)).toMatchObject({ status: 'Subscribe', removedFromGroup: true });
+  });
+
+  it('uses is_member to decide whether restricted members are active or removed', async () => {
+    const fake = createFakeDb([
+      { telegramUserId: 42, username: 'limited_active', status: 'Subscribe', removedFromGroup: true },
+      { telegramUserId: 43, username: 'limited_removed', status: 'Subscribe', removedFromGroup: false }
+    ]);
+    const deps = {
+      db: fake.db,
+      now: () => new Date('2026-05-26T00:00:00.000Z'),
+      subscriptionGroupChatId: -1003963665033
+    };
+
+    await handleSubscriptionBotUpdate(deps, {
+      update_id: 1,
+      chat_member: {
+        chat: { id: -1003963665033 },
+        from: { id: 99, username: 'admin' },
+        date: 1779753600,
+        old_chat_member: { status: 'member', user: { id: 42, username: 'limited_active' } },
+        new_chat_member: {
+          status: 'restricted',
+          is_member: true,
+          user: { id: 42, username: 'limited_active' }
+        }
+      }
+    });
+    await handleSubscriptionBotUpdate(deps, {
+      update_id: 2,
+      chat_member: {
+        chat: { id: -1003963665033 },
+        from: { id: 99, username: 'admin' },
+        date: 1779753600,
+        old_chat_member: { status: 'member', user: { id: 43, username: 'limited_removed' } },
+        new_chat_member: {
+          status: 'restricted',
+          is_member: false,
+          user: { id: 43, username: 'limited_removed' }
+        }
+      }
+    });
+
+    expect(fake.preparedSql.join('\n')).toContain('status != \'Kicked\'');
+    expect(fake.updateRemovedFromGroup).toHaveBeenNthCalledWith(1, {
+      telegramUserId: 42,
+      removedFromGroup: 0,
+      updatedAt: '2026-05-26T00:00:00.000Z'
+    });
+    expect(fake.updateRemovedFromGroup).toHaveBeenNthCalledWith(2, {
+      telegramUserId: 43,
+      removedFromGroup: 1,
+      updatedAt: '2026-05-26T00:00:00.000Z'
+    });
+    expect(fake.users.get(42)).toMatchObject({ status: 'Subscribe', removedFromGroup: false });
+    expect(fake.users.get(43)).toMatchObject({ status: 'Subscribe', removedFromGroup: true });
   });
 
   it('ignores unrelated groups, bot targets, malformed member events, and non-member updates', async () => {

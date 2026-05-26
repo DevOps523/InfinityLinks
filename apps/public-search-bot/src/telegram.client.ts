@@ -52,6 +52,7 @@ export type TelegramChatMember = {
     first_name?: string;
     is_bot?: boolean;
   };
+  is_member?: boolean;
 };
 
 export type TelegramChatMemberUpdated = {

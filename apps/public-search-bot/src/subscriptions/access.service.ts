@@ -24,6 +24,8 @@ export function evaluateSearchAccess(
   }
 
   const trialHours = validateTrialHours(input.trialHours);
+  // Public /search and callback interactions refresh the latest Telegram username here; Telegram does not emit
+  // chat_member updates for username-only changes.
   upsertSeenTelegramUser(db, input.user, input.now);
   const trial = startTrialIfEligible(db, input.user, input.now, trialHours);
   const user = getSubscriptionUser(db, input.user.id);

@@ -42,6 +42,32 @@ function updateRemovedFromGroup(deps: SubscriptionBotDeps, telegramUserId: numbe
     });
 }
 
+function getRemovedFromGroup(update: TelegramChatMemberUpdated): boolean | undefined {
+  const newMember = update.new_chat_member;
+
+  if (newMember.status === 'restricted') {
+    if (newMember.is_member === true) {
+      return false;
+    }
+
+    if (newMember.is_member === false) {
+      return true;
+    }
+
+    return undefined;
+  }
+
+  if (ACTIVE_MEMBER_STATUSES.has(newMember.status)) {
+    return false;
+  }
+
+  if (REMOVED_MEMBER_STATUSES.has(newMember.status)) {
+    return true;
+  }
+
+  return undefined;
+}
+
 export async function handleSubscriptionBotUpdate(deps: SubscriptionBotDeps, update: TelegramUpdate): Promise<void> {
   const chatMemberUpdate = update.chat_member ?? update.my_chat_member;
   if (!chatMemberUpdate || !isConfiguredSubscriptionGroup(deps, chatMemberUpdate)) {
@@ -55,13 +81,9 @@ export async function handleSubscriptionBotUpdate(deps: SubscriptionBotDeps, upd
 
   const now = deps.now();
   upsertSeenTelegramUser(deps.db, user, now);
+  const removedFromGroup = getRemovedFromGroup(chatMemberUpdate);
 
-  if (ACTIVE_MEMBER_STATUSES.has(chatMemberUpdate.new_chat_member.status)) {
-    updateRemovedFromGroup(deps, user.id, false, now);
-    return;
-  }
-
-  if (REMOVED_MEMBER_STATUSES.has(chatMemberUpdate.new_chat_member.status)) {
-    updateRemovedFromGroup(deps, user.id, true, now);
+  if (removedFromGroup !== undefined) {
+    updateRemovedFromGroup(deps, user.id, removedFromGroup, now);
   }
 }

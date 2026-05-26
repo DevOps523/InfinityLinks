@@ -1,16 +1,18 @@
 import type { PublicSearchDatabase as AppDatabase } from '../db/database.js';
-import type { PublicTelegramClient, TelegramChatMember, TelegramUpdate } from '../telegram.client.js';
+import type { TelegramUpdate } from '../telegram.client.js';
 import type { createTelegramReplyQueue } from '../telegram.reply-queue.js';
 import { getPublicSeasonDetails, hasPublicCatalog, searchPublicCatalog } from '../search.repository.js';
+import { evaluateSearchAccess } from '../subscriptions/access.service.js';
+import type { TelegramUserIdentity } from '../subscriptions/repository.js';
 import { decodeSeasonCallback } from './callback-data.js';
 import {
   formatClearMessage,
-  formatJoinRequiredMessage,
   formatNoResultsMessage,
   formatSearchValidationMessage,
   formatSearchResults,
   formatSeasonDetails,
   formatStartMessage,
+  formatSubscriptionRequiredMessage,
   formatUnavailableMessage,
   type PublicBotMessage
 } from './formatter.js';
@@ -32,7 +34,11 @@ export type ReplyThrottleState = {
 
 export type HandlerDeps = {
   db: AppDatabase;
-  telegram: Pick<PublicTelegramClient, 'getChatMember'>;
+  subscription: {
+    now: () => Date;
+    trialHours: number;
+    adminContact: string;
+  };
   replies: ReplyQueue;
   rateLimiter: {
     check(key: string): RateLimitResult;
@@ -41,7 +47,6 @@ export type HandlerDeps = {
   replyThrottleState?: ReplyThrottleState;
 };
 
-const JOINED_STATUSES = new Set(['creator', 'administrator', 'member']);
 const FIRST_START_EXEMPTION_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_REPLY_THROTTLE_STATE_LIMIT = 10_000;
 
@@ -133,12 +138,12 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
       return;
     }
 
-    const userId = message.from?.id;
-    if (!(await replyIfAllowed(deps, message.chat.id, userId))) {
+    const user = getTelegramUser(message.from);
+    if (!(await replyIfAllowed(deps, message.chat.id, user?.id))) {
       return;
     }
 
-    await handleSearch(deps, message.chat.id, userId, query);
+    await handleSearch(deps, message.chat.id, user, query);
     return;
   }
 
@@ -151,16 +156,15 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
   }
 }
 
-async function handleSearch(deps: HandlerDeps, chatId: number, userId: number | undefined, query: string) {
-  const membership = await checkMembership(deps, userId);
+async function handleSearch(deps: HandlerDeps, chatId: number, user: TelegramUserIdentity | undefined, query: string) {
+  const access = evaluateSearchAccess(deps.db, {
+    user,
+    now: deps.subscription.now(),
+    trialHours: deps.subscription.trialHours
+  });
 
-  if (membership === 'not-joined') {
-    await sendBotMessage(deps, chatId, formatJoinRequiredMessage(getHandles(deps)));
-    return;
-  }
-
-  if (membership === 'unavailable') {
-    await sendBotMessage(deps, chatId, formatJoinRequiredMessage(getHandles(deps)));
+  if (!access.allowed) {
+    await sendBotMessage(deps, chatId, formatSubscriptionRequiredMessage(deps.subscription.adminContact));
     return;
   }
 
@@ -200,26 +204,19 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
   }
 
   const chatId = callbackQuery.message?.chat.id;
-  const membership = await checkMembership(deps, callbackQuery.from.id);
+  const access = evaluateSearchAccess(deps.db, {
+    user: getTelegramUser(callbackQuery.from),
+    now: deps.subscription.now(),
+    trialHours: deps.subscription.trialHours
+  });
 
-  if (membership === 'not-joined') {
+  if (!access.allowed) {
     await deps.replies.enqueueAnswerCallbackQuery({
       callbackQueryId,
-      text: 'Please join the group first.'
+      text: 'Subscription required.'
     });
     if (chatId !== undefined) {
-      await sendBotMessage(deps, chatId, formatJoinRequiredMessage(getHandles(deps)));
-    }
-    return;
-  }
-
-  if (membership === 'unavailable') {
-    await deps.replies.enqueueAnswerCallbackQuery({
-      callbackQueryId,
-      text: 'Please try again later.'
-    });
-    if (chatId !== undefined) {
-      await sendBotMessage(deps, chatId, formatJoinRequiredMessage(getHandles(deps)));
+      await sendBotMessage(deps, chatId, formatSubscriptionRequiredMessage(deps.subscription.adminContact));
     }
     return;
   }
@@ -258,27 +255,6 @@ async function sendBotMessage(deps: HandlerDeps, chatId: number, message: Public
     text: message.text,
     replyMarkup: message.replyMarkup
   });
-}
-
-async function checkMembership(
-  deps: HandlerDeps,
-  userId: number | undefined
-): Promise<'joined' | 'not-joined' | 'unavailable'> {
-  if (userId === undefined) {
-    return 'not-joined';
-  }
-
-  let member: TelegramChatMember;
-  try {
-    member = await deps.telegram.getChatMember({
-      chatId: deps.groupHandle,
-      userId
-    });
-  } catch {
-    return 'unavailable';
-  }
-
-  return JOINED_STATUSES.has(member.status) ? 'joined' : 'not-joined';
 }
 
 function getUserKey(userId: number | undefined) {
@@ -348,6 +324,10 @@ function getHandles(deps: HandlerDeps) {
   return {
     groupHandle: deps.groupHandle
   };
+}
+
+function getTelegramUser(from: { id: number; username?: string } | undefined): TelegramUserIdentity | undefined {
+  return from ? { id: from.id, username: from.username } : undefined;
 }
 
 function formatWaitMessage(retryAfterMs: number) {

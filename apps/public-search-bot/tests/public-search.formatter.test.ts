@@ -8,6 +8,7 @@ import {
   formatSearchValidationMessage,
   formatSeasonDetails,
   formatStartMessage,
+  formatSubscriptionRequiredMessage,
   formatUnavailableMessage,
   MAX_INLINE_KEYBOARD_BUTTONS,
   MAX_INLINE_KEYBOARD_ROWS,
@@ -32,6 +33,9 @@ describe('public search bot formatter', () => {
         '/search inception',
         '/search breaking bad',
         '',
+        'You have 1 day free trial access when you search.',
+        'After the trial, subscription is required to view download links.',
+        '',
         '👥 Group: @infinitylinks69'
       ].join('\n')
     );
@@ -53,6 +57,10 @@ describe('public search bot formatter', () => {
       ].join('\n')
     );
     expect(formatJoinRequiredMessage(handles).replyMarkup).toBeUndefined();
+
+    expect(formatSubscriptionRequiredMessage('@seinen_illuminatiks').text).toBe(
+      'You need a subscription to view and access download links. Contact @seinen_illuminatiks to keep you going.'
+    );
 
     expect(formatNoResultsMessage(handles).text).toBe(
       [

@@ -29,6 +29,9 @@ export function formatStartMessage(handles: PublicBotHandles): PublicBotMessage 
       '/search inception',
       '/search breaking bad',
       '',
+      'You have 1 day free trial access when you search.',
+      'After the trial, subscription is required to view download links.',
+      '',
       formatHandles(handles)
     ].join('\n')
   };
@@ -53,6 +56,12 @@ export function formatJoinRequiredMessage(handles: PublicBotHandles): PublicBotM
       '',
       formatHandles(handles)
     ].join('\n')
+  };
+}
+
+export function formatSubscriptionRequiredMessage(adminContact: string): PublicBotMessage {
+  return {
+    text: `You need a subscription to view and access download links. Contact ${adminContact} to keep you going.`
   };
 }
 

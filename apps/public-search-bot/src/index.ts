@@ -44,7 +44,11 @@ async function main() {
         handleTelegramUpdate(
           {
             db,
-            telegram,
+            subscription: {
+              now: () => new Date(),
+              trialHours: config.subscriptionTrialHours,
+              adminContact: config.subscriptionAdminContact
+            },
             replies,
             rateLimiter,
             replyThrottleState,

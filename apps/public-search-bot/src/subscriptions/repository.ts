@@ -244,6 +244,24 @@ export function listKickCandidates(db: PublicSearchDatabase, today: string, grac
   ).filter((user) => user.unpaidSince && dateDifferenceDays(user.unpaidSince, today) >= graceDays);
 }
 
+export function isKickStillDue(
+  db: PublicSearchDatabase,
+  telegramUserId: number,
+  today: string,
+  graceDays: number
+): boolean {
+  validateDateOnly(today);
+  const user = getSubscriptionUser(db, telegramUserId);
+
+  return Boolean(
+    user &&
+      user.status === 'Unpaid' &&
+      !user.removedFromGroup &&
+      user.unpaidSince &&
+      dateDifferenceDays(user.unpaidSince, today) >= graceDays
+  );
+}
+
 export function markSubscriptionUserKicked(
   db: PublicSearchDatabase,
   telegramUserId: number,

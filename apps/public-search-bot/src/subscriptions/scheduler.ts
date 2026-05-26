@@ -10,6 +10,11 @@ export type DailySubscriptionRefreshOptions = {
   enqueueAt: Date;
 };
 
+export type DailySubscriptionRefreshResult = {
+  queuedKicks: number;
+  skipped: boolean;
+};
+
 export type StartDailySubscriptionRefreshLoopOptions = {
   run: () => Promise<void>;
   intervalMs?: number | undefined;
@@ -18,17 +23,25 @@ export type StartDailySubscriptionRefreshLoopOptions = {
 export async function runDailySubscriptionRefresh(
   db: PublicSearchDatabase,
   options: DailySubscriptionRefreshOptions
-) {
-  recalculateSubscriptions(db, options.today, options.periodDays);
-  const kickCandidates = listKickCandidates(db, options.today, options.overdueGraceDays);
+): Promise<DailySubscriptionRefreshResult> {
+  const refresh = db.transaction(() => {
+    if (!claimDailyRefreshDate(db, options.today, options.enqueueAt)) {
+      return { queuedKicks: 0, skipped: true };
+    }
 
-  for (const user of kickCandidates) {
-    enqueueSubscriptionJob(db, 'kick-user', { telegramUserId: user.telegramUserId }, options.enqueueAt);
-  }
-  enqueueSubscriptionJob(db, 'refresh-alert', {}, options.enqueueAt);
-  enqueueSubscriptionJob(db, 'refresh-sheet', {}, options.enqueueAt);
+    recalculateSubscriptions(db, options.today, options.periodDays);
+    const kickCandidates = listKickCandidates(db, options.today, options.overdueGraceDays);
 
-  return { queuedKicks: kickCandidates.length };
+    for (const user of kickCandidates) {
+      enqueueSubscriptionJob(db, 'kick-user', { telegramUserId: user.telegramUserId }, options.enqueueAt);
+    }
+    enqueueSubscriptionJob(db, 'refresh-alert', {}, options.enqueueAt);
+    enqueueSubscriptionJob(db, 'refresh-sheet', {}, options.enqueueAt);
+
+    return { queuedKicks: kickCandidates.length, skipped: false };
+  });
+
+  return refresh();
 }
 
 export function startDailySubscriptionRefreshLoop(input: StartDailySubscriptionRefreshLoopOptions) {
@@ -57,4 +70,27 @@ export function createDailySubscriptionRefreshRun(input: {
       enqueueAt
     });
   };
+}
+
+function claimDailyRefreshDate(db: PublicSearchDatabase, today: string, enqueueAt: Date) {
+  const row = db
+    .prepare('SELECT last_refresh_date AS lastRefreshDate FROM subscription_daily_refresh_state WHERE id = 1')
+    .get() as { lastRefreshDate: string | null } | undefined;
+
+  if (row?.lastRefreshDate === today) {
+    return false;
+  }
+
+  db.prepare(
+    `INSERT INTO subscription_daily_refresh_state (id, last_refresh_date, updated_at)
+     VALUES (1, @today, @updatedAt)
+     ON CONFLICT(id) DO UPDATE SET
+       last_refresh_date = excluded.last_refresh_date,
+       updated_at = excluded.updated_at`
+  ).run({
+    today,
+    updatedAt: enqueueAt.toISOString()
+  });
+
+  return true;
 }

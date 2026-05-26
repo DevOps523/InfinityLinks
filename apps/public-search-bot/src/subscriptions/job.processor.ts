@@ -19,6 +19,11 @@ export type ProcessSubscriptionJobOptions = {
   staleAfterMs?: number | undefined;
 };
 
+export type ProcessSubscriptionJobResult =
+  | { processed: false; failed: false }
+  | { processed: true; failed: false; job: SubscriptionJob }
+  | { processed: true; failed: true; job: SubscriptionJob; error: unknown };
+
 const DEFAULT_MAX_ATTEMPTS = 5;
 
 function retryAfterFor(error: unknown, attempts: number, now: Date) {
@@ -61,10 +66,10 @@ export async function processNextSubscriptionJob(
   handlers: SubscriptionJobHandlers,
   now: Date = new Date(),
   options: ProcessSubscriptionJobOptions = {}
-) {
+): Promise<ProcessSubscriptionJobResult> {
   const job = claimNextSubscriptionJob(db, now, { staleAfterMs: options.staleAfterMs });
   if (!job) {
-    return false;
+    return { processed: false, failed: false };
   }
 
   const claimedAt = requireClaimedAt(job);
@@ -78,7 +83,8 @@ export async function processNextSubscriptionJob(
     markSubscriptionJobFailed(db, job.id, claimedAt, error, retryAfterFor(error, job.attempts, failedAt), failedAt, {
       maxAttempts: options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
     });
+    return { processed: true, failed: true, job, error };
   }
 
-  return true;
+  return { processed: true, failed: false, job };
 }

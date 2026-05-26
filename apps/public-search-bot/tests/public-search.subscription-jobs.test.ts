@@ -243,7 +243,7 @@ describe('subscription jobs', () => {
         processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:01.000Z'), {
           clock: () => new Date('2026-05-26T00:00:01.000Z')
         })
-      ).resolves.toBe(true);
+      ).resolves.toMatchObject({ processed: true, failed: true });
 
       expect(listSubscriptionJobs(db)[0]).toMatchObject({
         status: 'pending',
@@ -252,6 +252,53 @@ describe('subscription jobs', () => {
         lastError: 'Too Many Requests',
         claimedAt: undefined
       });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('reports successful and empty job processor results', async () => {
+    const db = createDb();
+    try {
+      enqueueSubscriptionJob(db, 'refresh-alert', {}, new Date('2026-05-26T00:00:00.000Z'));
+      const handlers = {
+        kickUser: vi.fn(),
+        refreshAlert: vi.fn(async () => undefined),
+        refreshSheet: vi.fn()
+      };
+
+      await expect(
+        processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:01.000Z'), {
+          clock: () => new Date('2026-05-26T00:00:02.000Z')
+        })
+      ).resolves.toMatchObject({ processed: true, failed: false });
+      await expect(processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:03.000Z'))).resolves.toEqual({
+        processed: false,
+        failed: false
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('returns the handler error when a job is retried', async () => {
+    const db = createDb();
+    try {
+      enqueueSubscriptionJob(db, 'refresh-sheet', {}, new Date('2026-05-26T00:00:00.000Z'));
+      const error = new Error('sheet unavailable');
+      const handlers = {
+        kickUser: vi.fn(),
+        refreshAlert: vi.fn(),
+        refreshSheet: vi.fn(async () => {
+          throw error;
+        })
+      };
+
+      await expect(
+        processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:01.000Z'), {
+          clock: () => new Date('2026-05-26T00:00:01.000Z')
+        })
+      ).resolves.toMatchObject({ processed: true, failed: true, error });
     } finally {
       db.close();
     }
@@ -273,7 +320,7 @@ describe('subscription jobs', () => {
         processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:01.000Z'), {
           clock: () => new Date('2026-05-26T00:00:01.000Z')
         })
-      ).resolves.toBe(true);
+      ).resolves.toMatchObject({ processed: true, failed: true });
 
       expect(listSubscriptionJobs(db)[0]).toMatchObject({
         status: 'pending',
@@ -302,7 +349,7 @@ describe('subscription jobs', () => {
         processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:00.000Z'), {
           clock: () => new Date('2026-05-26T00:01:00.000Z')
         })
-      ).resolves.toBe(true);
+      ).resolves.toMatchObject({ processed: true, failed: true });
 
       expect(listSubscriptionJobs(db)[0]).toMatchObject({
         status: 'pending',
@@ -330,7 +377,7 @@ describe('subscription jobs', () => {
           clock: () => new Date('2026-05-26T00:00:01.000Z'),
           maxAttempts: 1
         })
-      ).resolves.toBe(true);
+      ).resolves.toMatchObject({ processed: true, failed: true });
 
       expect(handlers.kickUser).not.toHaveBeenCalled();
       expect(listSubscriptionJobs(db)[0]).toMatchObject({

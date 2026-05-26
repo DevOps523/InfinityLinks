@@ -86,6 +86,12 @@ CREATE TABLE IF NOT EXISTS subscription_alert_state (
   updated_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS subscription_daily_refresh_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  last_refresh_date TEXT,
+  updated_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_subscription_users_status ON subscription_users(status);
 CREATE INDEX IF NOT EXISTS idx_subscription_users_unpaid_since ON subscription_users(unpaid_since);
 

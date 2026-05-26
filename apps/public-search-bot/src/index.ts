@@ -9,13 +9,14 @@ import { createTelegramReplyQueue } from './telegram.reply-queue.js';
 import { createReplyThrottleState, handleTelegramUpdate } from './bot/handlers.js';
 import { pollOnce, type PollState } from './poller.js';
 import { createPublicSearchStatusTracker } from './status-tracker.js';
+import { todayDateString } from './subscriptions/date.js';
 import { refreshSubscriptionAlert } from './subscriptions/alert.service.js';
 import { handleSubscriptionBotUpdate } from './subscriptions/bot.handlers.js';
 import { createGoogleSheetsClient } from './subscriptions/google-sheets.client.js';
 import { processNextSubscriptionJob } from './subscriptions/job.processor.js';
 import { createSubscriptionRouter } from './subscriptions/routes.js';
 import { createDailySubscriptionRefreshRun, startDailySubscriptionRefreshLoop } from './subscriptions/scheduler.js';
-import { markSubscriptionUserKicked } from './subscriptions/repository.js';
+import { isKickStillDue, markSubscriptionUserKicked } from './subscriptions/repository.js';
 import { moveKickedUsersToHistory, syncSubscriptionsFromSheet } from './subscriptions/sync.service.js';
 
 function delay(ms: number) {
@@ -132,7 +133,7 @@ async function main() {
   async function processSubscriptionJobs() {
     while (true) {
       try {
-        await processNextSubscriptionJob(db, {
+        const result = await processNextSubscriptionJob(db, {
           refreshAlert: async () => {
             await refreshAlert();
           },
@@ -140,11 +141,23 @@ async function main() {
             await syncFromSheet();
           },
           kickUser: async (telegramUserId) => {
+            const now = new Date();
+            if (
+              !isKickStillDue(
+                db,
+                telegramUserId,
+                todayDateString(now),
+                config.subscriptionOverdueGraceDays
+              )
+            ) {
+              return;
+            }
+
             await subscriptionTelegram.removeChatMember({
               chatId: config.subscriptionGroupChatId,
               userId: telegramUserId
             });
-            const kicked = markSubscriptionUserKicked(db, telegramUserId, new Date());
+            const kicked = markSubscriptionUserKicked(db, telegramUserId, now);
             await moveKickedUsersToHistory(db, sheets, {
               usersRange: config.googleSheetsUsersRange,
               historyRange: config.googleSheetsHistoryRange,
@@ -152,7 +165,11 @@ async function main() {
             });
           }
         });
-        statusTracker.clearError('subscription_jobs');
+        if (result.failed) {
+          statusTracker.recordError('subscription_jobs', result.error);
+        } else {
+          statusTracker.clearError('subscription_jobs');
+        }
       } catch (error) {
         statusTracker.recordError('subscription_jobs', error);
         console.error('Subscription job processor failed', error);

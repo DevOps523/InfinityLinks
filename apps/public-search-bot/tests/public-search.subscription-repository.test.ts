@@ -8,6 +8,7 @@ import {
 } from '../src/subscriptions/date.js';
 import {
   applySubscriptionStartDate,
+  isKickStillDue,
   listActiveSubscriptionRows,
   listKickCandidates,
   listUsersNeedingAlert,
@@ -81,6 +82,10 @@ describe('subscription repository', () => {
         unpaidSince: '2026-06-26'
       });
       expect(listKickCandidates(db, '2026-06-27', 1).map((user) => user.telegramUserId)).toEqual([42]);
+      expect(isKickStillDue(db, 42, '2026-06-27', 1)).toBe(true);
+
+      applySubscriptionStartDate(db, 42, '2026-06-27', new Date('2026-06-27T01:00:00.000Z'), 31);
+      expect(isKickStillDue(db, 42, '2026-06-27', 1)).toBe(false);
     } finally {
       db.close();
     }

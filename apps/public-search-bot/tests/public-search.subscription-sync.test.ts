@@ -31,9 +31,68 @@ describe('subscription sync service', () => {
         enqueueAt: new Date('2026-06-27T00:00:00.000Z')
       });
 
-      expect(result).toEqual({ queuedKicks: 1 });
+      expect(result).toEqual({ queuedKicks: 1, skipped: false });
       expect(db.prepare('SELECT type, payload_json FROM subscription_jobs').all()).toEqual([
         { type: 'kick-user', payload_json: '{"telegramUserId":42}' },
+        { type: 'refresh-alert', payload_json: '{}' },
+        { type: 'refresh-sheet', payload_json: '{}' }
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not enqueue the same daily refresh batch twice', async () => {
+    const db = createDb();
+    try {
+      db.prepare(
+        `INSERT INTO subscription_users (
+           telegram_user_id, username, subscription_start_date, subscription_end_date, days_remaining,
+           status, unpaid_since, removed_from_group, created_at, updated_at
+         )
+         VALUES (42, 'late_user', '2026-05-26', '2026-06-26', 0, 'Unpaid', '2026-06-26', 0, '2026-05-26T00:00:00.000Z', '2026-06-26T00:00:00.000Z')`
+      ).run();
+
+      await runDailySubscriptionRefresh(db, {
+        today: '2026-06-27',
+        periodDays: 31,
+        overdueGraceDays: 1,
+        enqueueAt: new Date('2026-06-27T00:00:00.000Z')
+      });
+      const duplicate = await runDailySubscriptionRefresh(db, {
+        today: '2026-06-27',
+        periodDays: 31,
+        overdueGraceDays: 1,
+        enqueueAt: new Date('2026-06-27T01:00:00.000Z')
+      });
+
+      expect(duplicate).toEqual({ queuedKicks: 0, skipped: true });
+      expect(db.prepare('SELECT COUNT(*) AS count FROM subscription_jobs').get()).toEqual({ count: 3 });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('enqueues a new daily refresh batch on the next date', async () => {
+    const db = createDb();
+    try {
+      await runDailySubscriptionRefresh(db, {
+        today: '2026-06-27',
+        periodDays: 31,
+        overdueGraceDays: 1,
+        enqueueAt: new Date('2026-06-27T00:00:00.000Z')
+      });
+      const nextDay = await runDailySubscriptionRefresh(db, {
+        today: '2026-06-28',
+        periodDays: 31,
+        overdueGraceDays: 1,
+        enqueueAt: new Date('2026-06-28T00:00:00.000Z')
+      });
+
+      expect(nextDay).toEqual({ queuedKicks: 0, skipped: false });
+      expect(db.prepare('SELECT type, payload_json FROM subscription_jobs').all()).toEqual([
+        { type: 'refresh-alert', payload_json: '{}' },
+        { type: 'refresh-sheet', payload_json: '{}' },
         { type: 'refresh-alert', payload_json: '{}' },
         { type: 'refresh-sheet', payload_json: '{}' }
       ]);

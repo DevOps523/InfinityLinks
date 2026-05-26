@@ -114,6 +114,64 @@ describe('subscription alert service', () => {
     }
   });
 
+  it('treats an unchanged Telegram edit as a successful update', async () => {
+    const db = createDb();
+    try {
+      upsertSeenTelegramUser(db, { id: 42, username: 'need_pay' }, new Date('2026-05-26T00:00:00.000Z'));
+      db.prepare("UPDATE subscription_users SET status = 'Needs Attention' WHERE telegram_user_id = 42").run();
+      db.prepare(
+        "INSERT INTO subscription_alert_state (id, message_id, updated_at) VALUES (1, 777, '2026-05-26T00:00:00.000Z')"
+      ).run();
+      const telegram = createTelegram({
+        editMessageText: vi.fn(async () => {
+          throw new Error('Bad Request: message is not modified');
+        })
+      });
+
+      await expect(refreshSubscriptionAlert(db, telegram, { chatId: -1003963665033, messageThreadId: 46 })).resolves.toEqual({
+        state: 'updated',
+        count: 1,
+        messageId: 777
+      });
+
+      expect(telegram.sendMessage).not.toHaveBeenCalled();
+      expect(alertState(db)).toEqual({ messageId: 777 });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('truncates long alert lists to fit Telegram message limits', async () => {
+    const db = createDb();
+    try {
+      for (let id = 1000; id < 1100; id += 1) {
+        upsertSeenTelegramUser(
+          db,
+          { id, username: `user_${id}_${'x'.repeat(90)}` },
+          new Date('2026-05-26T00:00:00.000Z')
+        );
+        db.prepare("UPDATE subscription_users SET status = 'Needs Attention' WHERE telegram_user_id = ?").run(id);
+      }
+      const telegram = createTelegram();
+
+      await expect(refreshSubscriptionAlert(db, telegram, { chatId: -1003963665033, messageThreadId: 46 })).resolves.toEqual({
+        state: 'posted',
+        count: 100,
+        messageId: 777
+      });
+
+      const text = telegram.sendMessage.mock.calls[0]?.[0].text as string;
+      const truncatedMatch = text.match(/\.\.\.and (\d+) more users\.$/);
+      expect(text.length).toBeLessThanOrEqual(4096);
+      expect(text).toContain('@user_1000_');
+      expect(text).not.toContain('@user_1099_');
+      expect(truncatedMatch).not.toBeNull();
+      expect(Number(truncatedMatch?.[1])).toBeGreaterThan(0);
+    } finally {
+      db.close();
+    }
+  });
+
   it('deletes the alert when no users need attention', async () => {
     const db = createDb();
     try {
@@ -129,6 +187,28 @@ describe('subscription alert service', () => {
 
       expect(telegram.deleteMessage).toHaveBeenCalledWith({ chatId: -1003963665033, messageId: 777 });
       expect(alertState(db)).toEqual({ messageId: null });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('throws and preserves state when Telegram cannot delete an old alert', async () => {
+    const db = createDb();
+    try {
+      db.prepare(
+        "INSERT INTO subscription_alert_state (id, message_id, updated_at) VALUES (1, 777, '2026-05-26T00:00:00.000Z')"
+      ).run();
+      const telegram = createTelegram({
+        deleteMessage: vi.fn(async () => {
+          throw new Error("Bad Request: message can't be deleted");
+        })
+      });
+
+      await expect(refreshSubscriptionAlert(db, telegram, { chatId: -1003963665033, messageThreadId: 46 })).rejects.toThrow(
+        /message can't be deleted/
+      );
+
+      expect(alertState(db)).toEqual({ messageId: 777 });
     } finally {
       db.close();
     }

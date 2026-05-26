@@ -13,18 +13,42 @@ export type RefreshSubscriptionAlertOptions = {
   messageThreadId: number;
 };
 
+const TELEGRAM_TEXT_LIMIT = 4096;
+const ALERT_HEADER_LINES = [
+  '🚨 Subscription Alert',
+  '',
+  'Your subscription is unpaid or almost expired. Please renew to keep access.',
+  ''
+];
+
 function usernameLine(user: SubscriptionUser) {
   return user.username ? `@${user.username}` : `User ID: ${user.telegramUserId}`;
 }
 
 export function formatSubscriptionAlert(users: SubscriptionUser[]) {
-  return [
-    '🚨 Subscription Alert',
-    '',
-    'Your subscription is unpaid or almost expired. Please renew to keep access.',
-    '',
-    ...users.map(usernameLine)
-  ].join('\n');
+  const userLines = users.map(usernameLine);
+  const includedUserLines: string[] = [];
+
+  for (const userLine of userLines) {
+    const remainingAfterLine = userLines.length - includedUserLines.length - 1;
+    const candidate = formatAlertLines([
+      ...includedUserLines,
+      userLine,
+      ...(remainingAfterLine > 0 ? [truncatedLine(remainingAfterLine)] : [])
+    ]);
+
+    if (candidate.length > TELEGRAM_TEXT_LIMIT) {
+      break;
+    }
+
+    includedUserLines.push(userLine);
+  }
+
+  const truncatedCount = userLines.length - includedUserLines.length;
+  return formatAlertLines([
+    ...includedUserLines,
+    ...(truncatedCount > 0 ? [truncatedLine(truncatedCount)] : [])
+  ]);
 }
 
 function getStoredAlertMessageId(db: PublicSearchDatabase) {
@@ -48,14 +72,36 @@ function storeAlertMessageId(db: PublicSearchDatabase, messageId: number | undef
   });
 }
 
-function isMissingMessageError(error: unknown) {
+function formatAlertLines(lines: string[]) {
+  return [...ALERT_HEADER_LINES, ...lines].join('\n');
+}
+
+function truncatedLine(count: number) {
+  return `...and ${count} more users.`;
+}
+
+function isMessageNotModifiedError(error: unknown) {
   if (!(error instanceof Error)) {
     return false;
   }
 
-  return /message (to edit|to delete|identifier) not found|message can't be (edited|deleted)|message_id_invalid/i.test(
-    error.message
-  );
+  return /message is not modified/i.test(error.message);
+}
+
+function isMissingEditMessageError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /message to edit not found|message identifier is not specified|message_id_invalid/i.test(error.message);
+}
+
+function isMissingDeleteMessageError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /message to delete not found|message identifier is not specified|message_id_invalid/i.test(error.message);
 }
 
 async function sendFreshAlert(
@@ -87,7 +133,7 @@ export async function refreshSubscriptionAlert(
       try {
         await telegram.deleteMessage({ chatId: options.chatId, messageId: existingMessageId });
       } catch (error) {
-        if (!isMissingMessageError(error)) {
+        if (!isMissingDeleteMessageError(error)) {
           throw error;
         }
       }
@@ -103,7 +149,11 @@ export async function refreshSubscriptionAlert(
       await telegram.editMessageText({ chatId: options.chatId, messageId: existingMessageId, text });
       return { state: 'updated', count: users.length, messageId: existingMessageId };
     } catch (error) {
-      if (!isMissingMessageError(error)) {
+      if (isMessageNotModifiedError(error)) {
+        return { state: 'updated', count: users.length, messageId: existingMessageId };
+      }
+
+      if (!isMissingEditMessageError(error)) {
         throw error;
       }
       return sendFreshAlert(db, telegram, options, text, users.length);

@@ -13,7 +13,14 @@ function parseDateOnly(value: string) {
     throw new Error(`Invalid date-only value: ${value}`);
   }
 
-  return Date.UTC(year, month - 1, day);
+  const utcTime = Date.UTC(year, month - 1, day);
+  const date = new Date(utcTime);
+
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    throw new Error(`Invalid date-only value: ${value}`);
+  }
+
+  return utcTime;
 }
 
 export function todayDateString(now: Date = new Date()) {

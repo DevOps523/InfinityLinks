@@ -141,46 +141,25 @@ export function applySubscriptionStartDate(
   now: Date,
   periodDays: number
 ): SubscriptionUser {
+  validateSubscriptionPeriodDays(periodDays);
+
   const nowIso = now.toISOString();
   const endDate = addDateDays(startDate, periodDays);
   const daysRemaining = calculateDaysRemaining(endDate, todayDateString(now));
   const status = statusForDaysRemaining(daysRemaining);
   const unpaidSince = status === 'Unpaid' ? todayDateString(now) : null;
 
-  db.prepare(
-    `INSERT INTO subscription_users (
-       telegram_user_id,
-       subscription_start_date,
-       subscription_end_date,
-       days_remaining,
-       status,
-       unpaid_since,
-       kicked_at,
-       removed_from_group,
-       created_at,
-       updated_at
-     )
-     VALUES (
-       @telegramUserId,
-       @subscriptionStartDate,
-       @subscriptionEndDate,
-       @daysRemaining,
-       @status,
-       @unpaidSince,
-       NULL,
-       0,
-       @nowIso,
-       @nowIso
-     )
-     ON CONFLICT(telegram_user_id) DO UPDATE SET
-       subscription_start_date = excluded.subscription_start_date,
-       subscription_end_date = excluded.subscription_end_date,
-       days_remaining = excluded.days_remaining,
-       status = excluded.status,
-       unpaid_since = excluded.unpaid_since,
-       kicked_at = NULL,
-       removed_from_group = 0,
-       updated_at = excluded.updated_at`
+  const result = db.prepare(
+    `UPDATE subscription_users
+     SET subscription_start_date = @subscriptionStartDate,
+         subscription_end_date = @subscriptionEndDate,
+         days_remaining = @daysRemaining,
+         status = @status,
+         unpaid_since = @unpaidSince,
+         kicked_at = NULL,
+         removed_from_group = 0,
+         updated_at = @nowIso
+     WHERE telegram_user_id = @telegramUserId`
   ).run({
     telegramUserId,
     subscriptionStartDate: startDate,
@@ -191,10 +170,17 @@ export function applySubscriptionStartDate(
     nowIso
   });
 
+  if (result.changes !== 1) {
+    throw new Error(`Subscription user ${telegramUserId} does not exist`);
+  }
+
   return requireSubscriptionUser(db, telegramUserId);
 }
 
 export function recalculateSubscriptions(db: PublicSearchDatabase, today: string, periodDays: number): void {
+  validateSubscriptionPeriodDays(periodDays);
+
+  const updatedAt = `${today}T00:00:00.000Z`;
   const rows = db
     .prepare(
       `SELECT telegram_user_id AS telegramUserId, subscription_start_date AS subscriptionStartDate, unpaid_since AS unpaidSince
@@ -226,7 +212,7 @@ export function recalculateSubscriptions(db: PublicSearchDatabase, today: string
         daysRemaining,
         status,
         unpaidSince: status === 'Unpaid' ? row.unpaidSince ?? today : null,
-        updatedAt: today
+        updatedAt
       });
     }
   });
@@ -329,6 +315,12 @@ function statusForDaysRemaining(daysRemaining: number): SubscriptionStatus {
   }
 
   return 'Unpaid';
+}
+
+function validateSubscriptionPeriodDays(periodDays: number) {
+  if (!Number.isInteger(periodDays) || periodDays <= 0) {
+    throw new Error('Subscription period days must be a positive integer');
+  }
 }
 
 function mapSubscriptionUser(row: SubscriptionUserRow): SubscriptionUser {

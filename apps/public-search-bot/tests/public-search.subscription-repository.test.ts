@@ -30,6 +30,7 @@ describe('subscription repository', () => {
     expect(calculateDaysRemaining('2026-06-26', '2026-06-25')).toBe(1);
     expect(calculateDaysRemaining('2026-06-26', '2026-06-26')).toBe(0);
     expect(todayDateString(new Date('2026-05-26T16:00:00.000Z'))).toBe('2026-05-26');
+    expect(() => addDateDays('2026-02-31', 1)).toThrow(/Invalid date-only value/);
   });
 
   it('starts one trial once and keeps username keyed by user id', () => {
@@ -80,6 +81,35 @@ describe('subscription repository', () => {
         unpaidSince: '2026-06-26'
       });
       expect(listKickCandidates(db, '2026-06-27', 1).map((user) => user.telegramUserId)).toEqual([42]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('requires an existing user before applying a paid start date', () => {
+    const db = createDb();
+    try {
+      expect(() => applySubscriptionStartDate(db, 42, '2026-05-26', new Date('2026-05-26T00:00:00.000Z'), 31)).toThrow(
+        /Subscription user 42 does not exist/
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rejects invalid paid subscription periods', () => {
+    const db = createDb();
+    try {
+      upsertSeenTelegramUser(db, { id: 42, username: 'paid_user' }, new Date('2026-05-26T00:00:00.000Z'));
+
+      for (const periodDays of [0, -1, 1.5, Number.POSITIVE_INFINITY, Number.NaN]) {
+        expect(() => applySubscriptionStartDate(db, 42, '2026-05-26', new Date('2026-05-26T00:00:00.000Z'), periodDays)).toThrow(
+          /Subscription period days must be a positive integer/
+        );
+        expect(() => recalculateSubscriptions(db, '2026-06-25', periodDays)).toThrow(
+          /Subscription period days must be a positive integer/
+        );
+      }
     } finally {
       db.close();
     }

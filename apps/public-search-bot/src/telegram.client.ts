@@ -81,6 +81,21 @@ export class TelegramRateLimitError extends Error {
   }
 }
 
+export class TelegramRemoveChatMemberError extends Error {
+  chatId: number;
+  userId: number;
+
+  constructor(input: { chatId: number; userId: number; cause: unknown }) {
+    super(
+      `Telegram removeChatMember failed after banning user ${input.userId} from chat ${input.chatId}; user may still be banned`,
+      { cause: input.cause }
+    );
+    this.name = 'TelegramRemoveChatMemberError';
+    this.chatId = input.chatId;
+    this.userId = input.userId;
+  }
+}
+
 function getTelegramErrorMessage(payload: TelegramApiResponse<unknown>, fallback: string) {
   return typeof payload.description === 'string' && payload.description.length > 0 ? payload.description : fallback;
 }
@@ -132,6 +147,14 @@ export function createPublicTelegramClient(
     return payload.result;
   }
 
+  async function unbanChatMember(input: { chatId: number; userId: number; onlyIfBanned?: boolean }): Promise<void> {
+    await post('unbanChatMember', {
+      chat_id: input.chatId,
+      user_id: input.userId,
+      only_if_banned: input.onlyIfBanned
+    });
+  }
+
   return {
     async getUpdates(input: {
       offset?: number | undefined;
@@ -181,14 +204,22 @@ export function createPublicTelegramClient(
     async removeChatMember(input: { chatId: number; userId: number }): Promise<void> {
       await post('banChatMember', {
         chat_id: input.chatId,
-        user_id: input.userId
-      });
-      await post('unbanChatMember', {
-        chat_id: input.chatId,
         user_id: input.userId,
-        only_if_banned: true
+        revoke_messages: false
       });
+
+      try {
+        await unbanChatMember({
+          chatId: input.chatId,
+          userId: input.userId,
+          onlyIfBanned: true
+        });
+      } catch (cause) {
+        throw new TelegramRemoveChatMemberError({ ...input, cause });
+      }
     },
+
+    unbanChatMember,
 
     async answerCallbackQuery(input: { callbackQueryId: string; text?: string }): Promise<void> {
       await post('answerCallbackQuery', {

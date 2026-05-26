@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createPublicTelegramClient,
+  TelegramRemoveChatMemberError,
   TelegramRateLimitError
 } from '../src/telegram.client.js';
 
@@ -70,8 +71,48 @@ describe('public Telegram client', () => {
 
     await client.removeChatMember({ chatId: -1003963665033, userId: 42 });
 
-    expect(getJsonBody(fetchMock, 0)).toEqual({ chat_id: -1003963665033, user_id: 42 });
+    expect(getJsonBody(fetchMock, 0)).toEqual({ chat_id: -1003963665033, user_id: 42, revoke_messages: false });
     expect(getJsonBody(fetchMock, 1)).toEqual({ chat_id: -1003963665033, user_id: 42, only_if_banned: true });
+  });
+
+  it('throws a recoverable remove error when unban fails after ban succeeds', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ ok: true, result: true }))
+      .mockResolvedValueOnce(Response.json({ ok: false, description: 'Telegram unbanChatMember failed' }, { status: 400 }));
+    const client = createPublicTelegramClient({ botToken: 'bot-token' }, fetchMock);
+
+    let error: unknown;
+    try {
+      await client.removeChatMember({ chatId: -1003963665033, userId: 42 });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(TelegramRemoveChatMemberError);
+    expect(error).toMatchObject({
+      name: 'TelegramRemoveChatMemberError',
+      message: expect.stringContaining('user may still be banned'),
+      chatId: -1003963665033,
+      userId: 42
+    });
+    expect((error as Error).cause).toBeInstanceOf(Error);
+
+    expect(getJsonBody(fetchMock, 0)).toEqual({ chat_id: -1003963665033, user_id: 42, revoke_messages: false });
+    expect(getJsonBody(fetchMock, 1)).toEqual({ chat_id: -1003963665033, user_id: 42, only_if_banned: true });
+  });
+
+  it('unbanChatMember sends the unban payload', async () => {
+    const fetchMock = vi.fn(async () => Response.json({ ok: true, result: true }));
+    const client = createPublicTelegramClient({ botToken: 'bot-token' }, fetchMock);
+
+    await client.unbanChatMember({ chatId: -1003963665033, userId: 42, onlyIfBanned: true });
+
+    expect(getJsonBody(fetchMock)).toEqual({
+      chat_id: -1003963665033,
+      user_id: 42,
+      only_if_banned: true
+    });
   });
 
   it('answerCallbackQuery sends the callback query ID', async () => {

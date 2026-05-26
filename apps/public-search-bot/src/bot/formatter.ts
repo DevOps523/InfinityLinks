@@ -49,16 +49,6 @@ export function formatClearMessage(): PublicBotMessage {
   };
 }
 
-export function formatJoinRequiredMessage(handles: PublicBotHandles): PublicBotMessage {
-  return {
-    text: [
-      'We could not verify your group membership right now. Please join the group and try again.',
-      '',
-      formatHandles(handles)
-    ].join('\n')
-  };
-}
-
 export function formatSubscriptionRequiredMessage(adminContact: string): PublicBotMessage {
   return {
     text: `You need a subscription to view and access download links. Contact ${adminContact} to keep you going.`

@@ -200,7 +200,7 @@ function createDeps(db: PublicSearchDatabase, overrides: Partial<HandlerDeps> = 
 }
 
 describe('public search bot handlers', () => {
-  it('replies to /start with usage without requiring membership', async () => {
+  it('replies to /start with usage without requiring subscription access', async () => {
     const db = createMigratedDatabase();
 
     try {
@@ -217,7 +217,7 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('replies to /search with no query with validation without requiring membership', async () => {
+  it('replies to /search with no query with validation without requiring subscription access', async () => {
     const db = createMigratedDatabase();
 
     try {
@@ -235,7 +235,7 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('replies to /clear with a clear message without requiring membership', async () => {
+  it('replies to /clear with a clear message without requiring subscription access', async () => {
     const db = createMigratedDatabase();
 
     try {
@@ -339,7 +339,7 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('rate limits repeated unknown slash commands without requiring membership', async () => {
+  it('rate limits repeated unknown slash commands without requiring subscription access', async () => {
     const db = createMigratedDatabase();
 
     try {

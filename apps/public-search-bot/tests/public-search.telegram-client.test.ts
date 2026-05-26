@@ -95,7 +95,7 @@ describe('public Telegram client', () => {
     ]);
   });
 
-  it('getChatMember returns membership status', async () => {
+  it('getChatMember returns chat member status', async () => {
     const fetchMock = vi.fn(async () =>
       Response.json({
         ok: true,

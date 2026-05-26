@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { PublicSearchResult, PublicSeasonDetails } from '../src/search.repository.js';
 import {
   formatClearMessage,
-  formatJoinRequiredMessage,
   formatNoResultsMessage,
   formatSearchResults,
   formatSearchValidationMessage,
@@ -48,15 +47,6 @@ describe('public search bot formatter', () => {
 
     expect(formatClearMessage().text).toBe('🧹 Cleared. Search anytime with /search movie or tv show name.');
     expect(formatClearMessage().replyMarkup).toBeUndefined();
-
-    expect(formatJoinRequiredMessage(handles).text).toBe(
-      [
-        'We could not verify your group membership right now. Please join the group and try again.',
-        '',
-        '👥 Group: @infinitylinks69'
-      ].join('\n')
-    );
-    expect(formatJoinRequiredMessage(handles).replyMarkup).toBeUndefined();
 
     expect(formatSubscriptionRequiredMessage('@seinen_illuminatiks').text).toBe(
       'You need a subscription to view and access download links. Contact @seinen_illuminatiks to keep you going.'

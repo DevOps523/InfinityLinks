@@ -13,10 +13,11 @@ import { todayDateString } from './subscriptions/date.js';
 import { refreshSubscriptionAlert } from './subscriptions/alert.service.js';
 import { handleSubscriptionBotUpdate } from './subscriptions/bot.handlers.js';
 import { createGoogleSheetsClient } from './subscriptions/google-sheets.client.js';
+import { getSubscriptionJobHealth } from './subscriptions/job.repository.js';
 import { processNextSubscriptionJob } from './subscriptions/job.processor.js';
 import { createSubscriptionRouter } from './subscriptions/routes.js';
 import { createDailySubscriptionRefreshRun, startDailySubscriptionRefreshLoop } from './subscriptions/scheduler.js';
-import { isKickStillDue, markSubscriptionUserKicked } from './subscriptions/repository.js';
+import { isKickStillDue, markSubscriptionUserKickedIfStillDue } from './subscriptions/repository.js';
 import { moveKickedUsersToHistory, syncSubscriptionsFromSheet } from './subscriptions/sync.service.js';
 
 function delay(ms: number) {
@@ -157,7 +158,17 @@ async function main() {
               chatId: config.subscriptionGroupChatId,
               userId: telegramUserId
             });
-            const kicked = markSubscriptionUserKicked(db, telegramUserId, now);
+            const kicked = markSubscriptionUserKickedIfStillDue(
+              db,
+              telegramUserId,
+              now,
+              todayDateString(now),
+              config.subscriptionOverdueGraceDays
+            );
+            if (!kicked) {
+              return;
+            }
+
             await moveKickedUsersToHistory(db, sheets, {
               usersRange: config.googleSheetsUsersRange,
               historyRange: config.googleSheetsHistoryRange,
@@ -168,7 +179,12 @@ async function main() {
         if (result.failed) {
           statusTracker.recordError('subscription_jobs', result.error);
         } else {
-          statusTracker.clearError('subscription_jobs');
+          const health = getSubscriptionJobHealth(db);
+          if (health.unhealthy) {
+            statusTracker.recordError('subscription_jobs', formatSubscriptionJobHealthError(health));
+          } else {
+            statusTracker.clearError('subscription_jobs');
+          }
         }
       } catch (error) {
         statusTracker.recordError('subscription_jobs', error);
@@ -195,6 +211,14 @@ async function main() {
   });
 
   await Promise.all([pollPublicBot(), pollSubscriptionBot(), processSubscriptionJobs()]);
+}
+
+function formatSubscriptionJobHealthError(health: ReturnType<typeof getSubscriptionJobHealth>) {
+  return new Error(
+    `Subscription jobs unhealthy: ${health.failedJobs} failed, ${health.retryJobs} pending retry${
+      health.lastError ? `; last error: ${health.lastError}` : ''
+    }`
+  );
 }
 
 main().catch((error) => {

@@ -8,10 +8,12 @@ import {
 } from '../src/subscriptions/date.js';
 import {
   applySubscriptionStartDate,
+  getSubscriptionUser,
   isKickStillDue,
   listActiveSubscriptionRows,
   listKickCandidates,
   listUsersNeedingAlert,
+  markSubscriptionUserKickedIfStillDue,
   markSubscriptionUserKicked,
   recalculateSubscriptions,
   startTrialIfEligible,
@@ -225,6 +227,35 @@ describe('subscription repository', () => {
         kickedAt: '2026-06-27T00:00:00.000Z'
       });
       expect(startTrialIfEligible(db, { id: 42, username: 'late_user' }, new Date('2026-06-28T00:00:00.000Z'), 24).started).toBe(false);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not overwrite a paid subscription when completing a stale kick', () => {
+    const db = createDb();
+    try {
+      upsertSeenTelegramUser(db, { id: 42, username: 'late_user' }, new Date('2026-05-26T00:00:00.000Z'));
+      applySubscriptionStartDate(db, 42, '2026-05-26', new Date('2026-05-26T00:00:00.000Z'), 31);
+      recalculateSubscriptions(db, '2026-06-26', 31);
+      expect(isKickStillDue(db, 42, '2026-06-27', 1)).toBe(true);
+
+      applySubscriptionStartDate(db, 42, '2026-06-27', new Date('2026-06-27T00:30:00.000Z'), 31);
+
+      expect(
+        markSubscriptionUserKickedIfStillDue(
+          db,
+          42,
+          new Date('2026-06-27T01:00:00.000Z'),
+          '2026-06-27',
+          1
+        )
+      ).toBeUndefined();
+      expect(getSubscriptionUser(db, 42)).toMatchObject({
+        status: 'Subscribe',
+        removedFromGroup: false,
+        kickedAt: undefined
+      });
     } finally {
       db.close();
     }

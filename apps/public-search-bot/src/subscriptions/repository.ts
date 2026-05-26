@@ -284,6 +284,47 @@ export function markSubscriptionUserKicked(
   return requireSubscriptionUser(db, telegramUserId);
 }
 
+export function markSubscriptionUserKickedIfStillDue(
+  db: PublicSearchDatabase,
+  telegramUserId: number,
+  now: Date,
+  today: string,
+  graceDays: number
+): SubscriptionUser | undefined {
+  validateDateOnly(today);
+  const current = getSubscriptionUser(db, telegramUserId);
+  if (
+    !current ||
+    current.status !== 'Unpaid' ||
+    current.removedFromGroup ||
+    !current.unpaidSince ||
+    dateDifferenceDays(current.unpaidSince, today) < graceDays
+  ) {
+    return undefined;
+  }
+
+  const nowIso = now.toISOString();
+  const result = db
+    .prepare(
+      `UPDATE subscription_users
+       SET status = 'Kicked',
+           kicked_at = @nowIso,
+           removed_from_group = 1,
+           updated_at = @nowIso
+       WHERE telegram_user_id = @telegramUserId
+         AND status = 'Unpaid'
+         AND removed_from_group = 0
+         AND unpaid_since = @unpaidSince`
+    )
+    .run({
+      telegramUserId,
+      unpaidSince: current.unpaidSince,
+      nowIso
+    });
+
+  return result.changes === 1 ? requireSubscriptionUser(db, telegramUserId) : undefined;
+}
+
 export function listActiveSubscriptionRows(db: PublicSearchDatabase): SubscriptionUser[] {
   return listSubscriptionUsers(
     db,

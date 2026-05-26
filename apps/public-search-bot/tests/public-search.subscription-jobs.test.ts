@@ -4,6 +4,7 @@ import { createPublicSearchDatabase } from '../src/db/database.js';
 import { migratePublicSearchDatabase } from '../src/db/migrate.js';
 import {
   enqueueSubscriptionJob,
+  getSubscriptionJobHealth,
   listSubscriptionJobs,
   claimNextSubscriptionJob,
   markSubscriptionJobSucceeded,
@@ -299,6 +300,12 @@ describe('subscription jobs', () => {
           clock: () => new Date('2026-05-26T00:00:01.000Z')
         })
       ).resolves.toMatchObject({ processed: true, failed: true, error });
+      expect(getSubscriptionJobHealth(db)).toEqual({
+        unhealthy: true,
+        failedJobs: 0,
+        retryJobs: 1,
+        lastError: 'sheet unavailable'
+      });
     } finally {
       db.close();
     }
@@ -385,6 +392,37 @@ describe('subscription jobs', () => {
         attempts: 1,
         lastError: 'kick-user job is missing numeric telegramUserId',
         claimedAt: undefined
+      });
+      expect(getSubscriptionJobHealth(db)).toEqual({
+        unhealthy: true,
+        failedJobs: 1,
+        retryJobs: 0,
+        lastError: 'kick-user job is missing numeric telegramUserId'
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('reports healthy when no failed or retrying jobs remain', async () => {
+    const db = createDb();
+    try {
+      enqueueSubscriptionJob(db, 'refresh-alert', {}, new Date('2026-05-26T00:00:00.000Z'));
+      const handlers = {
+        kickUser: vi.fn(),
+        refreshAlert: vi.fn(async () => undefined),
+        refreshSheet: vi.fn()
+      };
+
+      await processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:01.000Z'), {
+        clock: () => new Date('2026-05-26T00:00:02.000Z')
+      });
+
+      expect(getSubscriptionJobHealth(db)).toEqual({
+        unhealthy: false,
+        failedJobs: 0,
+        retryJobs: 0,
+        lastError: undefined
       });
     } finally {
       db.close();

@@ -24,6 +24,13 @@ export type MarkSubscriptionJobFailedOptions = {
   maxAttempts?: number | undefined;
 };
 
+export type SubscriptionJobHealth = {
+  unhealthy: boolean;
+  failedJobs: number;
+  retryJobs: number;
+  lastError?: string | undefined;
+};
+
 type SubscriptionJobRow = {
   id: number;
   type: SubscriptionJobType;
@@ -250,6 +257,39 @@ export function markSubscriptionJobFailed(
     });
 
   return result.changes === 1;
+}
+
+export function getSubscriptionJobHealth(db: PublicSearchDatabase): SubscriptionJobHealth {
+  const row = db
+    .prepare(
+      `SELECT
+         SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failedJobs,
+         SUM(CASE WHEN status = 'pending' AND last_error IS NOT NULL THEN 1 ELSE 0 END) AS retryJobs
+       FROM subscription_jobs`
+    )
+    .get() as { failedJobs: number | null; retryJobs: number | null };
+  const lastErrorRow = db
+    .prepare(
+      `SELECT last_error AS lastError
+       FROM subscription_jobs
+       WHERE last_error IS NOT NULL
+         AND (
+           status = 'failed'
+           OR (status = 'pending' AND last_error IS NOT NULL)
+         )
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 1`
+    )
+    .get() as { lastError: string | null } | undefined;
+  const failedJobs = row.failedJobs ?? 0;
+  const retryJobs = row.retryJobs ?? 0;
+
+  return {
+    unhealthy: failedJobs > 0 || retryJobs > 0,
+    failedJobs,
+    retryJobs,
+    lastError: lastErrorRow?.lastError ?? undefined
+  };
 }
 
 function requireSubscriptionJob(db: PublicSearchDatabase, id: number): SubscriptionJob {

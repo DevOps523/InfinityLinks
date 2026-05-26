@@ -141,6 +141,44 @@ describe('loadPublicSearchConfig', () => {
     ).toThrow(/SUBSCRIPTION_ADMIN_TOKEN is required/);
   });
 
+  it('requires Google Sheets spreadsheet and service account settings', () => {
+    expect(() =>
+      loadPublicSearchConfig({
+        PUBLIC_BOT_TOKEN: 'bot-token',
+        PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
+        PUBLIC_SEARCH_STATUS_TOKEN: 'status-token',
+        SUBSCRIPTION_BOT_TOKEN: 'subscription-token',
+        SUBSCRIPTION_ADMIN_TOKEN: 'admin-token',
+        GOOGLE_SERVICE_ACCOUNT_KEY_FILE: '/secure/google.json'
+      })
+    ).toThrow(/GOOGLE_SHEETS_SPREADSHEET_ID is required/);
+
+    expect(() =>
+      loadPublicSearchConfig({
+        PUBLIC_BOT_TOKEN: 'bot-token',
+        PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
+        PUBLIC_SEARCH_STATUS_TOKEN: 'status-token',
+        SUBSCRIPTION_BOT_TOKEN: 'subscription-token',
+        SUBSCRIPTION_ADMIN_TOKEN: 'admin-token',
+        GOOGLE_SHEETS_SPREADSHEET_ID: 'sheet-id'
+      })
+    ).toThrow(/GOOGLE_SERVICE_ACCOUNT_KEY_FILE is required/);
+  });
+
+  it('rejects reusing the sync token as the subscription admin token after trimming', () => {
+    expect(() =>
+      loadPublicSearchConfig({
+        PUBLIC_BOT_TOKEN: 'bot-token',
+        PUBLIC_SEARCH_SYNC_TOKEN: ' shared-token ',
+        PUBLIC_SEARCH_STATUS_TOKEN: 'status-token',
+        SUBSCRIPTION_BOT_TOKEN: 'subscription-token',
+        SUBSCRIPTION_ADMIN_TOKEN: 'shared-token',
+        GOOGLE_SHEETS_SPREADSHEET_ID: 'sheet-id',
+        GOOGLE_SERVICE_ACCOUNT_KEY_FILE: '/secure/google.json'
+      })
+    ).toThrow(/SUBSCRIPTION_ADMIN_TOKEN must be different from PUBLIC_SEARCH_SYNC_TOKEN/);
+  });
+
   it('returns subscription defaults and explicit sheet settings', () => {
     expect(
       loadPublicSearchConfig({
@@ -165,6 +203,37 @@ describe('loadPublicSearchConfig', () => {
       googleSheetsUsersRange: 'Users!A:G',
       googleSheetsHistoryRange: 'History!A:G',
       googleServiceAccountKeyFile: '/secure/google.json'
+    });
+  });
+
+  it('accepts explicit subscription and Google Sheets optional values', () => {
+    expect(
+      loadPublicSearchConfig({
+        PUBLIC_BOT_TOKEN: 'bot-token',
+        PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
+        PUBLIC_SEARCH_STATUS_TOKEN: 'status-token',
+        SUBSCRIPTION_BOT_TOKEN: 'subscription-token',
+        SUBSCRIPTION_GROUP_CHAT_ID: '-100123',
+        SUBSCRIPTION_ALERT_THREAD_ID: '47',
+        SUBSCRIPTION_ADMIN_CONTACT: ' @admin_contact ',
+        SUBSCRIPTION_TRIAL_HOURS: '12',
+        SUBSCRIPTION_PERIOD_DAYS: '30',
+        SUBSCRIPTION_OVERDUE_GRACE_DAYS: '2',
+        SUBSCRIPTION_ADMIN_TOKEN: 'admin-token',
+        GOOGLE_SHEETS_SPREADSHEET_ID: 'sheet-id',
+        GOOGLE_SHEETS_USERS_RANGE: ' Members!A:G ',
+        GOOGLE_SHEETS_HISTORY_RANGE: ' Payments!A:G ',
+        GOOGLE_SERVICE_ACCOUNT_KEY_FILE: '/secure/google.json'
+      })
+    ).toMatchObject({
+      subscriptionGroupChatId: -100123,
+      subscriptionAlertThreadId: 47,
+      subscriptionAdminContact: '@admin_contact',
+      subscriptionTrialHours: 12,
+      subscriptionPeriodDays: 30,
+      subscriptionOverdueGraceDays: 2,
+      googleSheetsUsersRange: 'Members!A:G',
+      googleSheetsHistoryRange: 'Payments!A:G'
     });
   });
 });

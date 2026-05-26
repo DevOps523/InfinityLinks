@@ -3,7 +3,7 @@ import { createPublicSearchDatabase } from '../src/db/database.js';
 import { migratePublicSearchDatabase } from '../src/db/migrate.js';
 import { syncSubscriptionsFromSheet, moveKickedUsersToHistory } from '../src/subscriptions/sync.service.js';
 import { HISTORY_HEADER, USERS_HEADER } from '../src/subscriptions/sheet.mapper.js';
-import { markSubscriptionUserKicked } from '../src/subscriptions/repository.js';
+import { getSubscriptionUser, markSubscriptionUserKicked } from '../src/subscriptions/repository.js';
 
 function createDb() {
   const db = createPublicSearchDatabase(':memory:');
@@ -96,6 +96,57 @@ describe('subscription sync service', () => {
         ['42', '@late_user', 'Kicked', '2026-06-02T00:00:00.000Z', '2026-05-01', '2026-06-01', 'Overdue subscription removed']
       ]);
       expect(sheets.replaceRows).toHaveBeenCalledWith('Users!A:G', [
+        USERS_HEADER,
+        ['43', '@active_user', '2026-05-26', '2026-06-26', '31', 'Subscribe', '2026-05-26T00:00:00.000Z']
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not duplicate history rows when retrying after active row refresh fails', async () => {
+    const db = createDb();
+    try {
+      db.prepare(
+        `INSERT INTO subscription_users (
+           telegram_user_id, username, subscription_start_date, subscription_end_date, days_remaining,
+           status, removed_from_group, created_at, updated_at
+         )
+         VALUES
+           (42, 'late_user', '2026-05-01', '2026-06-01', 0, 'Unpaid', 0, '2026-05-01T00:00:00.000Z', '2026-06-01T00:00:00.000Z'),
+           (43, 'active_user', '2026-05-26', '2026-06-26', 31, 'Subscribe', 0, '2026-05-26T00:00:00.000Z', '2026-05-26T00:00:00.000Z')`
+      ).run();
+      const kicked = markSubscriptionUserKicked(db, 42, new Date('2026-06-02T00:00:00.000Z'));
+      const sheets = {
+        replaceRows: vi
+          .fn()
+          .mockRejectedValueOnce(new Error('Users sheet unavailable'))
+          .mockResolvedValueOnce(undefined),
+        appendRows: vi.fn(async () => undefined)
+      };
+
+      await expect(
+        moveKickedUsersToHistory(db, sheets, {
+          usersRange: 'Users!A:G',
+          historyRange: 'History!A:G',
+          users: [kicked]
+        })
+      ).rejects.toThrow(/Users sheet unavailable/);
+
+      expect(sheets.appendRows).toHaveBeenCalledTimes(1);
+      expect(getSubscriptionUser(db, 42)?.historyExportedAt).toEqual(expect.any(String));
+
+      await expect(
+        moveKickedUsersToHistory(db, sheets, {
+          usersRange: 'Users!A:G',
+          historyRange: 'History!A:G',
+          users: [kicked]
+        })
+      ).resolves.toEqual({ movedUsers: 0 });
+
+      expect(sheets.appendRows).toHaveBeenCalledTimes(1);
+      expect(sheets.replaceRows).toHaveBeenCalledTimes(2);
+      expect(sheets.replaceRows).toHaveBeenLastCalledWith('Users!A:G', [
         USERS_HEADER,
         ['43', '@active_user', '2026-05-26', '2026-06-26', '31', 'Subscribe', '2026-05-26T00:00:00.000Z']
       ]);

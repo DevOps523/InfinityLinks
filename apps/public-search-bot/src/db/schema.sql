@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS subscription_users (
     CHECK (status IN ('Trial', 'Subscribe', 'Needs Attention', 'Unpaid', 'Kicked')),
   unpaid_since TEXT,
   kicked_at TEXT,
+  history_exported_at TEXT,
   removed_from_group INTEGER NOT NULL DEFAULT 0 CHECK (removed_from_group IN (0, 1)),
   last_seen_at TEXT,
   created_at TEXT NOT NULL,

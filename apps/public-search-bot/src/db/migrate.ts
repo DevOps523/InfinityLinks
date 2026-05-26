@@ -24,9 +24,32 @@ export function resolvePublicSearchSchemaPath() {
 export function migratePublicSearchDatabase(db: PublicSearchDatabase) {
   const schema = fs.readFileSync(resolvePublicSearchSchemaPath(), 'utf8');
   db.exec(schema);
+  addSubscriptionUsersHistoryExportedAtColumnIfNeeded(db);
   rebuildSubscriptionUsersBooleanConstraintIfNeeded(db);
   rebuildSubscriptionJobsLeaseShapeIfNeeded(db);
   db.exec(schema);
+}
+
+function addSubscriptionUsersHistoryExportedAtColumnIfNeeded(db: PublicSearchDatabase) {
+  const row = db
+    .prepare(
+      `SELECT 1
+       FROM sqlite_schema
+       WHERE type = 'table'
+         AND name = 'subscription_users'`
+    )
+    .get();
+
+  if (!row) {
+    return;
+  }
+
+  const columns = db.pragma('table_info(subscription_users)') as Array<{ name: string }>;
+  if (columns.some((column) => column.name === 'history_exported_at')) {
+    return;
+  }
+
+  db.exec('ALTER TABLE subscription_users ADD COLUMN history_exported_at TEXT');
 }
 
 function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatabase) {
@@ -62,6 +85,7 @@ function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatab
           CHECK (status IN ('Trial', 'Subscribe', 'Needs Attention', 'Unpaid', 'Kicked')),
         unpaid_since TEXT,
         kicked_at TEXT,
+        history_exported_at TEXT,
         removed_from_group INTEGER NOT NULL DEFAULT 0 CHECK (removed_from_group IN (0, 1)),
         last_seen_at TEXT,
         created_at TEXT NOT NULL,
@@ -79,6 +103,7 @@ function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatab
         status,
         unpaid_since,
         kicked_at,
+        history_exported_at,
         removed_from_group,
         last_seen_at,
         created_at,
@@ -95,6 +120,7 @@ function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatab
         status,
         unpaid_since,
         kicked_at,
+        history_exported_at,
         CASE WHEN removed_from_group = 1 THEN 1 ELSE 0 END,
         last_seen_at,
         created_at,

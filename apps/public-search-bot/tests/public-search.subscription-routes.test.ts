@@ -25,10 +25,14 @@ describe('subscription routes', () => {
     const update = await request(app).post('/api/subscriptions/update').set('Authorization', 'Bearer admin-token');
     const alert = await request(app).post('/api/subscriptions/send-alert').set('Authorization', 'Bearer admin-token');
 
-    expect(update.body).toEqual({ subscriptions: { updatedUsers: 2 } });
+    expect(update.body).toEqual({
+      subscriptions: { updatedUsers: 2 },
+      alert: { state: 'posted', count: 1 }
+    });
     expect(alert.body).toEqual({ alert: { state: 'posted', count: 1 } });
     expect(syncFromSheet).toHaveBeenCalledTimes(1);
-    expect(refreshAlert).toHaveBeenCalledTimes(1);
+    expect(refreshAlert).toHaveBeenCalledTimes(2);
+    expect(syncFromSheet.mock.invocationCallOrder[0]).toBeLessThan(refreshAlert.mock.invocationCallOrder[0]);
   });
 
   it('passes action errors to the express error handler', async () => {

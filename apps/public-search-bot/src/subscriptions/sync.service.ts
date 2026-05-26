@@ -4,6 +4,8 @@ import {
   applySubscriptionStartDate,
   getSubscriptionUser,
   listActiveSubscriptionRows,
+  listKickedUsersPendingHistoryExport,
+  markSubscriptionUsersHistoryExported,
   recalculateSubscriptions,
   type SubscriptionUser
 } from './repository.js';
@@ -68,10 +70,20 @@ export async function moveKickedUsersToHistory(
     users: SubscriptionUser[];
   }
 ) {
-  if (options.users.length > 0) {
-    await sheets.appendRows(options.historyRange, options.users.map(toHistorySheetRow));
+  const pendingUsers = listKickedUsersPendingHistoryExport(
+    db,
+    options.users.map((user) => user.telegramUserId)
+  );
+
+  if (pendingUsers.length > 0) {
+    await sheets.appendRows(options.historyRange, pendingUsers.map(toHistorySheetRow));
+    markSubscriptionUsersHistoryExported(
+      db,
+      pendingUsers.map((user) => user.telegramUserId),
+      new Date()
+    );
   }
 
   await sheets.replaceRows(options.usersRange, toUsersSheetRows(listActiveSubscriptionRows(db)));
-  return { movedUsers: options.users.length };
+  return { movedUsers: pendingUsers.length };
 }

@@ -24,7 +24,9 @@ export function createSubscriptionRouter(options: {
 
   router.post('/subscriptions/update', async (_req, res, next) => {
     try {
-      res.json({ subscriptions: await options.syncFromSheet() });
+      const subscriptions = await options.syncFromSheet();
+      const alert = await options.refreshAlert();
+      res.json({ subscriptions, alert });
     } catch (error) {
       next(error);
     }

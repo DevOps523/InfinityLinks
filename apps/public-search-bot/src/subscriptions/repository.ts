@@ -19,6 +19,7 @@ export type SubscriptionUser = {
   status: SubscriptionStatus;
   unpaidSince?: string | undefined;
   kickedAt?: string | undefined;
+  historyExportedAt?: string | undefined;
   removedFromGroup: boolean;
   lastSeenAt?: string | undefined;
   createdAt: string;
@@ -36,6 +37,7 @@ type SubscriptionUserRow = {
   status: SubscriptionStatus;
   unpaidSince: string | null;
   kickedAt: string | null;
+  historyExportedAt: string | null;
   removedFromGroup: number;
   lastSeenAt: string | null;
   createdAt: string;
@@ -56,6 +58,7 @@ export function getSubscriptionUser(db: PublicSearchDatabase, telegramUserId: nu
          status,
          unpaid_since AS unpaidSince,
          kicked_at AS kickedAt,
+         history_exported_at AS historyExportedAt,
          removed_from_group AS removedFromGroup,
          last_seen_at AS lastSeenAt,
          created_at AS createdAt,
@@ -157,6 +160,7 @@ export function applySubscriptionStartDate(
          status = @status,
          unpaid_since = @unpaidSince,
          kicked_at = NULL,
+         history_exported_at = NULL,
          removed_from_group = 0,
          updated_at = @nowIso
      WHERE telegram_user_id = @telegramUserId`
@@ -270,7 +274,49 @@ export function listActiveSubscriptionRows(db: PublicSearchDatabase): Subscripti
   );
 }
 
-function listSubscriptionUsers(db: PublicSearchDatabase, whereClause: string): SubscriptionUser[] {
+export function listKickedUsersPendingHistoryExport(
+  db: PublicSearchDatabase,
+  telegramUserIds: number[]
+): SubscriptionUser[] {
+  if (telegramUserIds.length === 0) {
+    return [];
+  }
+
+  const placeholders = telegramUserIds.map(() => '?').join(', ');
+  return listSubscriptionUsers(
+    db,
+    `WHERE status = 'Kicked'
+       AND history_exported_at IS NULL
+       AND telegram_user_id IN (${placeholders})
+     ORDER BY telegram_user_id`,
+    telegramUserIds
+  );
+}
+
+export function markSubscriptionUsersHistoryExported(
+  db: PublicSearchDatabase,
+  telegramUserIds: number[],
+  now: Date
+): number {
+  if (telegramUserIds.length === 0) {
+    return 0;
+  }
+
+  const placeholders = telegramUserIds.map(() => '?').join(', ');
+  const nowIso = now.toISOString();
+  const result = db.prepare(
+    `UPDATE subscription_users
+     SET history_exported_at = ?,
+         updated_at = ?
+     WHERE status = 'Kicked'
+       AND history_exported_at IS NULL
+       AND telegram_user_id IN (${placeholders})`
+  ).run(nowIso, nowIso, ...telegramUserIds);
+
+  return result.changes;
+}
+
+function listSubscriptionUsers(db: PublicSearchDatabase, whereClause: string, params: unknown[] = []): SubscriptionUser[] {
   const rows = db
     .prepare(
       `SELECT
@@ -284,6 +330,7 @@ function listSubscriptionUsers(db: PublicSearchDatabase, whereClause: string): S
          status,
          unpaid_since AS unpaidSince,
          kicked_at AS kickedAt,
+         history_exported_at AS historyExportedAt,
          removed_from_group AS removedFromGroup,
          last_seen_at AS lastSeenAt,
          created_at AS createdAt,
@@ -291,7 +338,7 @@ function listSubscriptionUsers(db: PublicSearchDatabase, whereClause: string): S
        FROM subscription_users
        ${whereClause}`
     )
-    .all() as SubscriptionUserRow[];
+    .all(...params) as SubscriptionUserRow[];
 
   return rows.map(mapSubscriptionUser);
 }
@@ -336,6 +383,7 @@ function mapSubscriptionUser(row: SubscriptionUserRow): SubscriptionUser {
     status: row.status,
     unpaidSince: row.unpaidSince ?? undefined,
     kickedAt: row.kickedAt ?? undefined,
+    historyExportedAt: row.historyExportedAt ?? undefined,
     removedFromGroup: Boolean(row.removedFromGroup),
     lastSeenAt: row.lastSeenAt ?? undefined,
     createdAt: row.createdAt,

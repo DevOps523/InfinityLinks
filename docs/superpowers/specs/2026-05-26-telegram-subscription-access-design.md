@@ -177,6 +177,29 @@ When `Update Subscription` or the daily refresh changes users back to `Subscribe
 
 If no `Needs Attention` or `Unpaid` users remain, the subscription bot deletes the alert message and clears the stored alert message id.
 
+## Scalability And Queueing
+
+One subscription bot token is enough for the approved design, even as the group grows.
+
+The service should not add a third helper bot by default. Growth pressure is expected to come from Telegram API rate limits and batch work, not from needing more bot identities.
+
+Subscription-side Telegram actions should run through a persistent job queue inside the VPS service:
+
+- alert post/edit/delete jobs
+- overdue kick jobs
+- Google Sheets refresh jobs
+- retry jobs after Telegram or Google Sheets failures
+
+The queue should process risky or high-volume actions slowly and predictably:
+
+- kick overdue users in batches
+- retry failed Telegram calls with backoff
+- respect Telegram `retry_after` responses
+- avoid sending many announcement messages when one alert post can be edited
+- keep enough job status in the database for diagnostics
+
+A third helper bot should only be considered later if production logs show a real, repeated limit that queueing cannot handle.
+
 ## Overdue Kick Flow
 
 When a user's `Days Remaining` reaches zero, their status becomes `Unpaid` and search access is blocked.
@@ -291,6 +314,7 @@ Add or update tests for:
 - paid users are removed from the alert after `Update Subscription`.
 - alert message is deleted when the list becomes empty.
 - overdue users are kicked after the extra one-day grace period.
+- overdue kicks are queued, processed in batches, and retried with backoff.
 - kicked users move from `Users` to `History` in sheet output.
 - kicked users do not receive a second free trial.
 - Google Sheets outages do not break public search access for already-known users.

@@ -91,10 +91,11 @@ CREATE INDEX IF NOT EXISTS idx_subscription_users_unpaid_since ON subscription_u
 CREATE TABLE IF NOT EXISTS subscription_jobs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   type TEXT NOT NULL CHECK (type IN ('refresh-alert', 'kick-user', 'refresh-sheet')),
-  payload_json TEXT NOT NULL DEFAULT '{}',
+  payload_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(payload_json)),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'succeeded', 'failed')),
   attempts INTEGER NOT NULL DEFAULT 0,
   run_after TEXT NOT NULL,
+  claimed_at TEXT,
   last_error TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL

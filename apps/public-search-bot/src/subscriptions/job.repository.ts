@@ -10,9 +10,18 @@ export type SubscriptionJob = {
   status: SubscriptionJobStatus;
   attempts: number;
   runAfter: string;
+  claimedAt?: string | undefined;
   lastError?: string | undefined;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ClaimSubscriptionJobOptions = {
+  staleAfterMs?: number | undefined;
+};
+
+export type MarkSubscriptionJobFailedOptions = {
+  maxAttempts?: number | undefined;
 };
 
 type SubscriptionJobRow = {
@@ -22,10 +31,14 @@ type SubscriptionJobRow = {
   status: SubscriptionJobStatus;
   attempts: number;
   runAfter: string;
+  claimedAt: string | null;
   lastError: string | null;
   createdAt: string;
   updatedAt: string;
 };
+
+const DEFAULT_STALE_AFTER_MS = 10 * 60 * 1000;
+const DEFAULT_MAX_ATTEMPTS = 5;
 
 export function enqueueSubscriptionJob(
   db: PublicSearchDatabase,
@@ -67,6 +80,7 @@ export function getSubscriptionJob(db: PublicSearchDatabase, id: number): Subscr
          status,
          attempts,
          run_after AS runAfter,
+         claimed_at AS claimedAt,
          last_error AS lastError,
          created_at AS createdAt,
          updated_at AS updatedAt
@@ -88,6 +102,7 @@ export function listSubscriptionJobs(db: PublicSearchDatabase): SubscriptionJob[
          status,
          attempts,
          run_after AS runAfter,
+         claimed_at AS claimedAt,
          last_error AS lastError,
          created_at AS createdAt,
          updated_at AS updatedAt
@@ -99,18 +114,41 @@ export function listSubscriptionJobs(db: PublicSearchDatabase): SubscriptionJob[
   return rows.map(mapSubscriptionJob);
 }
 
-export function claimNextSubscriptionJob(db: PublicSearchDatabase, now: Date): SubscriptionJob | undefined {
+export function claimNextSubscriptionJob(
+  db: PublicSearchDatabase,
+  now: Date,
+  options: ClaimSubscriptionJobOptions = {}
+): SubscriptionJob | undefined {
+  const nowIso = now.toISOString();
+  const staleCutoff = new Date(now.getTime() - (options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS)).toISOString();
   const claim = db.transaction(() => {
     const row = db
       .prepare(
-        `SELECT id
-         FROM subscription_jobs
-         WHERE status = 'pending'
-           AND run_after <= @nowIso
-         ORDER BY run_after ASC, id ASC
+        `SELECT id, status
+         FROM (
+           SELECT
+             id,
+             status,
+             run_after AS sort_at,
+             0 AS priority
+           FROM subscription_jobs
+           WHERE status = 'pending'
+             AND run_after <= @nowIso
+           UNION ALL
+           SELECT
+             id,
+             status,
+             claimed_at AS sort_at,
+             1 AS priority
+           FROM subscription_jobs
+           WHERE status = 'running'
+             AND claimed_at IS NOT NULL
+             AND claimed_at <= @staleCutoff
+         )
+         ORDER BY priority ASC, sort_at ASC, id ASC
          LIMIT 1`
       )
-      .get({ nowIso: now.toISOString() }) as { id: number } | undefined;
+      .get({ nowIso, staleCutoff }) as { id: number; status: SubscriptionJobStatus } | undefined;
 
     if (!row) {
       return undefined;
@@ -120,40 +158,47 @@ export function claimNextSubscriptionJob(db: PublicSearchDatabase, now: Date): S
       .prepare(
         `UPDATE subscription_jobs
          SET status = 'running',
+             claimed_at = @nowIso,
              updated_at = @nowIso
          WHERE id = @id
-           AND status = 'pending'`
+           AND (
+             status = 'pending'
+             OR (
+               status = 'running'
+               AND claimed_at IS NOT NULL
+               AND claimed_at <= @staleCutoff
+             )
+           )`
       )
       .run({
         id: row.id,
-        nowIso: now.toISOString()
+        nowIso,
+        staleCutoff
       });
 
-    return result.changes === 1 ? requireSubscriptionJob(db, row.id) : undefined;
+    return result.changes === 1 ? getSubscriptionJob(db, row.id) : undefined;
   });
 
   return claim();
 }
 
-export function markSubscriptionJobSucceeded(db: PublicSearchDatabase, id: number, now: Date): SubscriptionJob {
+export function markSubscriptionJobSucceeded(db: PublicSearchDatabase, id: number, now: Date): boolean {
   const result = db
     .prepare(
       `UPDATE subscription_jobs
        SET status = 'succeeded',
+           claimed_at = NULL,
            last_error = NULL,
            updated_at = @nowIso
-       WHERE id = @id`
+       WHERE id = @id
+         AND status = 'running'`
     )
     .run({
       id,
       nowIso: now.toISOString()
     });
 
-  if (result.changes !== 1) {
-    throw new Error(`Subscription job not found: ${id}`);
-  }
-
-  return requireSubscriptionJob(db, id);
+  return result.changes === 1;
 }
 
 export function markSubscriptionJobFailed(
@@ -161,30 +206,40 @@ export function markSubscriptionJobFailed(
   id: number,
   error: unknown,
   runAfter: Date,
-  now: Date
-): SubscriptionJob {
+  now: Date,
+  options: MarkSubscriptionJobFailedOptions = {}
+): boolean {
+  const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+  const job = getSubscriptionJob(db, id);
+
+  if (!job || job.status !== 'running') {
+    return false;
+  }
+
+  const nextAttempts = job.attempts + 1;
+  const terminal = nextAttempts >= maxAttempts;
   const result = db
     .prepare(
       `UPDATE subscription_jobs
-       SET status = 'pending',
-           attempts = attempts + 1,
+       SET status = @status,
+           attempts = @nextAttempts,
            run_after = @runAfter,
+           claimed_at = NULL,
            last_error = @lastError,
            updated_at = @nowIso
-       WHERE id = @id`
+       WHERE id = @id
+         AND status = 'running'`
     )
     .run({
       id,
+      status: terminal ? 'failed' : 'pending',
+      nextAttempts,
       runAfter: runAfter.toISOString(),
       lastError: errorMessage(error),
       nowIso: now.toISOString()
     });
 
-  if (result.changes !== 1) {
-    throw new Error(`Subscription job not found: ${id}`);
-  }
-
-  return requireSubscriptionJob(db, id);
+  return result.changes === 1;
 }
 
 function requireSubscriptionJob(db: PublicSearchDatabase, id: number): SubscriptionJob {
@@ -206,10 +261,16 @@ function errorMessage(error: unknown) {
 }
 
 function parsePayload(payloadJson: string): Record<string, unknown> {
-  const parsed = JSON.parse(payloadJson) as unknown;
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(payloadJson) as unknown;
+  } catch {
+    return {};
+  }
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Subscription job payload must be a JSON object');
+    return {};
   }
 
   return parsed as Record<string, unknown>;
@@ -223,6 +284,7 @@ function mapSubscriptionJob(row: SubscriptionJobRow): SubscriptionJob {
     status: row.status,
     attempts: row.attempts,
     runAfter: row.runAfter,
+    claimedAt: row.claimedAt ?? undefined,
     lastError: row.lastError ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt

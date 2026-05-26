@@ -25,6 +25,7 @@ export function migratePublicSearchDatabase(db: PublicSearchDatabase) {
   const schema = fs.readFileSync(resolvePublicSearchSchemaPath(), 'utf8');
   db.exec(schema);
   rebuildSubscriptionUsersBooleanConstraintIfNeeded(db);
+  rebuildSubscriptionJobsLeaseShapeIfNeeded(db);
   db.exec(schema);
 }
 
@@ -102,6 +103,76 @@ function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatab
 
       DROP TABLE subscription_users;
       ALTER TABLE subscription_users_new RENAME TO subscription_users;
+    `);
+  } finally {
+    db.pragma(`foreign_keys = ${previousForeignKeys ? 'ON' : 'OFF'}`);
+  }
+}
+
+function rebuildSubscriptionJobsLeaseShapeIfNeeded(db: PublicSearchDatabase) {
+  const row = db
+    .prepare(
+      `SELECT sql
+       FROM sqlite_schema
+       WHERE type = 'table'
+         AND name = 'subscription_jobs'`
+    )
+    .get() as { sql: string } | undefined;
+
+  if (!row || (row.sql.includes('claimed_at') && row.sql.includes('json_valid(payload_json)'))) {
+    return;
+  }
+
+  const columns = db.pragma('table_info(subscription_jobs)') as Array<{ name: string }>;
+  const hasClaimedAt = columns.some((column) => column.name === 'claimed_at');
+  const claimedAtSelect = hasClaimedAt ? 'claimed_at' : 'NULL AS claimed_at';
+  const previousForeignKeys = db.pragma('foreign_keys', { simple: true }) as number;
+  db.pragma('foreign_keys = OFF');
+
+  try {
+    db.exec(`
+      DROP TABLE IF EXISTS subscription_jobs_new;
+
+      CREATE TABLE subscription_jobs_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL CHECK (type IN ('refresh-alert', 'kick-user', 'refresh-sheet')),
+        payload_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(payload_json)),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'succeeded', 'failed')),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        run_after TEXT NOT NULL,
+        claimed_at TEXT,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      INSERT INTO subscription_jobs_new (
+        id,
+        type,
+        payload_json,
+        status,
+        attempts,
+        run_after,
+        claimed_at,
+        last_error,
+        created_at,
+        updated_at
+      )
+      SELECT
+        id,
+        type,
+        CASE WHEN json_valid(payload_json) THEN payload_json ELSE '{}' END,
+        status,
+        attempts,
+        run_after,
+        ${claimedAtSelect},
+        last_error,
+        created_at,
+        updated_at
+      FROM subscription_jobs;
+
+      DROP TABLE subscription_jobs;
+      ALTER TABLE subscription_jobs_new RENAME TO subscription_jobs;
     `);
   } finally {
     db.pragma(`foreign_keys = ${previousForeignKeys ? 'ON' : 'OFF'}`);

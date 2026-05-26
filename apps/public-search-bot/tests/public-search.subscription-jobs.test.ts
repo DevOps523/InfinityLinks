@@ -25,13 +25,91 @@ describe('subscription jobs', () => {
       expect(claimNextSubscriptionJob(db, new Date('2026-05-26T00:00:01.000Z'))).toMatchObject({
         id: job.id,
         type: 'refresh-alert',
-        status: 'running'
+        status: 'running',
+        claimedAt: '2026-05-26T00:00:01.000Z'
       });
 
-      markSubscriptionJobSucceeded(db, job.id, new Date('2026-05-26T00:00:02.000Z'));
+      expect(markSubscriptionJobSucceeded(db, job.id, new Date('2026-05-26T00:00:02.000Z'))).toBe(true);
       expect(listSubscriptionJobs(db)).toEqual([
-        expect.objectContaining({ id: job.id, status: 'succeeded' })
+        expect.objectContaining({ id: job.id, status: 'succeeded', claimedAt: undefined })
       ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not claim jobs before run_after', () => {
+    const db = createDb();
+    try {
+      enqueueSubscriptionJob(db, 'refresh-alert', {}, new Date('2026-05-26T00:01:00.000Z'));
+
+      expect(claimNextSubscriptionJob(db, new Date('2026-05-26T00:00:59.000Z'))).toBeUndefined();
+      expect(claimNextSubscriptionJob(db, new Date('2026-05-26T00:01:00.000Z'))).toMatchObject({
+        status: 'running'
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('claims due jobs by run_after then id', () => {
+    const db = createDb();
+    try {
+      const second = enqueueSubscriptionJob(db, 'refresh-alert', {}, new Date('2026-05-26T00:00:02.000Z'));
+      const first = enqueueSubscriptionJob(db, 'refresh-sheet', {}, new Date('2026-05-26T00:00:01.000Z'));
+      const third = enqueueSubscriptionJob(db, 'kick-user', { telegramUserId: 42 }, new Date('2026-05-26T00:00:02.000Z'));
+
+      expect(claimNextSubscriptionJob(db, new Date('2026-05-26T00:00:03.000Z'))?.id).toBe(first.id);
+      expect(claimNextSubscriptionJob(db, new Date('2026-05-26T00:00:04.000Z'))?.id).toBe(second.id);
+      expect(claimNextSubscriptionJob(db, new Date('2026-05-26T00:00:05.000Z'))?.id).toBe(third.id);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('reclaims running jobs only after the stale timeout', () => {
+    const db = createDb();
+    try {
+      const job = enqueueSubscriptionJob(db, 'refresh-alert', {}, new Date('2026-05-26T00:00:00.000Z'));
+
+      expect(claimNextSubscriptionJob(db, new Date('2026-05-26T00:00:01.000Z'))?.id).toBe(job.id);
+      expect(
+        claimNextSubscriptionJob(db, new Date('2026-05-26T00:05:00.000Z'), { staleAfterMs: 10 * 60 * 1000 })
+      ).toBeUndefined();
+      expect(
+        claimNextSubscriptionJob(db, new Date('2026-05-26T00:11:02.000Z'), { staleAfterMs: 10 * 60 * 1000 })
+      ).toMatchObject({
+        id: job.id,
+        status: 'running',
+        claimedAt: '2026-05-26T00:11:02.000Z'
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not let success or failure helpers overwrite non-running jobs', () => {
+    const db = createDb();
+    try {
+      const pending = enqueueSubscriptionJob(db, 'refresh-alert', {}, new Date('2026-05-26T00:00:00.000Z'));
+
+      expect(markSubscriptionJobSucceeded(db, pending.id, new Date('2026-05-26T00:00:01.000Z'))).toBe(false);
+      expect(
+        markSubscriptionJobFailed(
+          db,
+          pending.id,
+          new Error('ignored'),
+          new Date('2026-05-26T00:00:06.000Z'),
+          new Date('2026-05-26T00:00:01.000Z')
+        )
+      ).toBe(false);
+      expect(listSubscriptionJobs(db)[0]).toMatchObject({
+        id: pending.id,
+        status: 'pending',
+        attempts: 0,
+        runAfter: '2026-05-26T00:00:00.000Z',
+        lastError: undefined
+      });
     } finally {
       db.close();
     }
@@ -55,8 +133,80 @@ describe('subscription jobs', () => {
         status: 'pending',
         attempts: 1,
         runAfter: '2026-05-26T00:00:13.000Z',
-        lastError: 'Too Many Requests'
+        lastError: 'Too Many Requests',
+        claimedAt: undefined
       });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('backs off generic failures for 5 seconds on the first attempt', async () => {
+    const db = createDb();
+    try {
+      enqueueSubscriptionJob(db, 'refresh-alert', {}, new Date('2026-05-26T00:00:00.000Z'));
+      const handlers = {
+        kickUser: vi.fn(),
+        refreshAlert: vi.fn(async () => {
+          throw new Error('temporary failure');
+        }),
+        refreshSheet: vi.fn()
+      };
+
+      await expect(processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:01.000Z'))).resolves.toBe(true);
+
+      expect(listSubscriptionJobs(db)[0]).toMatchObject({
+        status: 'pending',
+        attempts: 1,
+        runAfter: '2026-05-26T00:00:06.000Z',
+        lastError: 'temporary failure'
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('marks permanently invalid kick-user payloads failed at max attempts', async () => {
+    const db = createDb();
+    try {
+      enqueueSubscriptionJob(db, 'kick-user', {}, new Date('2026-05-26T00:00:00.000Z'));
+      const handlers = {
+        kickUser: vi.fn(),
+        refreshAlert: vi.fn(),
+        refreshSheet: vi.fn()
+      };
+
+      await expect(
+        processNextSubscriptionJob(db, handlers, new Date('2026-05-26T00:00:01.000Z'), { maxAttempts: 1 })
+      ).resolves.toBe(true);
+
+      expect(handlers.kickUser).not.toHaveBeenCalled();
+      expect(listSubscriptionJobs(db)[0]).toMatchObject({
+        status: 'failed',
+        attempts: 1,
+        lastError: 'kick-user job is missing numeric telegramUserId',
+        claimedAt: undefined
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rejects invalid payload_json through the schema constraint', () => {
+    const db = createDb();
+    try {
+      expect(() => {
+        db.prepare(
+          `INSERT INTO subscription_jobs (
+             type,
+             payload_json,
+             run_after,
+             created_at,
+             updated_at
+           )
+           VALUES ('refresh-alert', '{bad json', '2026-05-26T00:00:00.000Z', '2026-05-26T00:00:00.000Z', '2026-05-26T00:00:00.000Z')`
+        ).run();
+      }).toThrow();
     } finally {
       db.close();
     }

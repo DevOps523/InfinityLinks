@@ -13,6 +13,13 @@ export type SubscriptionJobHandlers = {
   kickUser: (telegramUserId: number) => Promise<void>;
 };
 
+export type ProcessSubscriptionJobOptions = {
+  maxAttempts?: number | undefined;
+  staleAfterMs?: number | undefined;
+};
+
+const DEFAULT_MAX_ATTEMPTS = 5;
+
 function retryAfterFor(error: unknown, attempts: number, now: Date) {
   if (error instanceof TelegramRateLimitError) {
     return new Date(now.getTime() + error.retryAfter * 1000);
@@ -43,9 +50,10 @@ async function executeJob(job: SubscriptionJob, handlers: SubscriptionJobHandler
 export async function processNextSubscriptionJob(
   db: PublicSearchDatabase,
   handlers: SubscriptionJobHandlers,
-  now: Date = new Date()
+  now: Date = new Date(),
+  options: ProcessSubscriptionJobOptions = {}
 ) {
-  const job = claimNextSubscriptionJob(db, now);
+  const job = claimNextSubscriptionJob(db, now, { staleAfterMs: options.staleAfterMs });
   if (!job) {
     return false;
   }
@@ -54,7 +62,9 @@ export async function processNextSubscriptionJob(
     await executeJob(job, handlers);
     markSubscriptionJobSucceeded(db, job.id, now);
   } catch (error) {
-    markSubscriptionJobFailed(db, job.id, error, retryAfterFor(error, job.attempts, now), now);
+    markSubscriptionJobFailed(db, job.id, error, retryAfterFor(error, job.attempts, now), now, {
+      maxAttempts: options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
+    });
   }
 
   return true;

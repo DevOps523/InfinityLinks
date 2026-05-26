@@ -2,9 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { loadPublicSearchConfig } from '../src/config.js';
 
 describe('loadPublicSearchConfig', () => {
+  const subscriptionEnv = {
+    SUBSCRIPTION_BOT_TOKEN: 'subscription-token',
+    SUBSCRIPTION_ADMIN_TOKEN: 'admin-token',
+    GOOGLE_SHEETS_SPREADSHEET_ID: 'sheet-id',
+    GOOGLE_SERVICE_ACCOUNT_KEY_FILE: '/secure/google.json'
+  };
+
   it('requires PUBLIC_BOT_TOKEN', () => {
     expect(() =>
       loadPublicSearchConfig({
+        ...subscriptionEnv,
         PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
         PUBLIC_SEARCH_STATUS_TOKEN: 'status-token'
       })
@@ -14,6 +22,7 @@ describe('loadPublicSearchConfig', () => {
   it('requires PUBLIC_SEARCH_SYNC_TOKEN', () => {
     expect(() =>
       loadPublicSearchConfig({
+        ...subscriptionEnv,
         PUBLIC_BOT_TOKEN: 'bot-token',
         PUBLIC_SEARCH_STATUS_TOKEN: 'status-token'
       })
@@ -23,6 +32,7 @@ describe('loadPublicSearchConfig', () => {
   it('requires PUBLIC_SEARCH_STATUS_TOKEN', () => {
     expect(() =>
       loadPublicSearchConfig({
+        ...subscriptionEnv,
         PUBLIC_BOT_TOKEN: 'bot-token',
         PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token'
       })
@@ -32,6 +42,7 @@ describe('loadPublicSearchConfig', () => {
   it('rejects reusing the sync token as the status token after trimming', () => {
     expect(() =>
       loadPublicSearchConfig({
+        ...subscriptionEnv,
         PUBLIC_BOT_TOKEN: 'bot-token',
         PUBLIC_SEARCH_SYNC_TOKEN: ' shared-token ',
         PUBLIC_SEARCH_STATUS_TOKEN: 'shared-token'
@@ -42,6 +53,7 @@ describe('loadPublicSearchConfig', () => {
   it('returns required secrets and default public search settings', () => {
     expect(
       loadPublicSearchConfig({
+        ...subscriptionEnv,
         PUBLIC_BOT_TOKEN: ' bot-token ',
         PUBLIC_SEARCH_SYNC_TOKEN: ' sync-token ',
         PUBLIC_SEARCH_STATUS_TOKEN: ' status-token '
@@ -53,13 +65,26 @@ describe('loadPublicSearchConfig', () => {
       publicSearchGroupHandle: '@infinitylinks69',
       publicSearchDatabasePath: './data/public-search.sqlite',
       publicSearchHost: '127.0.0.1',
-      publicSearchPort: 3001
+      publicSearchPort: 3001,
+      subscriptionBotToken: 'subscription-token',
+      subscriptionGroupChatId: -1003963665033,
+      subscriptionAlertThreadId: 46,
+      subscriptionAdminContact: '@seinen_illuminatiks',
+      subscriptionTrialHours: 24,
+      subscriptionPeriodDays: 31,
+      subscriptionOverdueGraceDays: 1,
+      subscriptionAdminToken: 'admin-token',
+      googleSheetsSpreadsheetId: 'sheet-id',
+      googleSheetsUsersRange: 'Users!A:G',
+      googleSheetsHistoryRange: 'History!A:G',
+      googleServiceAccountKeyFile: '/secure/google.json'
     });
   });
 
   it('falls back to defaults for blank optional values', () => {
     expect(
       loadPublicSearchConfig({
+        ...subscriptionEnv,
         PUBLIC_BOT_TOKEN: 'bot-token',
         PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
         PUBLIC_SEARCH_STATUS_TOKEN: 'status-token',
@@ -79,6 +104,7 @@ describe('loadPublicSearchConfig', () => {
   it('accepts explicit optional values', () => {
     expect(
       loadPublicSearchConfig({
+        ...subscriptionEnv,
         PUBLIC_BOT_TOKEN: 'bot-token',
         PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
         PUBLIC_SEARCH_STATUS_TOKEN: 'status-token',
@@ -92,6 +118,53 @@ describe('loadPublicSearchConfig', () => {
       publicSearchDatabasePath: './tmp/search.sqlite',
       publicSearchHost: '0.0.0.0',
       publicSearchPort: 4321
+    });
+  });
+
+  it('requires subscription bot and admin secrets', () => {
+    expect(() =>
+      loadPublicSearchConfig({
+        PUBLIC_BOT_TOKEN: 'bot-token',
+        PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
+        PUBLIC_SEARCH_STATUS_TOKEN: 'status-token',
+        SUBSCRIPTION_ADMIN_TOKEN: 'admin-token'
+      })
+    ).toThrow(/SUBSCRIPTION_BOT_TOKEN is required/);
+
+    expect(() =>
+      loadPublicSearchConfig({
+        PUBLIC_BOT_TOKEN: 'bot-token',
+        PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
+        PUBLIC_SEARCH_STATUS_TOKEN: 'status-token',
+        SUBSCRIPTION_BOT_TOKEN: 'subscription-token'
+      })
+    ).toThrow(/SUBSCRIPTION_ADMIN_TOKEN is required/);
+  });
+
+  it('returns subscription defaults and explicit sheet settings', () => {
+    expect(
+      loadPublicSearchConfig({
+        PUBLIC_BOT_TOKEN: 'bot-token',
+        PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
+        PUBLIC_SEARCH_STATUS_TOKEN: 'status-token',
+        SUBSCRIPTION_BOT_TOKEN: 'subscription-token',
+        SUBSCRIPTION_ADMIN_TOKEN: 'admin-token',
+        GOOGLE_SHEETS_SPREADSHEET_ID: 'sheet-id',
+        GOOGLE_SERVICE_ACCOUNT_KEY_FILE: '/secure/google.json'
+      })
+    ).toMatchObject({
+      subscriptionBotToken: 'subscription-token',
+      subscriptionGroupChatId: -1003963665033,
+      subscriptionAlertThreadId: 46,
+      subscriptionAdminContact: '@seinen_illuminatiks',
+      subscriptionTrialHours: 24,
+      subscriptionPeriodDays: 31,
+      subscriptionOverdueGraceDays: 1,
+      subscriptionAdminToken: 'admin-token',
+      googleSheetsSpreadsheetId: 'sheet-id',
+      googleSheetsUsersRange: 'Users!A:G',
+      googleSheetsHistoryRange: 'History!A:G',
+      googleServiceAccountKeyFile: '/secure/google.json'
     });
   });
 });

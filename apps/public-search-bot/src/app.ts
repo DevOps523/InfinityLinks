@@ -12,6 +12,7 @@ type CreatePublicSearchAppOptions = {
   db: PublicSearchDatabase;
   config: PublicSearchConfig;
   statusTracker?: PublicSearchStatusTracker;
+  subscriptionRouter?: express.Router | undefined;
 };
 
 function formatZodPath(path: Array<number | string>) {
@@ -34,6 +35,9 @@ export function createPublicSearchApp(options: CreatePublicSearchAppOptions) {
   app.set('trust proxy', 'loopback');
   app.use('/api', createPublicSearchStatusRouter(options.config, statusTracker));
   app.use('/api', createPublicSearchSyncRouter(options.db, options.config, statusTracker));
+  if (options.subscriptionRouter) {
+    app.use('/api', options.subscriptionRouter);
+  }
 
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'API route not found' });

@@ -297,7 +297,7 @@ describe('subscription sync service', () => {
     }
   });
 
-  it('exports pending kicked history before renewing a kicked user', async () => {
+  it('exports pending kicked history before renewing a kicked user without an interim users rewrite', async () => {
     const db = createDb();
     try {
       db.prepare(
@@ -338,13 +338,13 @@ describe('subscription sync service', () => {
       expect(sheets.appendRows).toHaveBeenCalledWith('History!A:G', [
         ['42', '@returning_user', 'Kicked', '2026-06-02T00:00:00.000Z', '2026-05-01', '2026-06-01', 'Overdue subscription removed']
       ]);
-      expect(sheets.replaceRows).toHaveBeenNthCalledWith(1, 'Users!A:H', [USERS_HEADER]);
-      expect(sheets.replaceRows).toHaveBeenLastCalledWith('Users!A:H', [
+      expect(sheets.replaceRows).toHaveBeenCalledTimes(1);
+      expect(sheets.replaceRows).toHaveBeenCalledWith('Users!A:H', [
         USERS_HEADER,
         ['42', '@returning_user', '2026-06-28', '1 Month', '2026-07-28', '30', 'Subscribe', '2026-06-28T00:00:00.000Z']
       ]);
       expect(sheets.appendRows.mock.invocationCallOrder[0]).toBeLessThan(
-        sheets.replaceRows.mock.invocationCallOrder[1] ?? 0
+        sheets.replaceRows.mock.invocationCallOrder[0] ?? 0
       );
     } finally {
       db.close();

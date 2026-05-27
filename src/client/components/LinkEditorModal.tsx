@@ -20,6 +20,15 @@ type LinkEditorModalProps = {
 const qualities = ['SD', 'HD', 'Full HD', '2K', '4K'];
 const providers = ['Filekeeper', 'Mixdrop'];
 
+export function isHttpOrHttpsUrl(value: string) {
+  try {
+    const protocol = new URL(value.trim()).protocol;
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 function emptyLink(): MovieLinkInput {
   return {
     providerName: providers[0],
@@ -27,6 +36,16 @@ function emptyLink(): MovieLinkInput {
     status: 'active',
     url: ''
   };
+}
+
+function isIntendedLink(link: MovieLinkInput) {
+  const defaultLink = emptyLink();
+  return (
+    Boolean(link.url.trim()) ||
+    link.providerName.trim() !== defaultLink.providerName ||
+    link.quality !== defaultLink.quality ||
+    link.status !== defaultLink.status
+  );
 }
 
 export function LinkEditorModal({ open, links, isSaving = false, onClose, onSave }: LinkEditorModalProps) {
@@ -69,11 +88,21 @@ export function LinkEditorModal({ open, links, isSaving = false, onClose, onSave
       return;
     }
 
-    const nonEmptyLinks = draftLinks.filter((link) => link.providerName.trim() || link.url.trim());
+    const nonEmptyLinks = draftLinks.filter(isIntendedLink);
     const hasPartialLink = nonEmptyLinks.some((link) => !link.providerName.trim() || !link.url.trim());
 
     if (hasPartialLink) {
       setError('Each saved link needs both a provider and URL.');
+      return;
+    }
+
+    const hasInvalidUrl = nonEmptyLinks.some((link) => {
+      const trimmedUrl = link.url.trim();
+      return trimmedUrl && !isHttpOrHttpsUrl(trimmedUrl);
+    });
+
+    if (hasInvalidUrl) {
+      setError('URLs must start with http:// or https://.');
       return;
     }
 

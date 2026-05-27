@@ -12,6 +12,14 @@ function trimmedStringWithDefault(defaultValue: string) {
   return z.preprocess(emptyStringToUndefined, z.string().trim().min(1).default(defaultValue));
 }
 
+const loopbackHosts = new Set(['127.0.0.1', 'localhost', '::1']);
+
+function loopbackHostWithDefault(defaultValue: string) {
+  return trimmedStringWithDefault(defaultValue).refine((host) => loopbackHosts.has(host), {
+    message: 'PUBLIC_SEARCH_HOST must be a loopback host: 127.0.0.1, localhost, or ::1'
+  });
+}
+
 function numberWithDefault(defaultValue: number) {
   return z.preprocess(emptyStringToUndefined, z.coerce.number().int().positive().default(defaultValue));
 }
@@ -26,7 +34,7 @@ const PublicSearchEnvSchema = z.object({
   PUBLIC_SEARCH_STATUS_TOKEN: requiredSecret('PUBLIC_SEARCH_STATUS_TOKEN'),
   PUBLIC_SEARCH_GROUP_HANDLE: trimmedStringWithDefault('@infinitylinks69'),
   PUBLIC_SEARCH_DATABASE_PATH: trimmedStringWithDefault('./data/public-search.sqlite'),
-  PUBLIC_SEARCH_HOST: trimmedStringWithDefault('127.0.0.1'),
+  PUBLIC_SEARCH_HOST: loopbackHostWithDefault('127.0.0.1'),
   PUBLIC_SEARCH_PORT: numberWithDefault(3001),
   SUBSCRIPTION_BOT_TOKEN: requiredSecret('SUBSCRIPTION_BOT_TOKEN'),
   SUBSCRIPTION_GROUP_CHAT_ID: integerWithDefault(-1003963665033),

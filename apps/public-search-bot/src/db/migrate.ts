@@ -27,6 +27,7 @@ export function migratePublicSearchDatabase(db: PublicSearchDatabase) {
   db.exec(schema);
   addSubscriptionUsersHistoryExportedAtColumnIfNeeded(db);
   addSubscriptionUsersTrialSearchesUsedColumnIfNeeded(db);
+  addSubscriptionUsersPlanMonthsColumnIfNeeded(db);
   rebuildSubscriptionUsersBooleanConstraintIfNeeded(db);
   rebuildSubscriptionJobsLeaseShapeIfNeeded(db);
   db.exec(schema);
@@ -104,6 +105,28 @@ function addSubscriptionUsersTrialSearchesUsedColumnIfNeeded(db: PublicSearchDat
   db.exec('ALTER TABLE subscription_users ADD COLUMN trial_searches_used INTEGER NOT NULL DEFAULT 0');
 }
 
+function addSubscriptionUsersPlanMonthsColumnIfNeeded(db: PublicSearchDatabase) {
+  const row = db
+    .prepare(
+      `SELECT 1
+       FROM sqlite_schema
+       WHERE type = 'table'
+         AND name = 'subscription_users'`
+    )
+    .get();
+
+  if (!row) {
+    return;
+  }
+
+  const columns = db.pragma('table_info(subscription_users)') as Array<{ name: string }>;
+  if (columns.some((column) => column.name === 'subscription_plan_months')) {
+    return;
+  }
+
+  db.exec('ALTER TABLE subscription_users ADD COLUMN subscription_plan_months INTEGER NOT NULL DEFAULT 1');
+}
+
 function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatabase) {
   const row = db
     .prepare(
@@ -133,6 +156,7 @@ function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatab
         trial_searches_used INTEGER NOT NULL DEFAULT 0,
         subscription_start_date TEXT,
         subscription_end_date TEXT,
+        subscription_plan_months INTEGER NOT NULL DEFAULT 1,
         days_remaining INTEGER,
         status TEXT NOT NULL DEFAULT 'Unpaid'
           CHECK (status IN ('Trial', 'Subscribe', 'Needs Attention', 'Unpaid', 'Kicked')),
@@ -153,6 +177,7 @@ function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatab
         trial_searches_used,
         subscription_start_date,
         subscription_end_date,
+        subscription_plan_months,
         days_remaining,
         status,
         unpaid_since,
@@ -171,6 +196,7 @@ function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatab
         COALESCE(trial_searches_used, 0),
         subscription_start_date,
         subscription_end_date,
+        COALESCE(subscription_plan_months, 1),
         days_remaining,
         status,
         unpaid_since,

@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS subscription_users (
   trial_searches_used INTEGER NOT NULL DEFAULT 0,
   subscription_start_date TEXT,
   subscription_end_date TEXT,
+  subscription_plan_months INTEGER NOT NULL DEFAULT 1,
   days_remaining INTEGER,
   status TEXT NOT NULL DEFAULT 'Unpaid'
     CHECK (status IN ('Trial', 'Subscribe', 'Needs Attention', 'Unpaid', 'Kicked')),

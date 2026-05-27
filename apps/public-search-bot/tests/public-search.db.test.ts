@@ -67,6 +67,91 @@ describe('public search database', () => {
     }
   });
 
+  it('creates subscription plan months with a one-month default', () => {
+    const db = createMigratedDatabase();
+
+    try {
+      expect(columnNames(db, 'subscription_users')).toContain('subscription_plan_months');
+      const row = db
+        .prepare(
+          `INSERT INTO subscription_users (
+             telegram_user_id,
+             status,
+             removed_from_group,
+             created_at,
+             updated_at
+           )
+           VALUES (42, 'Unpaid', 0, '2026-05-26T00:00:00.000Z', '2026-05-26T00:00:00.000Z')
+           RETURNING subscription_plan_months AS subscriptionPlanMonths`
+        )
+        .get() as { subscriptionPlanMonths: number };
+
+      expect(row.subscriptionPlanMonths).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('adds subscription plan months to legacy subscription users tables', () => {
+    const db = createPublicSearchDatabase(':memory:');
+
+    try {
+      db.exec(`
+        CREATE TABLE subscription_users (
+          telegram_user_id INTEGER PRIMARY KEY,
+          username TEXT,
+          trial_started_at TEXT,
+          trial_expires_at TEXT,
+          trial_searches_used INTEGER NOT NULL DEFAULT 0,
+          subscription_start_date TEXT,
+          subscription_end_date TEXT,
+          days_remaining INTEGER,
+          status TEXT NOT NULL DEFAULT 'Unpaid'
+            CHECK (status IN ('Trial', 'Subscribe', 'Needs Attention', 'Unpaid', 'Kicked')),
+          unpaid_since TEXT,
+          kicked_at TEXT,
+          history_exported_at TEXT,
+          removed_from_group INTEGER NOT NULL DEFAULT 0 CHECK (removed_from_group IN (0, 1)),
+          last_seen_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        INSERT INTO subscription_users (
+          telegram_user_id,
+          username,
+          subscription_start_date,
+          subscription_end_date,
+          status,
+          removed_from_group,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          42,
+          'legacy_user',
+          '2026-05-26',
+          '2026-06-26',
+          'Subscribe',
+          0,
+          '2026-05-26T00:00:00.000Z',
+          '2026-05-26T00:00:00.000Z'
+        );
+      `);
+
+      migratePublicSearchDatabase(db);
+
+      const row = db
+        .prepare('SELECT subscription_plan_months AS subscriptionPlanMonths FROM subscription_users WHERE telegram_user_id = 42')
+        .get() as { subscriptionPlanMonths: number };
+
+      expect(columnNames(db, 'subscription_users')).toContain('subscription_plan_months');
+      expect(row.subscriptionPlanMonths).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
   it('cascades movie provider rows when a movie is deleted', () => {
     const db = createMigratedDatabase();
 

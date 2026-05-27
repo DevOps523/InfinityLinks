@@ -1,5 +1,10 @@
 import type { PublicSearchDatabase } from '../db/database.js';
-import { addDateDays, calculateDaysRemaining, dateDifferenceDays, todayDateString, validateDateOnly } from './date.js';
+import { addDateMonths, calculateDaysRemaining, dateDifferenceDays, todayDateString, validateDateOnly } from './date.js';
+import {
+  DEFAULT_SUBSCRIPTION_PLAN_MONTHS,
+  type SubscriptionPlanMonths,
+  validateSubscriptionPlanMonths
+} from './plan.js';
 
 export type SubscriptionStatus = 'Trial' | 'Subscribe' | 'Needs Attention' | 'Unpaid' | 'Kicked';
 
@@ -16,6 +21,7 @@ export type SubscriptionUser = {
   trialSearchesUsed: number;
   subscriptionStartDate?: string | undefined;
   subscriptionEndDate?: string | undefined;
+  subscriptionPlanMonths: SubscriptionPlanMonths;
   daysRemaining?: number | undefined;
   status: SubscriptionStatus;
   unpaidSince?: string | undefined;
@@ -35,6 +41,7 @@ type SubscriptionUserRow = {
   trialSearchesUsed: number;
   subscriptionStartDate: string | null;
   subscriptionEndDate: string | null;
+  subscriptionPlanMonths: number | null;
   daysRemaining: number | null;
   status: SubscriptionStatus;
   unpaidSince: string | null;
@@ -57,6 +64,7 @@ export function getSubscriptionUser(db: PublicSearchDatabase, telegramUserId: nu
          trial_searches_used AS trialSearchesUsed,
          subscription_start_date AS subscriptionStartDate,
          subscription_end_date AS subscriptionEndDate,
+         subscription_plan_months AS subscriptionPlanMonths,
          days_remaining AS daysRemaining,
          status,
          unpaid_since AS unpaidSince,
@@ -173,10 +181,10 @@ export function applySubscriptionStartDate(
   db: PublicSearchDatabase,
   telegramUserId: number,
   startDate: string,
-  now: Date,
-  periodDays: number
+  planMonths: number,
+  now: Date
 ): SubscriptionUser {
-  validateSubscriptionPeriodDays(periodDays);
+  validateSubscriptionPlanMonths(planMonths);
   const current = getSubscriptionUser(db, telegramUserId);
 
   if (!current) {
@@ -184,7 +192,7 @@ export function applySubscriptionStartDate(
   }
 
   const nowIso = now.toISOString();
-  const endDate = addDateDays(startDate, periodDays);
+  const endDate = addDateMonths(startDate, planMonths);
   const daysRemaining = calculateDaysRemaining(endDate, todayDateString(now));
   const calculatedStatus = statusForDaysRemaining(daysRemaining);
   const hasActivePaidAccess = isActivePaidStatus(calculatedStatus);
@@ -199,6 +207,7 @@ export function applySubscriptionStartDate(
     `UPDATE subscription_users
      SET subscription_start_date = @subscriptionStartDate,
          subscription_end_date = @subscriptionEndDate,
+         subscription_plan_months = @subscriptionPlanMonths,
          days_remaining = @daysRemaining,
          status = @status,
          unpaid_since = @unpaidSince,
@@ -211,6 +220,7 @@ export function applySubscriptionStartDate(
     telegramUserId,
     subscriptionStartDate: startDate,
     subscriptionEndDate: endDate,
+    subscriptionPlanMonths: planMonths,
     daysRemaining,
     status,
     unpaidSince,
@@ -252,19 +262,27 @@ export function markSubscriptionUserUnbanned(
   return result.changes === 1 ? requireSubscriptionUser(db, telegramUserId) : undefined;
 }
 
-export function recalculateSubscriptions(db: PublicSearchDatabase, today: string, periodDays: number): void {
+export function recalculateSubscriptions(db: PublicSearchDatabase, today: string): void {
   validateDateOnly(today);
-  validateSubscriptionPeriodDays(periodDays);
 
   const updatedAt = `${today}T00:00:00.000Z`;
   const rows = db
     .prepare(
-      `SELECT telegram_user_id AS telegramUserId, subscription_start_date AS subscriptionStartDate, unpaid_since AS unpaidSince
+      `SELECT
+         telegram_user_id AS telegramUserId,
+         subscription_start_date AS subscriptionStartDate,
+         subscription_plan_months AS subscriptionPlanMonths,
+         unpaid_since AS unpaidSince
        FROM subscription_users
        WHERE status != 'Kicked'
          AND subscription_start_date IS NOT NULL`
     )
-    .all() as Array<{ telegramUserId: number; subscriptionStartDate: string; unpaidSince: string | null }>;
+    .all() as Array<{
+      telegramUserId: number;
+      subscriptionStartDate: string;
+      subscriptionPlanMonths: number | null;
+      unpaidSince: string | null;
+    }>;
 
   const update = db.prepare(
     `UPDATE subscription_users
@@ -278,7 +296,8 @@ export function recalculateSubscriptions(db: PublicSearchDatabase, today: string
 
   const updateAll = db.transaction(() => {
     for (const row of rows) {
-      const subscriptionEndDate = addDateDays(row.subscriptionStartDate, periodDays);
+      const subscriptionPlanMonths = subscriptionPlanMonthsFromDatabaseValue(row.subscriptionPlanMonths);
+      const subscriptionEndDate = addDateMonths(row.subscriptionStartDate, subscriptionPlanMonths);
       const daysRemaining = calculateDaysRemaining(subscriptionEndDate, today);
       const status = statusForDaysRemaining(daysRemaining);
 
@@ -457,6 +476,7 @@ function listSubscriptionUsers(db: PublicSearchDatabase, whereClause: string, pa
          trial_searches_used AS trialSearchesUsed,
          subscription_start_date AS subscriptionStartDate,
          subscription_end_date AS subscriptionEndDate,
+         subscription_plan_months AS subscriptionPlanMonths,
          days_remaining AS daysRemaining,
          status,
          unpaid_since AS unpaidSince,
@@ -500,16 +520,16 @@ function isActivePaidStatus(status: SubscriptionStatus) {
   return status === 'Subscribe' || status === 'Needs Attention';
 }
 
-function validateSubscriptionPeriodDays(periodDays: number) {
-  if (!Number.isInteger(periodDays) || periodDays <= 0) {
-    throw new Error('Subscription period days must be a positive integer');
-  }
-}
-
 export function validateTrialSearchLimit(trialSearchLimit: number) {
   if (!Number.isInteger(trialSearchLimit) || trialSearchLimit <= 0) {
     throw new Error('Trial search limit must be a positive integer');
   }
+}
+
+function subscriptionPlanMonthsFromDatabaseValue(value: number | null | undefined): SubscriptionPlanMonths {
+  const planMonths = value ?? DEFAULT_SUBSCRIPTION_PLAN_MONTHS;
+  validateSubscriptionPlanMonths(planMonths);
+  return planMonths;
 }
 
 function mapSubscriptionUser(row: SubscriptionUserRow): SubscriptionUser {
@@ -521,6 +541,7 @@ function mapSubscriptionUser(row: SubscriptionUserRow): SubscriptionUser {
     trialSearchesUsed: row.trialSearchesUsed,
     subscriptionStartDate: row.subscriptionStartDate ?? undefined,
     subscriptionEndDate: row.subscriptionEndDate ?? undefined,
+    subscriptionPlanMonths: subscriptionPlanMonthsFromDatabaseValue(row.subscriptionPlanMonths),
     daysRemaining: row.daysRemaining ?? undefined,
     status: row.status,
     unpaidSince: row.unpaidSince ?? undefined,

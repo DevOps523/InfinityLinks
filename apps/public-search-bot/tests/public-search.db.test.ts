@@ -27,7 +27,11 @@ describe('public search database', () => {
         'public_movies',
         'public_seasons',
         'public_sync_state',
-        'public_tv_shows'
+        'public_tv_shows',
+        'subscription_alert_state',
+        'subscription_daily_refresh_state',
+        'subscription_jobs',
+        'subscription_users'
       ]);
     } finally {
       db.close();

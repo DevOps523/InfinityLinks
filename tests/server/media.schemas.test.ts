@@ -20,6 +20,33 @@ describe('media input schemas', () => {
     ).toBe('');
   });
 
+  it('rejects unsafe provider URL schemes for movies', () => {
+    expect(() =>
+      MovieInputSchema.parse({
+        title: 'Movie',
+        quality: 'HD',
+        links: [
+          {
+            providerName: 'UnsafeHost',
+            quality: 'HD',
+            status: 'active',
+            url: 'javascript:alert(1)'
+          }
+        ]
+      })
+    ).toThrow(/URL must use http or https/);
+  });
+
+  it('rejects unsafe poster URL schemes for TV shows', () => {
+    expect(() =>
+      TvShowInputSchema.parse({
+        title: 'Show',
+        quality: 'Full HD',
+        posterUrl: 'data:text/html,<h1>x</h1>'
+      })
+    ).toThrow(/URL must use http or https/);
+  });
+
   it('accepts any numeric rating for movies and TV shows', () => {
     expect(
       MovieInputSchema.parse({

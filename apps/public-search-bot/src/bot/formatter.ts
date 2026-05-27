@@ -20,7 +20,7 @@ export type PublicBotMessage = {
 export function formatStartMessage(handles: PublicBotHandles): PublicBotMessage {
   return {
     text: [
-      '🎬 Welcome to DownloadHub Search.',
+      '🎬 Welcome to DownloadHub',
       '',
       '🔎 Use:',
       '/search movie or tv show name',
@@ -50,6 +50,12 @@ export function formatClearMessage(): PublicBotMessage {
 export function formatSubscriptionRequiredMessage(adminContact: string): PublicBotMessage {
   return {
     text: `You need a subscription to view and access download links. Contact ${adminContact} to keep you going.`
+  };
+}
+
+export function formatPrivateChatRequiredMessage(): PublicBotMessage {
+  return {
+    text: 'Open a private chat with this bot to view download links.'
   };
 }
 

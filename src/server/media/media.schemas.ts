@@ -6,18 +6,33 @@ export const LinkStatusSchema = z.enum(['active', 'inactive']);
 export const MovieTopicKeySchema = z.enum(MOVIE_TOPIC_KEYS);
 export const TvTopicKeySchema = z.enum(TV_TOPIC_KEYS);
 
+const HTTP_URL_ERROR_MESSAGE = 'URL must use http or https';
+
+function isHttpUrl(value: string) {
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+const HttpUrlSchema = z.string().url().refine(isHttpUrl, {
+  message: HTTP_URL_ERROR_MESSAGE
+});
+
 export const LinkInputSchema = z.object({
   providerName: z.string().trim().min(1),
   quality: QualitySchema,
   status: LinkStatusSchema,
-  url: z.string().url()
+  url: HttpUrlSchema
 });
 
 const MediaInputBaseSchema = z.object({
   tmdbId: z.number().int().positive().optional(),
   title: z.string().trim().min(1),
   year: z.number().int().positive().optional(),
-  posterUrl: z.union([z.string().url(), z.literal('')]).optional(),
+  posterUrl: z.union([HttpUrlSchema, z.literal('')]).optional(),
   rating: z.number().optional(),
   quality: QualitySchema,
   description: z.string().default('')

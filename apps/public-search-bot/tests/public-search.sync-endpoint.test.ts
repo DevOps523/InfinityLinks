@@ -381,6 +381,32 @@ describe('public search sync endpoint', () => {
     }
   });
 
+  it('returns 400 for unsafe provider URL schemes', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      const catalog = validCatalog();
+      catalog.movies[0].providers[0].url = 'javascript:alert(1)';
+      const app = createPublicSearchApp({ db, config: createConfig() });
+
+      const response = await request(app).post('/api/sync').set('Authorization', 'Bearer sync-token').send(catalog);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Validation failed');
+      expect(response.body.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: 'movies.0.providers.0.url',
+            message: 'URL must use http or https'
+          })
+        ])
+      );
+      expect(JSON.stringify(response.body)).toContain('URL must use http or https');
+    } finally {
+      db.close();
+    }
+  });
+
   it('returns a generic client error for malformed JSON', async () => {
     const db = createMigratedDatabase();
 

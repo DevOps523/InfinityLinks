@@ -12,6 +12,11 @@ RestartSec=5
 # Ensure /opt/infinitylinks-public-search-bot/data is writable by this user.
 User=www-data
 Group=www-data
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/infinitylinks-public-search-bot/data
 
 [Install]
 WantedBy=multi-user.target

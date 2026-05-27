@@ -110,16 +110,31 @@ describe('loadPublicSearchConfig', () => {
         PUBLIC_SEARCH_STATUS_TOKEN: 'status-token',
         PUBLIC_SEARCH_GROUP_HANDLE: '@customGroup',
         PUBLIC_SEARCH_DATABASE_PATH: './tmp/search.sqlite',
-        PUBLIC_SEARCH_HOST: '0.0.0.0',
+        PUBLIC_SEARCH_HOST: 'localhost',
         PUBLIC_SEARCH_PORT: '4321'
       })
     ).toMatchObject({
       publicSearchGroupHandle: '@customGroup',
       publicSearchDatabasePath: './tmp/search.sqlite',
-      publicSearchHost: '0.0.0.0',
+      publicSearchHost: 'localhost',
       publicSearchPort: 4321
     });
   });
+
+  it.each(['0.0.0.0', '192.168.1.10', 'example.com'])(
+    'rejects externally reachable PUBLIC_SEARCH_HOST %s',
+    (host) => {
+      expect(() =>
+        loadPublicSearchConfig({
+          ...subscriptionEnv,
+          PUBLIC_BOT_TOKEN: 'bot-token',
+          PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
+          PUBLIC_SEARCH_STATUS_TOKEN: 'status-token',
+          PUBLIC_SEARCH_HOST: host
+        })
+      ).toThrow(/PUBLIC_SEARCH_HOST must be a loopback host/);
+    }
+  );
 
   it('requires subscription bot and admin secrets', () => {
     expect(() =>

@@ -7,7 +7,7 @@ import type { AppConfig } from './config.js';
 import type { AppDatabase } from './db/database.js';
 import { createMediaRouter } from './media/media.routes.js';
 import { createPublicSearchRouter } from './public-search/public-search.routes.js';
-import { createAdminApiRequestGuard } from './security/api-request-guard.js';
+import { createAdminApiRequestGuard, getLoopbackAdminApiAllowedHosts } from './security/api-request-guard.js';
 import type { PublicSearchStatusServiceOptions } from './public-search/status.service.js';
 import { createTelegramAdminRouter } from './telegram/telegram.admin.routes.js';
 import { createTmdbRouter, type TmdbRouterOptions } from './tmdb/tmdb.routes.js';
@@ -27,6 +27,18 @@ function formatZodPath(path: Array<number | string>) {
   return path.map(String).join('.');
 }
 
+function getAdminApiRequestGuardOptions(config: AppConfig | undefined) {
+  if (!config) {
+    return undefined;
+  }
+
+  if (config.port === 0) {
+    return undefined;
+  }
+
+  return { allowedHosts: getLoopbackAdminApiAllowedHosts(config.port) };
+}
+
 export function createApp(options: CreateAppOptions = {}) {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
@@ -35,7 +47,7 @@ export function createApp(options: CreateAppOptions = {}) {
     res.json({ ok: true });
   });
 
-  app.use('/api', createAdminApiRequestGuard());
+  app.use('/api', createAdminApiRequestGuard(getAdminApiRequestGuardOptions(options.config)));
 
   if (options.db && options.config) {
     app.use('/api', createAdminRouter(options.db, options.config));

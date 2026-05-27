@@ -169,13 +169,14 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: /^add movie$/i })).toBeInTheDocument();
   });
 
-  it('saves an Add Movie form with the selected topic', async () => {
+  it('saves an Add Movie form with the selected topic and trimmed poster URL', async () => {
     render(<App />);
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
 
     fireEvent.change(screen.getByLabelText(/^title$/i), { target: { value: 'Topic Movie' } });
+    fireEvent.change(screen.getByLabelText(/^poster url$/i), { target: { value: '  https://example.com/topic.jpg  ' } });
     fireEvent.change(screen.getByLabelText(/^topic$/i), { target: { value: 'PINOY_MOVIES' } });
     fireEvent.click(screen.getByRole('button', { name: /^save movie$/i }));
 
@@ -192,10 +193,27 @@ describe('App', () => {
     expect(JSON.parse(moviePost?.[1]?.body as string)).toEqual(
       expect.objectContaining({
         title: 'Topic Movie',
+        posterUrl: 'https://example.com/topic.jpg',
         quality: 'HD',
         topicKey: 'PINOY_MOVIES'
       })
     );
+  });
+
+  it('rejects an unsafe movie poster URL before saving', async () => {
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
+
+    fireEvent.change(screen.getByLabelText(/^title$/i), { target: { value: 'Unsafe Poster Movie' } });
+    fireEvent.change(screen.getByLabelText(/^poster url$/i), { target: { value: 'javascript:alert(1)' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save movie$/i }));
+
+    expect(screen.getByText('Poster URL must start with http:// or https://.')).toBeInTheDocument();
+    expect(screen.getByText('No poster preview')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /unsafe poster movie poster preview/i })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/movies', expect.objectContaining({ method: 'POST' }));
   });
 
   it('shows a duplicate movie warning while adding a similar title', async () => {
@@ -434,13 +452,14 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /^save tv show$/i })).toBeInTheDocument();
   });
 
-  it('saves an Add TV Show form with the selected topic', async () => {
+  it('saves an Add TV Show form with the selected topic and trimmed poster URL', async () => {
     render(<App />);
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
 
     fireEvent.change(screen.getByLabelText(/^title$/i), { target: { value: 'Topic Show' } });
+    fireEvent.change(screen.getByLabelText(/^poster url$/i), { target: { value: '  https://example.com/topic-show.jpg  ' } });
     fireEvent.change(screen.getByLabelText(/^topic$/i), { target: { value: 'PINOY_TV_SERIES' } });
     fireEvent.click(screen.getByRole('button', { name: /^save tv show$/i }));
 
@@ -457,10 +476,38 @@ describe('App', () => {
     expect(JSON.parse(tvShowPost?.[1]?.body as string)).toEqual(
       expect.objectContaining({
         title: 'Topic Show',
+        posterUrl: 'https://example.com/topic-show.jpg',
         quality: 'HD',
         topicKey: 'PINOY_TV_SERIES'
       })
     );
+  });
+
+  it('rejects an unsafe TV show poster URL before saving', async () => {
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
+
+    fireEvent.change(screen.getByLabelText(/^title$/i), { target: { value: 'Unsafe Poster Show' } });
+    fireEvent.change(screen.getByLabelText(/^poster url$/i), { target: { value: 'javascript:alert(1)' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save tv show$/i }));
+
+    expect(screen.getByText('Poster URL must start with http:// or https://.')).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/tv-shows', expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('suppresses an unsafe TV show poster preview', async () => {
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
+
+    fireEvent.change(screen.getByLabelText(/^title$/i), { target: { value: 'Unsafe Preview Show' } });
+    fireEvent.change(screen.getByLabelText(/^poster url$/i), { target: { value: 'javascript:alert(1)' } });
+
+    expect(screen.getByText('No poster preview')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /unsafe preview show poster preview/i })).not.toBeInTheDocument();
   });
 
   it('shows a duplicate TV show warning while adding a similar title', async () => {
@@ -1555,6 +1602,55 @@ describe('App', () => {
 
     fireEvent.click(saveButton);
 
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('saves an untouched streaming link placeholder as an empty list', () => {
+    const onSave = vi.fn();
+
+    render(<LinkEditorModal open links={[]} onClose={vi.fn()} onSave={onSave} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^save links$/i }));
+
+    expect(onSave).toHaveBeenCalledWith([]);
+    expect(screen.queryByText('Each saved link needs both a provider and URL.')).not.toBeInTheDocument();
+  });
+
+  it('saves an empty list after removing the last streaming link', () => {
+    const onSave = vi.fn();
+
+    render(
+      <LinkEditorModal
+        open
+        links={[
+          {
+            providerName: 'Filekeeper',
+            quality: 'HD',
+            status: 'active',
+            url: 'https://example.com/watch'
+          }
+        ]}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^remove link$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save links$/i }));
+
+    expect(onSave).toHaveBeenCalledWith([]);
+    expect(screen.queryByText('Each saved link needs both a provider and URL.')).not.toBeInTheDocument();
+  });
+
+  it('rejects an unsafe streaming link before saving', () => {
+    const onSave = vi.fn();
+
+    render(<LinkEditorModal open links={[]} onClose={vi.fn()} onSave={onSave} />);
+
+    fireEvent.change(screen.getByLabelText(/^url$/i), { target: { value: 'javascript:alert(1)' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save links$/i }));
+
+    expect(screen.getByText('URLs must start with http:// or https://.')).toBeInTheDocument();
     expect(onSave).not.toHaveBeenCalled();
   });
 

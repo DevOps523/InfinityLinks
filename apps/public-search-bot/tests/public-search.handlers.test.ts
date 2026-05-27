@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { replacePublicCatalog } from '../src/catalog.repository.js';
 import { createPublicSearchDatabase, type PublicSearchDatabase } from '../src/db/database.js';
 import { migratePublicSearchDatabase } from '../src/db/migrate.js';
-import { applySubscriptionStartDate } from '../src/subscriptions/repository.js';
+import {
+  applySubscriptionStartDate,
+  markSubscriptionUserKicked,
+  upsertSeenTelegramUser
+} from '../src/subscriptions/repository.js';
 import { createReplyThrottleState, handleTelegramUpdate, type HandlerDeps } from '../src/bot/handlers.js';
 import type { PublicSearchCatalog } from '../src/catalog.schema.js';
 import type { InlineKeyboardMarkup, TelegramUpdate } from '../src/telegram.client.js';
@@ -13,6 +17,7 @@ const handles = {
 
 const subscriptionRequiredMessage =
   'You need a subscription to view and access download links. Contact @seinen_illuminatiks to keep you going.';
+const privateChatRequiredMessage = 'Open a private chat with this bot to view download links.';
 
 type SentMessage = {
   chatId: number;
@@ -146,7 +151,7 @@ function messageUpdate(text: string, overrides: Partial<TelegramUpdate['message'
     update_id: 1,
     message: {
       message_id: 10,
-      chat: { id: 500 },
+      chat: { id: 500, type: 'private' },
       from: { id: 42 },
       text,
       ...overrides
@@ -162,7 +167,7 @@ function callbackUpdate(data: string | undefined, overrides: Partial<TelegramUpd
       from: { id: 42 },
       message: {
         message_id: 11,
-        chat: { id: 500 }
+        chat: { id: 500, type: 'private' }
       },
       data,
       ...overrides
@@ -210,7 +215,7 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(deps, messageUpdate('/start'));
 
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
+      expect(sentMessages[0].text).toContain('Welcome to DownloadHub');
       expect(sentMessages[0].text).toContain('/search movie or tv show name');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
     } finally {
@@ -265,7 +270,7 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(deps, messageUpdate('/start', { from: { id: 99 } }));
 
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
+      expect(sentMessages[0].text).toContain('Welcome to DownloadHub');
     } finally {
       db.close();
     }
@@ -286,9 +291,9 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(second.deps, messageUpdate('/start', { from: { id: 99 } }));
 
       expect(first.sentMessages).toHaveLength(1);
-      expect(first.sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
+      expect(first.sentMessages[0].text).toContain('Welcome to DownloadHub');
       expect(second.sentMessages).toHaveLength(1);
-      expect(second.sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
+      expect(second.sentMessages[0].text).toContain('Welcome to DownloadHub');
     } finally {
       firstDb.close();
       secondDb.close();
@@ -309,7 +314,7 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(deps, messageUpdate('/start', { from: { id: 99 } }));
 
       expect(sentMessages).toHaveLength(2);
-      expect(sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
+      expect(sentMessages[0].text).toContain('Welcome to DownloadHub');
       expect(sentMessages[1].text).toBe('Please wait 60 seconds before trying again.');
     } finally {
       db.close();
@@ -357,7 +362,7 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(deps, messageUpdate('/wat'));
 
       expect(sentMessages).toHaveLength(2);
-      expect(sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
+      expect(sentMessages[0].text).toContain('Welcome to DownloadHub');
       expect(sentMessages[1].text).toBe('Please wait 30 seconds before trying again.');
     } finally {
       db.close();
@@ -481,7 +486,7 @@ describe('public search bot handlers', () => {
       const row = db.prepare('SELECT telegram_user_id FROM subscription_users WHERE telegram_user_id = 42').get();
       expect(row).toBeUndefined();
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
+      expect(sentMessages[0].text).toContain('Welcome to DownloadHub');
     } finally {
       db.close();
     }
@@ -588,6 +593,35 @@ describe('public search bot handlers', () => {
       expect(sentMessages[0].text).toContain('Movie');
       expect(sentMessages[0].text).toContain('https://providers.example/inception-hd');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('keeps /search provider links out of group chats for otherwise allowed users', async () => {
+    const db = createMigratedDatabase();
+    const groupChatId = -100500;
+
+    try {
+      seedCatalog(db);
+      const { deps, sentMessages } = createDeps(db);
+
+      await handleTelegramUpdate(
+        deps,
+        messageUpdate('/search inception', {
+          chat: { id: groupChatId, type: 'group' },
+          from: { id: 42, username: 'trial_user' }
+        })
+      );
+
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0].chatId).toBe(groupChatId);
+      expect(sentMessages[0].text).toBe(privateChatRequiredMessage);
+      expect(JSON.stringify(sentMessages)).not.toContain('providers.example');
+      expect(deps.subscription.scheduleSheetRefresh).not.toHaveBeenCalled();
+      expect(
+        db.prepare('SELECT telegram_user_id FROM subscription_users WHERE telegram_user_id = 42').get()
+      ).toBeUndefined();
     } finally {
       db.close();
     }
@@ -762,6 +796,103 @@ describe('public search bot handlers', () => {
       expect(deps.subscription.scheduleSheetRefresh).toHaveBeenCalledWith(new Date('2026-05-26T00:00:00.000Z'));
     } finally {
       db.close();
+    }
+  });
+
+  it('keeps season callback provider links out of group chats for otherwise allowed users', async () => {
+    const db = createMigratedDatabase();
+    const groupChatId = -100501;
+
+    try {
+      seedCatalog(db);
+      const { deps, sentMessages, callbackAnswers } = createDeps(db);
+
+      await handleTelegramUpdate(
+        deps,
+        callbackUpdate('season:30', {
+          from: { id: 42, username: 'trial_user' },
+          message: {
+            message_id: 11,
+            chat: { id: groupChatId, type: 'group' }
+          }
+        })
+      );
+
+      expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: privateChatRequiredMessage }]);
+      expect(sentMessages).toHaveLength(0);
+      expect(JSON.stringify({ sentMessages, callbackAnswers })).not.toContain('providers.example');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('answers season callbacks without a message before access and catalog side effects', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      const { deps, sentMessages, callbackAnswers } = createDeps(db);
+
+      await handleTelegramUpdate(
+        deps,
+        callbackUpdate('season:30', {
+          from: { id: 42, username: 'trial_user' },
+          message: undefined
+        })
+      );
+
+      expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: privateChatRequiredMessage }]);
+      expect(sentMessages).toHaveLength(0);
+      expect(deps.subscription.scheduleSheetRefresh).not.toHaveBeenCalled();
+      expect(
+        db.prepare('SELECT telegram_user_id FROM subscription_users WHERE telegram_user_id = 42').get()
+      ).toBeUndefined();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('answers group season callbacks before access and catalog failure paths can send messages', async () => {
+    const deniedDb = createMigratedDatabase();
+    const unavailableDb = createMigratedDatabase();
+    const groupChatId = -100502;
+    const groupSeasonCallback = {
+      from: { id: 42, username: 'trial_user' },
+      message: {
+        message_id: 11,
+        chat: { id: groupChatId, type: 'group' }
+      }
+    } satisfies Partial<NonNullable<TelegramUpdate['callback_query']>>;
+
+    try {
+      seedCatalog(deniedDb);
+      upsertSeenTelegramUser(
+        deniedDb,
+        { id: 42, username: 'kicked_user' },
+        new Date('2026-05-26T00:00:00.000Z')
+      );
+      markSubscriptionUserKicked(deniedDb, 42, new Date('2026-05-26T00:00:00.000Z'));
+      const denied = createDeps(deniedDb);
+
+      await handleTelegramUpdate(denied.deps, callbackUpdate('season:30', groupSeasonCallback));
+
+      expect(denied.callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: privateChatRequiredMessage }]);
+      expect(denied.sentMessages).toHaveLength(0);
+      expect(denied.deps.subscription.scheduleSheetRefresh).not.toHaveBeenCalled();
+
+      const unavailable = createDeps(unavailableDb);
+
+      await handleTelegramUpdate(unavailable.deps, callbackUpdate('season:30', groupSeasonCallback));
+
+      expect(unavailable.callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: privateChatRequiredMessage }]);
+      expect(unavailable.sentMessages).toHaveLength(0);
+      expect(unavailable.deps.subscription.scheduleSheetRefresh).not.toHaveBeenCalled();
+      expect(
+        unavailableDb.prepare('SELECT telegram_user_id FROM subscription_users WHERE telegram_user_id = 42').get()
+      ).toBeUndefined();
+    } finally {
+      deniedDb.close();
+      unavailableDb.close();
     }
   });
 

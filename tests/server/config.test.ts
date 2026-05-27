@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/server/config.js';
 
+function captureError(callback: () => unknown) {
+  try {
+    callback();
+  } catch (error) {
+    return error;
+  }
+
+  throw new Error('Expected callback to throw.');
+}
+
 describe('loadConfig', () => {
   it('accepts environment variables and returns camelCase values', () => {
     expect(
@@ -61,6 +71,31 @@ describe('loadConfig', () => {
     });
   });
 
+  it('rejects non-https public search sync URLs', () => {
+    expect(() =>
+      loadConfig({
+        TMDB_API_KEY: 'tmdb-key',
+        TELEGRAM_BOT_TOKEN: 'telegram-token',
+        TELEGRAM_CHANNEL_ID: '@channel',
+        PUBLIC_SEARCH_SYNC_URL: 'http://public.example/api/sync'
+      })
+    ).toThrow(/PUBLIC_SEARCH_SYNC_URL must use https/);
+  });
+
+  it('rejects malformed public search sync URLs through validation', () => {
+    const error = captureError(() =>
+      loadConfig({
+        TMDB_API_KEY: 'tmdb-key',
+        TELEGRAM_BOT_TOKEN: 'telegram-token',
+        TELEGRAM_CHANNEL_ID: '@channel',
+        PUBLIC_SEARCH_SYNC_URL: 'not a url'
+      })
+    );
+
+    expect(error).not.toBeInstanceOf(TypeError);
+    expect(String(error)).toMatch(/Invalid url/);
+  });
+
   it('accepts optional public search status configuration', () => {
     expect(
       loadConfig({
@@ -101,6 +136,31 @@ describe('loadConfig', () => {
       publicSearchStatusUrl: undefined,
       publicSearchStatusToken: undefined
     });
+  });
+
+  it('rejects non-https public search status URLs', () => {
+    expect(() =>
+      loadConfig({
+        TMDB_API_KEY: 'tmdb-key',
+        TELEGRAM_BOT_TOKEN: 'telegram-token',
+        TELEGRAM_CHANNEL_ID: '@channel',
+        PUBLIC_SEARCH_STATUS_URL: 'http://public.example/api/status'
+      })
+    ).toThrow(/PUBLIC_SEARCH_STATUS_URL must use https/);
+  });
+
+  it('rejects malformed public search status URLs through validation', () => {
+    const error = captureError(() =>
+      loadConfig({
+        TMDB_API_KEY: 'tmdb-key',
+        TELEGRAM_BOT_TOKEN: 'telegram-token',
+        TELEGRAM_CHANNEL_ID: '@channel',
+        PUBLIC_SEARCH_STATUS_URL: 'not a url'
+      })
+    );
+
+    expect(error).not.toBeInstanceOf(TypeError);
+    expect(String(error)).toMatch(/Invalid url/);
   });
 
   it('allows loopback host values only', () => {

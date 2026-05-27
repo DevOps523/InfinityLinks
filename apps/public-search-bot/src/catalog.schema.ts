@@ -4,11 +4,26 @@ const PositiveIntegerSchema = z.number().int().positive();
 
 const OptionalPositiveIntegerSchema = PositiveIntegerSchema.optional();
 
+const HTTP_URL_ERROR_MESSAGE = 'URL must use http or https';
+
+function isHttpUrl(value: string) {
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+const HttpUrlSchema = z.string().url().refine(isHttpUrl, {
+  message: HTTP_URL_ERROR_MESSAGE
+});
+
 export const PublicSearchProviderSchema = z
   .object({
     providerName: z.string().trim().min(1),
     quality: z.string().trim().min(1),
-    url: z.string().url(),
+    url: HttpUrlSchema,
     sortOrder: PositiveIntegerSchema
   })
   .strict();
@@ -19,7 +34,7 @@ export const PublicSearchMovieSchema = z
     title: z.string().trim().min(1),
     year: OptionalPositiveIntegerSchema,
     telegramMessageId: OptionalPositiveIntegerSchema,
-    channelPostUrl: z.string().url().optional(),
+    channelPostUrl: HttpUrlSchema.optional(),
     providers: PublicSearchProviderSchema.array().nonempty()
   })
   .strict();
@@ -36,7 +51,7 @@ export const PublicSearchSeasonSchema = z
     id: PositiveIntegerSchema,
     seasonNumber: PositiveIntegerSchema,
     telegramMessageId: OptionalPositiveIntegerSchema,
-    channelPostUrl: z.string().url().optional(),
+    channelPostUrl: HttpUrlSchema.optional(),
     episodes: PublicSearchEpisodeSchema.array().nonempty()
   })
   .strict();

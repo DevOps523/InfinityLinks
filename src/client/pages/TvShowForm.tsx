@@ -1,6 +1,7 @@
 import { Save } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { apiJson } from '../api/http';
+import { isHttpOrHttpsUrl } from '../components/LinkEditorModal';
 import { TmdbSearch, type TmdbResult } from '../components/TmdbSearch';
 import { useToast } from '../components/ToastProvider';
 
@@ -156,14 +157,21 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
 
   async function submitTvShow(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setIsSaving(true);
     setError('');
+
+    const trimmedPosterUrl = posterUrl.trim();
+    if (trimmedPosterUrl && !isHttpOrHttpsUrl(trimmedPosterUrl)) {
+      setError('Poster URL must start with http:// or https://.');
+      return;
+    }
+
+    setIsSaving(true);
 
     const body = {
       tmdbId: tmdbId.trim() ? Number(tmdbId) : undefined,
       title,
       year: year.trim() ? Number(year) : undefined,
-      posterUrl,
+      posterUrl: trimmedPosterUrl,
       description,
       rating: rating.trim() ? Number(rating) : undefined,
       quality,
@@ -183,6 +191,9 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
       setIsSaving(false);
     }
   }
+
+  const normalizedPosterUrl = posterUrl.trim();
+  const previewPosterUrl = normalizedPosterUrl && isHttpOrHttpsUrl(normalizedPosterUrl) ? normalizedPosterUrl : '';
 
   return (
     <section className="page-section">
@@ -262,7 +273,7 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
           </div>
 
           <aside className="poster-panel" aria-label="Poster preview">
-            {posterUrl ? <img src={posterUrl} alt={`${title || 'TV show'} poster preview`} /> : <span>No poster preview</span>}
+            {previewPosterUrl ? <img src={previewPosterUrl} alt={`${title || 'TV show'} poster preview`} /> : <span>No poster preview</span>}
           </aside>
         </form>
       ) : null}

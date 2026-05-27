@@ -54,7 +54,7 @@ describe('admin dashboard', () => {
       db,
       config: {
         host: '127.0.0.1',
-        port: 3000,
+        port: 0,
         databasePath: ':memory:',
         tmdbApiKey: 'tmdb-token',
         telegramBotToken: 'telegram-token',

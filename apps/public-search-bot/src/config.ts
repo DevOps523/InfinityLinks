@@ -41,7 +41,6 @@ const PublicSearchEnvSchema = z.object({
   SUBSCRIPTION_ALERT_THREAD_ID: numberWithDefault(46),
   SUBSCRIPTION_ADMIN_CONTACT: trimmedStringWithDefault('@seinen_illuminatiks'),
   SUBSCRIPTION_TRIAL_SEARCH_LIMIT: numberWithDefault(5),
-  SUBSCRIPTION_PERIOD_DAYS: numberWithDefault(31),
   SUBSCRIPTION_OVERDUE_GRACE_DAYS: numberWithDefault(1),
   SUBSCRIPTION_ADMIN_TOKEN: requiredSecret('SUBSCRIPTION_ADMIN_TOKEN'),
   GOOGLE_SHEETS_SPREADSHEET_ID: requiredSecret('GOOGLE_SHEETS_SPREADSHEET_ID'),
@@ -69,7 +68,6 @@ export type PublicSearchConfig = {
   subscriptionAlertThreadId: number;
   subscriptionAdminContact: string;
   subscriptionTrialSearchLimit: number;
-  subscriptionPeriodDays: number;
   subscriptionOverdueGraceDays: number;
   subscriptionAdminToken: string;
   googleSheetsSpreadsheetId: string;
@@ -94,7 +92,6 @@ export function loadPublicSearchConfig(env: NodeJS.ProcessEnv): PublicSearchConf
     subscriptionAlertThreadId: parsed.SUBSCRIPTION_ALERT_THREAD_ID,
     subscriptionAdminContact: parsed.SUBSCRIPTION_ADMIN_CONTACT,
     subscriptionTrialSearchLimit: parsed.SUBSCRIPTION_TRIAL_SEARCH_LIMIT,
-    subscriptionPeriodDays: parsed.SUBSCRIPTION_PERIOD_DAYS,
     subscriptionOverdueGraceDays: parsed.SUBSCRIPTION_OVERDUE_GRACE_DAYS,
     subscriptionAdminToken: parsed.SUBSCRIPTION_ADMIN_TOKEN,
     googleSheetsSpreadsheetId: parsed.GOOGLE_SHEETS_SPREADSHEET_ID,

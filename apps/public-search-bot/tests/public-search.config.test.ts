@@ -71,7 +71,6 @@ describe('loadPublicSearchConfig', () => {
       subscriptionAlertThreadId: 46,
       subscriptionAdminContact: '@seinen_illuminatiks',
       subscriptionTrialSearchLimit: 5,
-      subscriptionPeriodDays: 31,
       subscriptionOverdueGraceDays: 1,
       subscriptionAdminToken: 'admin-token',
       googleSheetsSpreadsheetId: 'sheet-id',
@@ -211,7 +210,6 @@ describe('loadPublicSearchConfig', () => {
       subscriptionAlertThreadId: 46,
       subscriptionAdminContact: '@seinen_illuminatiks',
       subscriptionTrialSearchLimit: 5,
-      subscriptionPeriodDays: 31,
       subscriptionOverdueGraceDays: 1,
       subscriptionAdminToken: 'admin-token',
       googleSheetsSpreadsheetId: 'sheet-id',
@@ -232,7 +230,6 @@ describe('loadPublicSearchConfig', () => {
         SUBSCRIPTION_ALERT_THREAD_ID: '47',
         SUBSCRIPTION_ADMIN_CONTACT: ' @admin_contact ',
         SUBSCRIPTION_TRIAL_SEARCH_LIMIT: '7',
-        SUBSCRIPTION_PERIOD_DAYS: '30',
         SUBSCRIPTION_OVERDUE_GRACE_DAYS: '2',
         SUBSCRIPTION_ADMIN_TOKEN: 'admin-token',
         GOOGLE_SHEETS_SPREADSHEET_ID: 'sheet-id',
@@ -245,11 +242,22 @@ describe('loadPublicSearchConfig', () => {
       subscriptionAlertThreadId: 47,
       subscriptionAdminContact: '@admin_contact',
       subscriptionTrialSearchLimit: 7,
-      subscriptionPeriodDays: 30,
       subscriptionOverdueGraceDays: 2,
       googleSheetsUsersRange: 'Members!A:H',
       googleSheetsHistoryRange: 'Payments!A:G'
     });
+  });
+
+  it('ignores obsolete SUBSCRIPTION_PERIOD_DAYS env values', () => {
+    expect(
+      loadPublicSearchConfig({
+        ...subscriptionEnv,
+        PUBLIC_BOT_TOKEN: 'bot-token',
+        PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
+        PUBLIC_SEARCH_STATUS_TOKEN: 'status-token',
+        SUBSCRIPTION_PERIOD_DAYS: '365'
+      })
+    ).not.toHaveProperty('subscriptionPeriodDays');
   });
 
   it.each(['0', '-1', '1.5', 'not-a-number'])(

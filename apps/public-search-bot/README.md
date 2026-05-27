@@ -33,7 +33,7 @@ SUBSCRIPTION_BOT_TOKEN=replace_with_subscription_bot_token
 SUBSCRIPTION_GROUP_CHAT_ID=-1003963665033
 SUBSCRIPTION_ALERT_THREAD_ID=46
 SUBSCRIPTION_ADMIN_CONTACT=@seinen_illuminatiks
-SUBSCRIPTION_TRIAL_HOURS=24
+SUBSCRIPTION_TRIAL_SEARCH_LIMIT=5
 SUBSCRIPTION_PERIOD_DAYS=31
 SUBSCRIPTION_OVERDUE_GRACE_DAYS=1
 SUBSCRIPTION_ADMIN_TOKEN=replace_with_subscription_admin_secret
@@ -60,7 +60,7 @@ The standalone service now runs two Telegram bot tokens:
 - `PUBLIC_BOT_TOKEN` handles `/start`, `/search`, and search result callbacks.
 - `SUBSCRIPTION_BOT_TOKEN` posts subscription alerts and removes overdue users from the group.
 
-Public search access is backed by the standalone SQLite subscription database. A user's first search starts a 1-day trial. Paid access lasts 31 days from the current subscription start date. Users whose subscription is expired, unpaid, kicked, or otherwise inactive are blocked from download links.
+Public search access is backed by the standalone SQLite subscription database. A user's first successful search starts a 5-search trial quota. The sixth successful search attempt is blocked with the subscription message. Paid access lasts 31 days from the current subscription start date. Users whose trial quota is used, subscription is expired, unpaid, kicked, or otherwise inactive are blocked from download links.
 
 Create a Google Sheets workbook with these tabs and headers:
 
@@ -88,7 +88,7 @@ Operational notes:
 - Keep the public search bot token and subscription bot token separate. Both bots need the Telegram permissions required for their jobs in `@infinitylinks69`.
 - Run `Update Subscription` after manually changing subscription rows so the VPS database is refreshed from the sheet.
 - Use `Send Alert` after updates when you want the alert topic to reflect current subscription state immediately.
-- The default trial is 1 day, the default paid period is 31 days, and overdue users have a 1-day grace period before removal jobs are queued.
+- The default trial is 5 successful searches, the default paid period is 31 days, and overdue users have a 1-day grace period before removal jobs are queued.
 - Overdue kicks are performed by the subscription bot from persisted jobs with retry/backoff. Check systemd logs before manually intervening.
 
 ## Step By Step VPS Deployment
@@ -268,7 +268,7 @@ SUBSCRIPTION_BOT_TOKEN=replace_with_subscription_bot_token
 SUBSCRIPTION_GROUP_CHAT_ID=-1003963665033
 SUBSCRIPTION_ALERT_THREAD_ID=46
 SUBSCRIPTION_ADMIN_CONTACT=@seinen_illuminatiks
-SUBSCRIPTION_TRIAL_HOURS=24
+SUBSCRIPTION_TRIAL_SEARCH_LIMIT=5
 SUBSCRIPTION_PERIOD_DAYS=31
 SUBSCRIPTION_OVERDUE_GRACE_DAYS=1
 SUBSCRIPTION_ADMIN_TOKEN=replace_with_long_random_subscription_secret
@@ -500,7 +500,10 @@ The VPS database starts empty. The public bot will not return movie or TV result
 
 Expected subscription behavior:
 
-- First search starts a 1-day trial.
+- First successful search starts a 5-search trial quota.
+- After 5 successful searches, the next successful search attempt is blocked with the subscription message.
+- Searches with no catalog results do not consume the trial quota.
+- TV season button clicks do not consume the trial quota.
 - Paid access is 31 days from `Start Date`.
 - At 1 day remaining, status becomes `Needs Attention`.
 - At 0 days remaining, status becomes `Unpaid`.
@@ -569,5 +572,5 @@ If users are always blocked from search, confirm:
 
 - The public bot is receiving `/search`.
 - The subscription database exists at `PUBLIC_SEARCH_DATABASE_PATH`.
-- The user has an active trial or paid subscription row.
+- The user has remaining trial searches or an active paid subscription row.
 - The systemd logs do not show Google Sheets or Telegram API errors.

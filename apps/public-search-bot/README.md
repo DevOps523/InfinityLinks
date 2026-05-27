@@ -105,11 +105,21 @@ The VPS does not need the root admin app. The standalone folder contains its own
 
 ### 2. Upload The Folder To The VPS
 
-Example using `scp` from your PC:
+Example from your PC:
 
 ```bash
-scp -r apps/public-search-bot root@your-vps-ip:/opt/infinitylinks-public-search-bot
+rsync -av --delete \
+  --include '.env.example' \
+  --exclude '.env' \
+  --exclude '.env.*' \
+  --exclude 'google-service-account.json' \
+  --exclude 'data/' \
+  --exclude 'dist/' \
+  --exclude 'node_modules/' \
+  apps/public-search-bot/ root@your-vps-ip:/opt/infinitylinks-public-search-bot/
 ```
+
+Create the production `.env` and Google service account JSON directly on the VPS; do not copy local secrets or local databases.
 
 Or upload it with your preferred SFTP/SSH tool. On the VPS, the folder should look like this:
 

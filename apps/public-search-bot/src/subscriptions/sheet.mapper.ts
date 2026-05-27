@@ -1,7 +1,12 @@
 import { validateDateOnly } from './date.js';
+import {
+  normalizeSubscriptionPlan,
+  subscriptionPlanLabel,
+  type SubscriptionPlanMonths
+} from './plan.js';
 import type { SubscriptionStatus, SubscriptionUser } from './repository.js';
 
-export const USERS_HEADER = ['User ID', 'Username', 'Start Date', 'End Date', 'Days Remaining', 'Status', 'Last Updated'];
+export const USERS_HEADER = ['User ID', 'Username', 'Start Date', 'Plan', 'End Date', 'Days Remaining', 'Status', 'Last Updated'];
 export const HISTORY_HEADER = ['User ID', 'Username', 'Last Status', 'Kicked At', 'Last Start Date', 'Last End Date', 'Notes'];
 
 const SUBSCRIPTION_STATUSES: readonly SubscriptionStatus[] = [
@@ -16,6 +21,7 @@ export type ParsedUsersSheetRow = {
   telegramUserId: number;
   username?: string | undefined;
   startDate?: string | undefined;
+  planMonths?: SubscriptionPlanMonths | undefined;
   endDate?: string | undefined;
   daysRemaining?: number | undefined;
   status?: SubscriptionStatus | undefined;
@@ -101,6 +107,21 @@ function normalizeDaysRemaining(value: SheetCell) {
   return daysRemaining;
 }
 
+function normalizePlan(value: SheetCell, rowNumber: number) {
+  const raw = normalizeString(value);
+  if (!raw) {
+    return undefined;
+  }
+
+  try {
+    return normalizeSubscriptionPlan(raw);
+  } catch {
+    throw new SheetValidationError(
+      `Invalid Plan in Users sheet row ${rowNumber}: ${raw}. Expected 1 Month, 3 Months, or 6 Months`
+    );
+  }
+}
+
 function normalizeStatus(value: SheetCell) {
   const trimmed = normalizeString(value);
   if (!trimmed) {
@@ -176,10 +197,11 @@ export function parseUsersSheetRows(rows: SheetCell[][]): ParsedUsersSheetRow[] 
         telegramUserId,
         username: normalizeUsername(row[1]),
         startDate: normalizeDateOnly(row[2], 'Start Date', index + 2),
-        endDate: normalizeDateOnly(row[3], 'End Date', index + 2),
-        daysRemaining: normalizeDaysRemaining(row[4]),
-        status: normalizeStatus(row[5]),
-        lastUpdated: normalizeLastUpdated(row[6])
+        planMonths: normalizePlan(row[3], index + 2),
+        endDate: normalizeDateOnly(row[4], 'End Date', index + 2),
+        daysRemaining: normalizeDaysRemaining(row[5]),
+        status: normalizeStatus(row[6]),
+        lastUpdated: normalizeLastUpdated(row[7])
       }
     ];
   });
@@ -192,6 +214,7 @@ export function toUsersSheetRows(users: SubscriptionUser[]) {
       String(user.telegramUserId),
       usernameCell(user),
       user.subscriptionStartDate ?? '',
+      user.subscriptionStartDate ? subscriptionPlanLabel(user.subscriptionPlanMonths) : '',
       user.subscriptionEndDate ?? '',
       user.daysRemaining === undefined ? '' : String(user.daysRemaining),
       user.status,

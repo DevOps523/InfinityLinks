@@ -65,7 +65,7 @@ Public search access is backed by the standalone SQLite subscription database. A
 Create a Google Sheets workbook with these tabs and headers:
 
 ```text
-Users: User ID | Username | Start Date | End Date | Days Remaining | Status | Last Updated
+Users: User ID | Username | Start Date | Plan | End Date | Days Remaining | Status | Last Updated
 History: User ID | Username | Last Status | Kicked At | Last Start Date | Last End Date | Notes
 ```
 
@@ -128,7 +128,7 @@ SUBSCRIPTION_ALERT_THREAD_ID=46
 Create a Google Sheet with these exact tabs and headers:
 
 ```text
-Users: User ID | Username | Start Date | End Date | Days Remaining | Status | Last Updated
+Users: User ID | Username | Start Date | Plan | End Date | Days Remaining | Status | Last Updated
 History: User ID | Username | Last Status | Kicked At | Last Start Date | Last End Date | Notes
 ```
 

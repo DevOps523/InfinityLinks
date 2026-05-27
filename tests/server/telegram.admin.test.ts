@@ -7,7 +7,7 @@ import { migrate } from '../../src/server/db/migrate.js';
 
 const config: AppConfig = {
   host: '127.0.0.1',
-  port: 3000,
+  port: 0,
   databasePath: ':memory:',
   tmdbApiKey: 'tmdb-token',
   telegramBotToken: 'telegram-token',

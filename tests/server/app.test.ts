@@ -53,7 +53,7 @@ const guardConfig: AppConfig = {
   telegramBotToken: 'test-telegram-token',
   telegramChannelId: '@test-channel',
   host: '127.0.0.1',
-  port: 0,
+  port: 3000,
   databasePath: ':memory:',
   publicSearchSyncUrl: 'https://search.example.com/api/sync',
   publicSearchSyncToken: 'secret-token',
@@ -76,12 +76,34 @@ describe('admin API request guard', () => {
 
       const response = await request(guardedApp)
         .post('/api/public-search/sync')
+        .set('Host', '127.0.0.1:3000')
         .set('Origin', 'https://evil.example')
         .set('Sec-Fetch-Site', 'cross-site')
         .expect(403);
 
       expect(response.body).toEqual({ error: 'Cross-site request blocked' });
       expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rejects browser requests with a non-loopback host even when the browser reports same-origin', async () => {
+    const db = createGuardDb();
+
+    try {
+      const guardedApp = createApp({ db, config: guardConfig, fetcher: vi.fn<typeof fetch>() });
+
+      const response = await request(guardedApp)
+        .post('/api/tv-shows')
+        .set('Host', 'evil.example:3000')
+        .set('Origin', 'http://evil.example:3000')
+        .set('Sec-Fetch-Site', 'same-origin')
+        .set('X-InfinityLinks-Request', 'fetch')
+        .send({ title: 'Injected Show', quality: 'HD' })
+        .expect(403);
+
+      expect(response.body).toEqual({ error: 'Cross-site request blocked' });
     } finally {
       db.close();
     }

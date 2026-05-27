@@ -13,12 +13,16 @@ import { todayDateString } from './subscriptions/date.js';
 import { refreshSubscriptionAlert } from './subscriptions/alert.service.js';
 import { handleSubscriptionBotUpdate } from './subscriptions/bot.handlers.js';
 import { createGoogleSheetsClient } from './subscriptions/google-sheets.client.js';
-import { getSubscriptionJobHealth } from './subscriptions/job.repository.js';
+import { enqueueSubscriptionJobIfNotActive, getSubscriptionJobHealth } from './subscriptions/job.repository.js';
 import { processNextSubscriptionJob } from './subscriptions/job.processor.js';
 import { createAsyncMutex } from './subscriptions/mutex.js';
 import { createSubscriptionRouter } from './subscriptions/routes.js';
 import { createDailySubscriptionRefreshRun, startDailySubscriptionRefreshLoop } from './subscriptions/scheduler.js';
-import { isKickStillDue, markSubscriptionUserKickedIfStillDue } from './subscriptions/repository.js';
+import {
+  isKickStillDue,
+  markSubscriptionUserKickedIfStillDue,
+  markSubscriptionUserUnbanned
+} from './subscriptions/repository.js';
 import { moveKickedUsersToHistory, syncSubscriptionsFromSheet } from './subscriptions/sync.service.js';
 
 function delay(ms: number) {
@@ -48,14 +52,30 @@ async function main() {
       messageThreadId: config.subscriptionAlertThreadId
     });
   const refreshAlert = () => subscriptionMutationMutex.run(runRefreshAlert);
-  const runSyncFromSheet = () =>
-    syncSubscriptionsFromSheet(db, sheets, {
+  const runSyncFromSheet = async () => {
+    const result = await syncSubscriptionsFromSheet(db, sheets, {
       usersRange: config.googleSheetsUsersRange,
       historyRange: config.googleSheetsHistoryRange,
       now: new Date(),
       periodDays: config.subscriptionPeriodDays
     });
+
+    for (const user of result.paidUsers) {
+      await subscriptionTelegram.unbanChatMember({
+        chatId: config.subscriptionGroupChatId,
+        userId: user.telegramUserId,
+        onlyIfBanned: true
+      });
+      markSubscriptionUserUnbanned(db, user.telegramUserId, new Date());
+    }
+
+    return result;
+  };
   const syncFromSheet = () => subscriptionMutationMutex.run(runSyncFromSheet);
+  const scheduleSheetRefresh = (now: Date) => {
+    const runAfter = new Date(now.getTime() + 5 * 60 * 1000);
+    enqueueSubscriptionJobIfNotActive(db, 'refresh-sheet', {}, runAfter);
+  };
   const subscriptionRouter = createSubscriptionRouter({
     adminToken: config.subscriptionAdminToken,
     syncFromSheet,
@@ -89,7 +109,8 @@ async function main() {
                 subscription: {
                   now: () => new Date(),
                   trialHours: config.subscriptionTrialHours,
-                  adminContact: config.subscriptionAdminContact
+                  adminContact: config.subscriptionAdminContact,
+                  scheduleSheetRefresh
                 },
                 replies,
                 rateLimiter,
@@ -160,7 +181,7 @@ async function main() {
                 return;
               }
 
-              await subscriptionTelegram.removeChatMember({
+              await subscriptionTelegram.banChatMember({
                 chatId: config.subscriptionGroupChatId,
                 userId: telegramUserId
               });

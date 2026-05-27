@@ -83,21 +83,6 @@ export class TelegramRateLimitError extends Error {
   }
 }
 
-export class TelegramRemoveChatMemberError extends Error {
-  chatId: number;
-  userId: number;
-
-  constructor(input: { chatId: number; userId: number; cause: unknown }) {
-    super(
-      `Telegram removeChatMember failed after banning user ${input.userId} from chat ${input.chatId}; user may still be banned`,
-      { cause: input.cause }
-    );
-    this.name = 'TelegramRemoveChatMemberError';
-    this.chatId = input.chatId;
-    this.userId = input.userId;
-  }
-}
-
 function getTelegramErrorMessage(payload: TelegramApiResponse<unknown>, fallback: string) {
   return typeof payload.description === 'string' && payload.description.length > 0 ? payload.description : fallback;
 }
@@ -203,22 +188,12 @@ export function createPublicTelegramClient(
       });
     },
 
-    async removeChatMember(input: { chatId: number; userId: number }): Promise<void> {
+    async banChatMember(input: { chatId: number; userId: number }): Promise<void> {
       await post('banChatMember', {
         chat_id: input.chatId,
         user_id: input.userId,
         revoke_messages: false
       });
-
-      try {
-        await unbanChatMember({
-          chatId: input.chatId,
-          userId: input.userId,
-          onlyIfBanned: true
-        });
-      } catch (cause) {
-        throw new TelegramRemoveChatMemberError({ ...input, cause });
-      }
     },
 
     unbanChatMember,

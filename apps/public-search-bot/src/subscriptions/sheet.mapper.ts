@@ -24,6 +24,16 @@ export type ParsedUsersSheetRow = {
 
 type SheetCell = unknown;
 
+export class SheetValidationError extends Error {
+  statusCode = 400;
+  expose = true;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'SheetValidationError';
+  }
+}
+
 function normalizeString(value: SheetCell) {
   if (typeof value !== 'string' && typeof value !== 'number') {
     return undefined;
@@ -38,14 +48,43 @@ function normalizeUsername(value: SheetCell) {
   return trimmed ? trimmed.replace(/^@+/, '') : undefined;
 }
 
-function normalizeDateOnly(value: SheetCell) {
+function toIsoDate(year: number, month: number, day: number, original: string) {
+  const utcTime = Date.UTC(year, month - 1, day);
+  const date = new Date(utcTime);
+
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    throw new SheetValidationError(`Invalid date value: ${original}`);
+  }
+
+  return [
+    String(year).padStart(4, '0'),
+    String(month).padStart(2, '0'),
+    String(day).padStart(2, '0')
+  ].join('-');
+}
+
+function normalizeDateOnly(value: SheetCell, label: string, rowNumber: number) {
   const trimmed = normalizeString(value);
   if (!trimmed) {
     return undefined;
   }
 
-  validateDateOnly(trimmed);
-  return trimmed;
+  try {
+    validateDateOnly(trimmed);
+    return trimmed;
+  } catch {
+    const slashDate = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!slashDate) {
+      throw new SheetValidationError(`Invalid ${label} in Users sheet row ${rowNumber}: ${trimmed}`);
+    }
+
+    const [, month, day, year] = slashDate;
+    try {
+      return toIsoDate(Number(year), Number(month), Number(day), trimmed);
+    } catch {
+      throw new SheetValidationError(`Invalid ${label} in Users sheet row ${rowNumber}: ${trimmed}`);
+    }
+  }
 }
 
 function normalizeDaysRemaining(value: SheetCell) {
@@ -56,7 +95,7 @@ function normalizeDaysRemaining(value: SheetCell) {
 
   const daysRemaining = Number(trimmed);
   if (!Number.isInteger(daysRemaining) || daysRemaining < 0) {
-    throw new Error(`Invalid Days Remaining value: ${trimmed}`);
+    throw new SheetValidationError(`Invalid Days Remaining value: ${trimmed}`);
   }
 
   return daysRemaining;
@@ -70,7 +109,7 @@ function normalizeStatus(value: SheetCell) {
 
   const status = SUBSCRIPTION_STATUSES.find((candidate) => candidate.toLowerCase() === trimmed.toLowerCase());
   if (!status) {
-    throw new Error(`Invalid subscription status: ${trimmed}`);
+    throw new SheetValidationError(`Invalid subscription status: ${trimmed}`);
   }
 
   return status;
@@ -84,7 +123,7 @@ function normalizeLastUpdated(value: SheetCell) {
 
   const timestamp = Date.parse(trimmed);
   if (Number.isNaN(timestamp)) {
-    throw new Error(`Invalid Last Updated value: ${trimmed}`);
+    throw new SheetValidationError(`Invalid Last Updated value: ${trimmed}`);
   }
 
   return trimmed;
@@ -101,13 +140,13 @@ function isBlankRow(row: SheetCell[]) {
 function validateUsersHeader(rows: SheetCell[][]) {
   const header = rows[0];
   if (!header) {
-    throw new Error(`Users sheet header mismatch: expected ${USERS_HEADER.join(' | ')}`);
+    throw new SheetValidationError(`Users sheet header mismatch: expected ${USERS_HEADER.join(' | ')}`);
   }
 
   const actualHeader = header.slice(0, USERS_HEADER.length).map((cell) => normalizeString(cell) ?? '');
   const matches = USERS_HEADER.every((expected, index) => actualHeader[index] === expected);
   if (!matches) {
-    throw new Error(`Users sheet header mismatch: expected ${USERS_HEADER.join(' | ')}, received ${actualHeader.join(' | ')}`);
+    throw new SheetValidationError(`Users sheet header mismatch: expected ${USERS_HEADER.join(' | ')}, received ${actualHeader.join(' | ')}`);
   }
 }
 
@@ -116,7 +155,7 @@ function normalizeTelegramUserId(value: SheetCell, rowNumber: number) {
   const numericId = typeof value === 'number' ? value : trimmed && /^\d+$/.test(trimmed) ? Number(trimmed) : NaN;
 
   if (!Number.isSafeInteger(numericId) || numericId <= 0) {
-    throw new Error(`Invalid User ID in Users sheet row ${rowNumber}: ${trimmed ?? ''}`);
+    throw new SheetValidationError(`Invalid User ID in Users sheet row ${rowNumber}: ${trimmed ?? ''}`);
   }
 
   return numericId;
@@ -136,8 +175,8 @@ export function parseUsersSheetRows(rows: SheetCell[][]): ParsedUsersSheetRow[] 
       {
         telegramUserId,
         username: normalizeUsername(row[1]),
-        startDate: normalizeDateOnly(row[2]),
-        endDate: normalizeDateOnly(row[3]),
+        startDate: normalizeDateOnly(row[2], 'Start Date', index + 2),
+        endDate: normalizeDateOnly(row[3], 'End Date', index + 2),
         daysRemaining: normalizeDaysRemaining(row[4]),
         status: normalizeStatus(row[5]),
         lastUpdated: normalizeLastUpdated(row[6])

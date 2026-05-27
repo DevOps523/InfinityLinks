@@ -23,11 +23,40 @@ export function resolvePublicSearchSchemaPath() {
 
 export function migratePublicSearchDatabase(db: PublicSearchDatabase) {
   const schema = fs.readFileSync(resolvePublicSearchSchemaPath(), 'utf8');
+  addSubscriptionJobsClaimedAtColumnIfNeeded(db);
   db.exec(schema);
   addSubscriptionUsersHistoryExportedAtColumnIfNeeded(db);
   rebuildSubscriptionUsersBooleanConstraintIfNeeded(db);
   rebuildSubscriptionJobsLeaseShapeIfNeeded(db);
   db.exec(schema);
+}
+
+function addSubscriptionJobsClaimedAtColumnIfNeeded(db: PublicSearchDatabase) {
+  const row = db
+    .prepare(
+      `SELECT 1
+       FROM sqlite_schema
+       WHERE type = 'table'
+         AND name = 'subscription_jobs'`
+    )
+    .get();
+
+  if (!row) {
+    return;
+  }
+
+  const columns = db.pragma('table_info(subscription_jobs)') as Array<{ name: string }>;
+  if (columns.some((column) => column.name === 'claimed_at')) {
+    return;
+  }
+
+  db.exec('ALTER TABLE subscription_jobs ADD COLUMN claimed_at TEXT');
+  db.prepare(
+    `UPDATE subscription_jobs
+     SET claimed_at = updated_at
+     WHERE status = 'running'
+       AND claimed_at IS NULL`
+  ).run();
 }
 
 function addSubscriptionUsersHistoryExportedAtColumnIfNeeded(db: PublicSearchDatabase) {

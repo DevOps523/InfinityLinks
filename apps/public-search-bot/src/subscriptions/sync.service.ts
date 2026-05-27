@@ -24,6 +24,7 @@ export type SyncSubscriptionsFromSheetOptions = {
 export type SyncSubscriptionsFromSheetResult = {
   updatedUsers: number;
   skippedUnknownUsers: number;
+  paidUsers: SubscriptionUser[];
 };
 
 export async function syncSubscriptionsFromSheet(
@@ -33,8 +34,10 @@ export async function syncSubscriptionsFromSheet(
 ): Promise<SyncSubscriptionsFromSheetResult> {
   const rows = await sheets.readRows(options.usersRange);
   const parsedRows = parseUsersSheetRows(rows);
+  recalculateSubscriptions(db, todayDateString(options.now), options.periodDays);
   let updatedUsers = 0;
   let skippedUnknownUsers = 0;
+  const paidUsers: SubscriptionUser[] = [];
 
   for (const row of parsedRows) {
     if (!row.startDate) {
@@ -48,17 +51,35 @@ export async function syncSubscriptionsFromSheet(
     }
 
     if (current.subscriptionStartDate === row.startDate) {
+      if (current.removedFromGroup) {
+        const paidUser = applySubscriptionStartDate(
+          db,
+          row.telegramUserId,
+          row.startDate,
+          options.now,
+          options.periodDays
+        );
+        if (needsUnban(paidUser)) {
+          paidUsers.push(paidUser);
+        }
+      }
       continue;
     }
 
-    applySubscriptionStartDate(db, row.telegramUserId, row.startDate, options.now, options.periodDays);
+    const paidUser = applySubscriptionStartDate(db, row.telegramUserId, row.startDate, options.now, options.periodDays);
+    if (needsUnban(paidUser)) {
+      paidUsers.push(paidUser);
+    }
     updatedUsers += 1;
   }
 
-  recalculateSubscriptions(db, todayDateString(options.now), options.periodDays);
   await sheets.replaceRows(options.usersRange, toUsersSheetRows(listActiveSubscriptionRows(db)));
 
-  return { updatedUsers, skippedUnknownUsers };
+  return { updatedUsers, skippedUnknownUsers, paidUsers };
+}
+
+function needsUnban(user: SubscriptionUser) {
+  return user.removedFromGroup && (user.status === 'Subscribe' || user.status === 'Needs Attention');
 }
 
 export async function moveKickedUsersToHistory(

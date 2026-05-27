@@ -178,7 +178,8 @@ function createDeps(db: PublicSearchDatabase, overrides: Partial<HandlerDeps> = 
     subscription: {
       now: () => new Date('2026-05-26T00:00:00.000Z'),
       trialHours: 24,
-      adminContact: '@seinen_illuminatiks'
+      adminContact: '@seinen_illuminatiks',
+      scheduleSheetRefresh: vi.fn()
     },
     replies: {
       enqueueSendMessage: vi.fn(async (input: SentMessage) => {
@@ -509,11 +510,56 @@ describe('public search bot handlers', () => {
       expect(sentMessages[0].text).toContain('🔗 Download Links:');
       expect(sentMessages[0].text).toContain('📁 MixDrop HD - https://providers.example/inception-hd');
       expect(sentMessages[0].text).toContain('📁 FileMoon 4K - https://providers.example/inception-4k');
-      expect(sentMessages[0].text).toContain('📌 Original Post:');
-      expect(sentMessages[0].text).toContain('https://t.me/infinitylinks65/101');
+      expect(sentMessages[0].text).not.toContain('📌 Original Post:');
+      expect(sentMessages[0].text).not.toContain('https://t.me/infinitylinks65/101');
       expect(sentMessages[0].text).not.toContain('📢 Channel:');
-      expect(sentMessages[0].text).toContain('👥 Group: @infinitylinks69');
+      expect(sentMessages[0].text).not.toContain('👥 Group: @infinitylinks69');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('schedules a delayed sheet refresh when a trial starts from search', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      const { deps } = createDeps(db);
+
+      await handleTelegramUpdate(
+        deps,
+        messageUpdate('/search inception', { from: { id: 42, username: 'trial_user' } })
+      );
+
+      expect(deps.subscription.scheduleSheetRefresh).toHaveBeenCalledTimes(1);
+      expect(deps.subscription.scheduleSheetRefresh).toHaveBeenCalledWith(new Date('2026-05-26T00:00:00.000Z'));
+    } finally {
+      db.close();
+    }
+  });
+
+  it('schedules a sheet refresh for an existing active subscriber search so username updates flow to Sheets', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      db.prepare(
+        `INSERT INTO subscription_users (
+           telegram_user_id, username, subscription_start_date, subscription_end_date, days_remaining,
+           status, removed_from_group, created_at, updated_at
+         )
+         VALUES (42, 'paid_user', '2026-05-01', '2026-06-01', 6, 'Subscribe', 0, '2026-05-01T00:00:00.000Z', '2026-05-01T00:00:00.000Z')`
+      ).run();
+      const { deps } = createDeps(db);
+
+      await handleTelegramUpdate(
+        deps,
+        messageUpdate('/search inception', { from: { id: 42, username: 'paid_user' } })
+      );
+
+      expect(deps.subscription.scheduleSheetRefresh).toHaveBeenCalledTimes(1);
+      expect(deps.subscription.scheduleSheetRefresh).toHaveBeenCalledWith(new Date('2026-05-26T00:00:00.000Z'));
     } finally {
       db.close();
     }
@@ -700,6 +746,25 @@ describe('public search bot handlers', () => {
     }
   });
 
+  it('schedules a sheet refresh for an allowed season callback', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      const { deps } = createDeps(db);
+
+      await handleTelegramUpdate(
+        deps,
+        callbackUpdate('season:30', { from: { id: 42, username: 'trial_user' } })
+      );
+
+      expect(deps.subscription.scheduleSheetRefresh).toHaveBeenCalledTimes(1);
+      expect(deps.subscription.scheduleSheetRefresh).toHaveBeenCalledWith(new Date('2026-05-26T00:00:00.000Z'));
+    } finally {
+      db.close();
+    }
+  });
+
   it('answers season callbacks even when sending season details fails', async () => {
     const db = createMigratedDatabase();
 
@@ -806,10 +871,10 @@ describe('public search bot handlers', () => {
       expect(sentMessages[0].text).toContain('📁 StreamTape HD - https://providers.example/breaking-s1e1');
       expect(sentMessages[0].text).toContain('🎞 Episode 2');
       expect(sentMessages[0].text).toContain('📁 MixDrop HD - https://providers.example/breaking-s1e2');
-      expect(sentMessages[0].text).toContain('📌 Original Post:');
-      expect(sentMessages[0].text).toContain('https://t.me/infinitylinks65/301');
+      expect(sentMessages[0].text).not.toContain('📌 Original Post:');
+      expect(sentMessages[0].text).not.toContain('https://t.me/infinitylinks65/301');
       expect(sentMessages[0].text).not.toContain('📢 Channel:');
-      expect(sentMessages[0].text).toContain('👥 Group: @infinitylinks69');
+      expect(sentMessages[0].text).not.toContain('👥 Group: @infinitylinks69');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
       expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1' }]);
     } finally {

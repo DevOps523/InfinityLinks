@@ -33,9 +33,7 @@ describe('public search bot formatter', () => {
         '/search breaking bad',
         '',
         'You have 1 day free trial access when you search.',
-        'After the trial, subscription is required to view download links.',
-        '',
-        '👥 Group: @infinitylinks69'
+        'After the trial, subscription is required to view download links.'
       ].join('\n')
     );
     expect(formatStartMessage(handles).replyMarkup).toBeUndefined();
@@ -52,13 +50,7 @@ describe('public search bot formatter', () => {
       'You need a subscription to view and access download links. Contact @seinen_illuminatiks to keep you going.'
     );
 
-    expect(formatNoResultsMessage(handles).text).toBe(
-      [
-        'No results found. Try checking the spelling or using fewer words.',
-        '',
-        '👥 Group: @infinitylinks69'
-      ].join('\n')
-    );
+    expect(formatNoResultsMessage(handles).text).toBe('No results found. Try checking the spelling or using fewer words.');
     expect(formatNoResultsMessage(handles).replyMarkup).toBeUndefined();
     expect(formatUnavailableMessage().text).toBe('Search is temporarily unavailable. Please try again later.');
   });
@@ -98,12 +90,7 @@ describe('public search bot formatter', () => {
         '',
         '🔗 Download Links:',
         '📁 MixDrop HD - https://providers.example/inception-hd',
-        '📁 FileMoon 4K - https://providers.example/inception-4k',
-        '',
-        '📌 Original Post:',
-        'https://t.me/infinitylinks65/101',
-        '',
-        '👥 Group: @infinitylinks69'
+        '📁 FileMoon 4K - https://providers.example/inception-4k'
       ].join('\n')
     );
     expect(messages[0].replyMarkup).toBeUndefined();
@@ -188,9 +175,7 @@ describe('public search bot formatter', () => {
         '📺 TV Show',
         'Breaking Bad (2008)',
         '',
-        '📂 Choose a season:',
-        '',
-        '👥 Group: @infinitylinks69'
+        '📂 Choose a season:'
       ].join('\n')
     );
     expect(messages[0].replyMarkup).toEqual({
@@ -315,12 +300,7 @@ describe('public search bot formatter', () => {
         '',
         '🎞 Episode 2',
         '🔗 Download Links:',
-        '📁 StreamTape HD - https://providers.example/breaking-bad-s1e2-hd',
-        '',
-        '📌 Original Post:',
-        'https://t.me/infinitylinks65/301',
-        '',
-        '👥 Group: @infinitylinks69'
+        '📁 StreamTape HD - https://providers.example/breaking-bad-s1e2-hd'
       ].join('\n')
     );
     expect(messages[0].replyMarkup).toBeUndefined();

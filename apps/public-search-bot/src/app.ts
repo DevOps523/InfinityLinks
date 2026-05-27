@@ -28,6 +28,14 @@ function getErrorStatus(error: unknown) {
   return typeof status === 'number' && status >= 400 && status < 600 ? status : undefined;
 }
 
+function getErrorMessage(error: unknown) {
+  if (!(error instanceof Error) || error.name !== 'SheetValidationError') {
+    return undefined;
+  }
+
+  return error.message || undefined;
+}
+
 export function createPublicSearchApp(options: CreatePublicSearchAppOptions) {
   const app = express();
   const statusTracker = options.statusTracker ?? createPublicSearchStatusTracker();
@@ -57,7 +65,7 @@ export function createPublicSearchApp(options: CreatePublicSearchAppOptions) {
 
     const status = getErrorStatus(error);
     if (status && status < 500) {
-      res.status(status).json({ error: status === 413 ? 'Request body too large' : 'Invalid request body' });
+      res.status(status).json({ error: status === 413 ? 'Request body too large' : getErrorMessage(error) ?? 'Invalid request body' });
       return;
     }
 

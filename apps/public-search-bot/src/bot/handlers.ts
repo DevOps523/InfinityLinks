@@ -38,6 +38,7 @@ export type HandlerDeps = {
     now: () => Date;
     trialHours: number;
     adminContact: string;
+    scheduleSheetRefresh?: ((now: Date) => void) | undefined;
   };
   replies: ReplyQueue;
   rateLimiter: {
@@ -157,9 +158,10 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
 }
 
 async function handleSearch(deps: HandlerDeps, chatId: number, user: TelegramUserIdentity | undefined, query: string) {
+  const now = deps.subscription.now();
   const access = evaluateSearchAccess(deps.db, {
     user,
-    now: deps.subscription.now(),
+    now,
     trialHours: deps.subscription.trialHours
   });
 
@@ -167,6 +169,8 @@ async function handleSearch(deps: HandlerDeps, chatId: number, user: TelegramUse
     await sendBotMessage(deps, chatId, formatSubscriptionRequiredMessage(deps.subscription.adminContact));
     return;
   }
+
+  deps.subscription.scheduleSheetRefresh?.(now);
 
   if (!hasPublicCatalog(deps.db)) {
     await sendBotMessage(deps, chatId, formatUnavailableMessage());
@@ -204,9 +208,10 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
   }
 
   const chatId = callbackQuery.message?.chat.id;
+  const now = deps.subscription.now();
   const access = evaluateSearchAccess(deps.db, {
     user: getTelegramUser(callbackQuery.from),
-    now: deps.subscription.now(),
+    now,
     trialHours: deps.subscription.trialHours
   });
 
@@ -220,6 +225,8 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
     }
     return;
   }
+
+  deps.subscription.scheduleSheetRefresh?.(now);
 
   if (!hasPublicCatalog(deps.db)) {
     await deps.replies.enqueueAnswerCallbackQuery({

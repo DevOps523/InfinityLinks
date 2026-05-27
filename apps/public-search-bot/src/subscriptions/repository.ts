@@ -145,12 +145,23 @@ export function applySubscriptionStartDate(
   periodDays: number
 ): SubscriptionUser {
   validateSubscriptionPeriodDays(periodDays);
+  const current = getSubscriptionUser(db, telegramUserId);
+
+  if (!current) {
+    throw new Error(`Subscription user ${telegramUserId} does not exist`);
+  }
 
   const nowIso = now.toISOString();
   const endDate = addDateDays(startDate, periodDays);
   const daysRemaining = calculateDaysRemaining(endDate, todayDateString(now));
-  const status = statusForDaysRemaining(daysRemaining);
-  const unpaidSince = status === 'Unpaid' ? todayDateString(now) : null;
+  const calculatedStatus = statusForDaysRemaining(daysRemaining);
+  const hasActivePaidAccess = isActivePaidStatus(calculatedStatus);
+  const preserveRemovedState = !hasActivePaidAccess && (current.status === 'Kicked' || current.removedFromGroup);
+  const status = preserveRemovedState ? 'Kicked' : calculatedStatus;
+  const unpaidSince = hasActivePaidAccess ? null : current.unpaidSince ?? todayDateString(now);
+  const kickedAt = current.kickedAt ?? null;
+  const historyExportedAt = current.historyExportedAt ?? null;
+  const removedFromGroup = current.removedFromGroup || preserveRemovedState ? 1 : 0;
 
   const result = db.prepare(
     `UPDATE subscription_users
@@ -159,9 +170,9 @@ export function applySubscriptionStartDate(
          days_remaining = @daysRemaining,
          status = @status,
          unpaid_since = @unpaidSince,
-         kicked_at = NULL,
-         history_exported_at = NULL,
-         removed_from_group = 0,
+         kicked_at = @kickedAt,
+         history_exported_at = @historyExportedAt,
+         removed_from_group = @removedFromGroup,
          updated_at = @nowIso
      WHERE telegram_user_id = @telegramUserId`
   ).run({
@@ -171,6 +182,9 @@ export function applySubscriptionStartDate(
     daysRemaining,
     status,
     unpaidSince,
+    kickedAt,
+    historyExportedAt,
+    removedFromGroup,
     nowIso
   });
 
@@ -179,6 +193,31 @@ export function applySubscriptionStartDate(
   }
 
   return requireSubscriptionUser(db, telegramUserId);
+}
+
+export function markSubscriptionUserUnbanned(
+  db: PublicSearchDatabase,
+  telegramUserId: number,
+  now: Date
+): SubscriptionUser | undefined {
+  const nowIso = now.toISOString();
+  const result = db
+    .prepare(
+      `UPDATE subscription_users
+       SET removed_from_group = 0,
+           kicked_at = NULL,
+           history_exported_at = NULL,
+           updated_at = @nowIso
+       WHERE telegram_user_id = @telegramUserId
+         AND removed_from_group = 1
+         AND status IN ('Subscribe', 'Needs Attention')`
+    )
+    .run({
+      telegramUserId,
+      nowIso
+    });
+
+  return result.changes === 1 ? requireSubscriptionUser(db, telegramUserId) : undefined;
 }
 
 export function recalculateSubscriptions(db: PublicSearchDatabase, today: string, periodDays: number): void {
@@ -422,6 +461,10 @@ function statusForDaysRemaining(daysRemaining: number): SubscriptionStatus {
   }
 
   return 'Unpaid';
+}
+
+function isActivePaidStatus(status: SubscriptionStatus) {
+  return status === 'Subscribe' || status === 'Needs Attention';
 }
 
 function validateSubscriptionPeriodDays(periodDays: number) {

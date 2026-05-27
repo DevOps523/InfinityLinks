@@ -1,5 +1,6 @@
 .superpowers/
 node_modules/
+apps/public-search-bot/google-service-account.json
 .env
 .env.*
 !.env.example

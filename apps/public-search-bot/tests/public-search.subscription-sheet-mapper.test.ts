@@ -62,6 +62,25 @@ describe('subscription sheet mapper', () => {
     ]);
   });
 
+  it('normalizes Google-formatted sheet dates', () => {
+    expect(
+      parseUsersSheetRows([
+        USERS_HEADER,
+        ['42', '@paid_user', '5/27/2026', '6/27/2026', '31', 'Subscribe', '2026-05-26T00:00:00.000Z']
+      ])
+    ).toEqual([
+      {
+        telegramUserId: 42,
+        username: 'paid_user',
+        startDate: '2026-05-27',
+        endDate: '2026-06-27',
+        daysRemaining: 31,
+        status: 'Subscribe',
+        lastUpdated: '2026-05-26T00:00:00.000Z'
+      }
+    ]);
+  });
+
   it('requires the expected Users sheet header', () => {
     expect(() => parseUsersSheetRows([])).toThrow(/Users sheet header mismatch/);
     expect(() =>
@@ -130,7 +149,10 @@ describe('subscription sheet mapper', () => {
 
   it('rejects invalid dates, days remaining, and statuses', () => {
     expect(() => parseUsersSheetRows([USERS_HEADER, ['42', '@paid_user', '2026-02-31', '', '', '', '']])).toThrow(
-      /Invalid date-only value/
+      /Invalid Start Date in Users sheet row 2/
+    );
+    expect(() => parseUsersSheetRows([USERS_HEADER, ['42', '@paid_user', '2\/31\/2026', '', '', '', '']])).toThrow(
+      /Invalid Start Date in Users sheet row 2/
     );
     expect(() => parseUsersSheetRows([USERS_HEADER, ['42', '@paid_user', '', '', '-1', '', '']])).toThrow(
       /Invalid Days Remaining/

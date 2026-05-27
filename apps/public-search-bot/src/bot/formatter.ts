@@ -30,9 +30,7 @@ export function formatStartMessage(handles: PublicBotHandles): PublicBotMessage 
       '/search breaking bad',
       '',
       'You have 1 day free trial access when you search.',
-      'After the trial, subscription is required to view download links.',
-      '',
-      formatHandles(handles)
+      'After the trial, subscription is required to view download links.'
     ].join('\n')
   };
 }
@@ -57,11 +55,7 @@ export function formatSubscriptionRequiredMessage(adminContact: string): PublicB
 
 export function formatNoResultsMessage(handles: PublicBotHandles): PublicBotMessage {
   return {
-    text: [
-      'No results found. Try checking the spelling or using fewer words.',
-      '',
-      formatHandles(handles)
-    ].join('\n')
+    text: 'No results found. Try checking the spelling or using fewer words.'
   };
 }
 
@@ -83,11 +77,7 @@ export function formatSearchResults(results: PublicSearchResult[], handles: Publ
 
 export function formatSeasonDetails(details: PublicSeasonDetails, handles: PublicBotHandles): PublicBotMessage[] {
   const headerLines = [`📺 ${formatTitle(details.showTitle, details.showYear)}`, `📂 Season ${details.seasonNumber}`];
-  const footerLines = [
-    ...originalPostSection(details.channelPostUrl),
-    ...(details.channelPostUrl ? [''] : []),
-    ...formatHandleLines(handles)
-  ];
+  const footerLines: string[] = [];
   const episodeBlocks = details.episodes.map((episode) => ({
     headingLines: [`🎞 Episode ${episode.episodeNumber}`, '🔗 Download Links:'],
     providerLines: episode.providers.map(formatProviderLine)
@@ -99,11 +89,7 @@ export function formatSeasonDetails(details: PublicSeasonDetails, handles: Publi
 function formatMovieResult(result: Extract<PublicSearchResult, { type: 'movie' }>, handles: PublicBotHandles) {
   const headerLines = ['🎬 Movie', formatTitle(result.title, result.year)];
   const bodyLines = ['🔗 Download Links:', ...result.providers.map(formatProviderLine)];
-  const footerLines = [
-    ...originalPostSection(result.channelPostUrl),
-    ...(result.channelPostUrl ? [''] : []),
-    ...formatHandleLines(handles)
-  ];
+  const footerLines: string[] = [];
 
   return splitTextSections(headerLines, bodyLines, footerLines).map((text) => ({ text }));
 }
@@ -114,8 +100,6 @@ function formatTvResult(result: Extract<PublicSearchResult, { type: 'tv' }>, han
     formatTitle(result.title, result.year),
     '',
     '📂 Choose a season:',
-    '',
-    formatHandles(handles)
   ].join('\n');
   const seasonRows = chunkButtons(
     result.seasons.map((season) => ({
@@ -135,20 +119,8 @@ function formatTitle(title: string, year?: number) {
   return typeof year === 'number' ? `${title} (${year})` : title;
 }
 
-function formatHandles(handles: PublicBotHandles) {
-  return formatHandleLines(handles).join('\n');
-}
-
-function formatHandleLines(handles: PublicBotHandles) {
-  return [`👥 Group: ${handles.groupHandle}`];
-}
-
 function formatProviderLine(provider: PublicProvider) {
   return `📁 ${provider.providerName} ${provider.quality} - ${provider.url}`;
-}
-
-function originalPostSection(channelPostUrl?: string) {
-  return channelPostUrl ? ['📌 Original Post:', channelPostUrl] : [];
 }
 
 function splitKeyboardRows(

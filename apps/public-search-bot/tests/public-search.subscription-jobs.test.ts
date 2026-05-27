@@ -4,6 +4,7 @@ import { createPublicSearchDatabase } from '../src/db/database.js';
 import { migratePublicSearchDatabase } from '../src/db/migrate.js';
 import {
   enqueueSubscriptionJob,
+  enqueueSubscriptionJobIfNotActive,
   getSubscriptionJobHealth,
   listSubscriptionJobs,
   claimNextSubscriptionJob,
@@ -19,6 +20,68 @@ function createDb() {
 }
 
 describe('subscription jobs', () => {
+  it('deduplicates active refresh-sheet jobs', () => {
+    const db = createDb();
+    try {
+      const first = enqueueSubscriptionJobIfNotActive(
+        db,
+        'refresh-sheet',
+        {},
+        new Date('2026-05-26T00:05:00.000Z')
+      );
+      const duplicate = enqueueSubscriptionJobIfNotActive(
+        db,
+        'refresh-sheet',
+        {},
+        new Date('2026-05-26T00:06:00.000Z')
+      );
+
+      expect(first.enqueued).toBe(true);
+      expect(duplicate).toEqual({ enqueued: false, job: first.job });
+      expect(listSubscriptionJobs(db)).toHaveLength(1);
+      expect(listSubscriptionJobs(db)[0]).toMatchObject({
+        type: 'refresh-sheet',
+        status: 'pending',
+        runAfter: '2026-05-26T00:05:00.000Z'
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('allows a new refresh-sheet job after prior active jobs finish', () => {
+    const db = createDb();
+    try {
+      const first = enqueueSubscriptionJobIfNotActive(
+        db,
+        'refresh-sheet',
+        {},
+        new Date('2026-05-26T00:05:00.000Z')
+      );
+      const claimed = claimNextSubscriptionJob(db, new Date('2026-05-26T00:05:00.000Z'));
+      expect(
+        markSubscriptionJobSucceeded(db, first.job.id, claimed?.claimedAt ?? '', new Date('2026-05-26T00:05:01.000Z'))
+      ).toBe(true);
+
+      const second = enqueueSubscriptionJobIfNotActive(
+        db,
+        'refresh-sheet',
+        {},
+        new Date('2026-05-26T00:10:00.000Z')
+      );
+
+      expect(second.enqueued).toBe(true);
+      expect(listSubscriptionJobs(db)).toHaveLength(2);
+      expect(listSubscriptionJobs(db)[1]).toMatchObject({
+        type: 'refresh-sheet',
+        status: 'pending',
+        runAfter: '2026-05-26T00:10:00.000Z'
+      });
+    } finally {
+      db.close();
+    }
+  });
+
   it('claims due jobs and records success', () => {
     const db = createDb();
     try {

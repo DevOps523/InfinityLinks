@@ -31,6 +31,10 @@ export type SubscriptionJobHealth = {
   lastError?: string | undefined;
 };
 
+export type EnqueueSubscriptionJobIfNotActiveResult =
+  | { enqueued: true; job: SubscriptionJob }
+  | { enqueued: false; job: SubscriptionJob };
+
 type SubscriptionJobRow = {
   id: number;
   type: SubscriptionJobType;
@@ -75,6 +79,44 @@ export function enqueueSubscriptionJob(
     });
 
   return requireSubscriptionJob(db, Number(result.lastInsertRowid));
+}
+
+export function enqueueSubscriptionJobIfNotActive(
+  db: PublicSearchDatabase,
+  type: SubscriptionJobType,
+  payload: Record<string, unknown>,
+  runAfter: Date
+): EnqueueSubscriptionJobIfNotActiveResult {
+  const enqueue = db.transaction(() => {
+    const active = db
+      .prepare(
+        `SELECT
+           id,
+           type,
+           payload_json AS payloadJson,
+           status,
+           attempts,
+           run_after AS runAfter,
+           claimed_at AS claimedAt,
+           last_error AS lastError,
+           created_at AS createdAt,
+           updated_at AS updatedAt
+         FROM subscription_jobs
+         WHERE type = @type
+           AND status IN ('pending', 'running')
+         ORDER BY run_after ASC, id ASC
+         LIMIT 1`
+      )
+      .get({ type }) as SubscriptionJobRow | undefined;
+
+    if (active) {
+      return { enqueued: false as const, job: mapSubscriptionJob(active) };
+    }
+
+    return { enqueued: true as const, job: enqueueSubscriptionJob(db, type, payload, runAfter) };
+  });
+
+  return enqueue();
 }
 
 export function getSubscriptionJob(db: PublicSearchDatabase, id: number): SubscriptionJob | undefined {

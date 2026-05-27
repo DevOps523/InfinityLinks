@@ -1,13 +1,19 @@
 import type { PublicSearchDatabase as AppDatabase } from '../db/database.js';
 import type { TelegramUpdate } from '../telegram.client.js';
 import type { createTelegramReplyQueue } from '../telegram.reply-queue.js';
-import { getPublicSeasonDetails, hasPublicCatalog, searchPublicCatalog } from '../search.repository.js';
+import {
+  getPublicSeasonDetails,
+  hasPublicCatalog,
+  searchPublicCatalog,
+  type PublicSearchResult
+} from '../search.repository.js';
 import { evaluateSearchAccess } from '../subscriptions/access.service.js';
 import type { TelegramUserIdentity } from '../subscriptions/repository.js';
 import { decodeSeasonCallback } from './callback-data.js';
 import {
   formatClearMessage,
   formatNoResultsMessage,
+  formatPrivateChatRequiredMessage,
   formatSearchValidationMessage,
   formatSearchResults,
   formatSeasonDetails,
@@ -25,6 +31,7 @@ type ReplyQueue = Pick<
 >;
 
 type ReplyUserKey = number | string;
+type MessageChat = NonNullable<TelegramUpdate['message']>['chat'];
 
 export type ReplyThrottleState = {
   shouldAllowFirstStart(userId: number | undefined): boolean;
@@ -144,7 +151,7 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
       return;
     }
 
-    await handleSearch(deps, message.chat.id, user, query);
+    await handleSearch(deps, message.chat, user, query);
     return;
   }
 
@@ -157,7 +164,8 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
   }
 }
 
-async function handleSearch(deps: HandlerDeps, chatId: number, user: TelegramUserIdentity | undefined, query: string) {
+async function handleSearch(deps: HandlerDeps, chat: MessageChat, user: TelegramUserIdentity | undefined, query: string) {
+  const chatId = chat.id;
   const now = deps.subscription.now();
   const access = evaluateSearchAccess(deps.db, {
     user,
@@ -178,6 +186,11 @@ async function handleSearch(deps: HandlerDeps, chatId: number, user: TelegramUse
   }
 
   const results = searchPublicCatalog(deps.db, query, 10);
+  if (hasProviderLinks(results) && !isPrivateChat(chat)) {
+    await sendBotMessage(deps, chatId, formatPrivateChatRequiredMessage());
+    return;
+  }
+
   const messages =
     results.length > 0 ? formatSearchResults(results, getHandles(deps)) : [formatNoResultsMessage(getHandles(deps))];
 
@@ -207,7 +220,16 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
     return;
   }
 
-  const chatId = callbackQuery.message?.chat.id;
+  const chat = callbackQuery.message?.chat;
+  if (!chat || !isPrivateChat(chat)) {
+    await deps.replies.enqueueAnswerCallbackQuery({
+      callbackQueryId,
+      text: 'Open a private chat with this bot to view download links.'
+    });
+    return;
+  }
+
+  const chatId = chat.id;
   const now = deps.subscription.now();
   const access = evaluateSearchAccess(deps.db, {
     user: getTelegramUser(callbackQuery.from),
@@ -241,7 +263,7 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
 
   const details = getPublicSeasonDetails(deps.db, seasonId);
 
-  if (!details || chatId === undefined) {
+  if (!details) {
     await deps.replies.enqueueAnswerCallbackQuery({
       callbackQueryId,
       text: 'That button is no longer available.'
@@ -252,7 +274,7 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
   await deps.replies.enqueueAnswerCallbackQuery({ callbackQueryId });
 
   for (const message of formatSeasonDetails(details, getHandles(deps))) {
-    await sendBotMessage(deps, chatId, message);
+    await sendBotMessage(deps, chat.id, message);
   }
 }
 
@@ -297,6 +319,14 @@ async function replyIfAllowed(deps: HandlerDeps, chatId: number, userId: number 
 function getReplyThrottleState(deps: HandlerDeps) {
   deps.replyThrottleState ??= createReplyThrottleState();
   return deps.replyThrottleState;
+}
+
+function hasProviderLinks(results: PublicSearchResult[]) {
+  return results.some((result) => result.type === 'movie' && result.providers.length > 0);
+}
+
+function isPrivateChat(chat: Pick<MessageChat, 'type'>) {
+  return chat.type === 'private';
 }
 
 function pruneExpired(entries: Map<ReplyUserKey, number>, nowMs: number) {

@@ -53,6 +53,12 @@ export function formatSubscriptionRequiredMessage(adminContact: string): PublicB
   };
 }
 
+export function formatPrivateChatRequiredMessage(): PublicBotMessage {
+  return {
+    text: 'Open a private chat with this bot to view download links.'
+  };
+}
+
 export function formatNoResultsMessage(handles: PublicBotHandles): PublicBotMessage {
   return {
     text: 'No results found. Try checking the spelling or using fewer words.'

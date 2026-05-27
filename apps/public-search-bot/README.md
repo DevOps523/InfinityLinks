@@ -34,7 +34,6 @@ SUBSCRIPTION_GROUP_CHAT_ID=-1003963665033
 SUBSCRIPTION_ALERT_THREAD_ID=46
 SUBSCRIPTION_ADMIN_CONTACT=@seinen_illuminatiks
 SUBSCRIPTION_TRIAL_SEARCH_LIMIT=5
-SUBSCRIPTION_PERIOD_DAYS=31
 SUBSCRIPTION_OVERDUE_GRACE_DAYS=1
 SUBSCRIPTION_ADMIN_TOKEN=replace_with_subscription_admin_secret
 GOOGLE_SHEETS_SPREADSHEET_ID=replace_with_google_sheet_id
@@ -60,7 +59,7 @@ The standalone service now runs two Telegram bot tokens:
 - `PUBLIC_BOT_TOKEN` handles `/start`, `/search`, and search result callbacks.
 - `SUBSCRIPTION_BOT_TOKEN` posts subscription alerts and removes overdue users from the group.
 
-Public search access is backed by the standalone SQLite subscription database. A user's first successful search starts a 5-search trial quota. The sixth successful search attempt is blocked with the subscription message. Paid access lasts 31 days from the current subscription start date. Users whose trial quota is used, subscription is expired, unpaid, kicked, or otherwise inactive are blocked from download links.
+Public search access is backed by the standalone SQLite subscription database. A user's first successful search starts a 5-search trial quota. The sixth successful search attempt is blocked with the subscription message. Paid access is calculated from Start Date and Plan. Supported plans are 1 Month, 3 Months, and 6 Months; blank paid plan cells default to 1 Month and are written back as 1 Month. Users whose trial quota is used, subscription is expired, unpaid, kicked, or otherwise inactive are blocked from download links.
 
 Create a Google Sheets workbook with these tabs and headers:
 
@@ -69,7 +68,7 @@ Users: User ID | Username | Start Date | Plan | End Date | Days Remaining | Stat
 History: User ID | Username | Last Status | Kicked At | Last Start Date | Last End Date | Notes
 ```
 
-The `Users` tab is the current operating view. The `History` tab records previous status and kick activity so operators can audit what changed. Share the workbook with the Google Cloud service account email from the JSON key, then copy that JSON key to the VPS path configured in `GOOGLE_SERVICE_ACCOUNT_KEY_FILE`.
+The `Users` tab is the current operating view. The `History` tab records previous status and kick activity so operators can audit what changed. For paid users, enter Start Date and choose Plan as 1 Month, 3 Months, or 6 Months. The bot recalculates End Date, Days Remaining, and Status when you run Subscriptions > Update Subscription. Share the workbook with the Google Cloud service account email from the JSON key, then copy that JSON key to the VPS path configured in `GOOGLE_SERVICE_ACCOUNT_KEY_FILE`.
 
 Copy `apps/public-search-bot/google-apps-script/Code.gs` into the workbook's Apps Script project. In Apps Script, set Script Properties:
 
@@ -88,7 +87,7 @@ Operational notes:
 - Keep the public search bot token and subscription bot token separate. Both bots need the Telegram permissions required for their jobs in `@infinitylinks69`.
 - Run `Update Subscription` after manually changing subscription rows so the VPS database is refreshed from the sheet.
 - Use `Send Alert` after updates when you want the alert topic to reflect current subscription state immediately.
-- The default trial is 5 successful searches, the default paid period is 31 days, and overdue users have a 1-day grace period before removal jobs are queued.
+- The default trial is 5 successful searches, blank paid plan cells default to 1 Month, and overdue users have a 1-day grace period before removal jobs are queued.
 - Overdue kicks are performed by the subscription bot from persisted jobs with retry/backoff. Check systemd logs before manually intervening.
 
 ## Step By Step VPS Deployment
@@ -139,6 +138,8 @@ https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
 ```
 
 Keep that value for `GOOGLE_SHEETS_SPREADSHEET_ID`.
+
+For paid users, enter Start Date and choose Plan as 1 Month, 3 Months, or 6 Months. The bot recalculates End Date, Days Remaining, and Status when you run Subscriptions > Update Subscription.
 
 ### 3. Create The Google Service Account JSON
 
@@ -269,7 +270,6 @@ SUBSCRIPTION_GROUP_CHAT_ID=-1003963665033
 SUBSCRIPTION_ALERT_THREAD_ID=46
 SUBSCRIPTION_ADMIN_CONTACT=@seinen_illuminatiks
 SUBSCRIPTION_TRIAL_SEARCH_LIMIT=5
-SUBSCRIPTION_PERIOD_DAYS=31
 SUBSCRIPTION_OVERDUE_GRACE_DAYS=1
 SUBSCRIPTION_ADMIN_TOKEN=replace_with_long_random_subscription_secret
 GOOGLE_SHEETS_SPREADSHEET_ID=replace_with_google_sheet_id
@@ -457,7 +457,7 @@ Save, reload the spreadsheet, then check for the `Subscriptions` menu.
 
 Use:
 
-- `Subscriptions > Update Subscription` after you add or change a user's `Start Date`.
+- `Subscriptions > Update Subscription` after you add or change a user's `Start Date` or `Plan`.
 - `Subscriptions > Send Alert` when you want the alert topic updated immediately.
 
 The bot also refreshes the sheet after trial/search activity through queued jobs, so accidental deleted user rows should be restored from the database on refresh.
@@ -494,7 +494,7 @@ The VPS database starts empty. The public bot will not return movie or TV result
 2. Send `/start`.
 3. Send `/search <movie or tv show name>`.
 4. Confirm a new trial user appears in the `Users` sheet after the delayed refresh job.
-5. Add a `Start Date` for a paid user in the sheet.
+5. Add a `Start Date` and `Plan` for a paid user in the sheet.
 6. Run `Subscriptions > Update Subscription`.
 7. Confirm `End Date`, `Days Remaining`, and `Status` are recalculated by the bot and written back to the sheet.
 
@@ -504,11 +504,11 @@ Expected subscription behavior:
 - After 5 successful searches, the next successful search attempt is blocked with the subscription message.
 - Searches with no catalog results do not consume the trial quota.
 - TV season button clicks do not consume the trial quota.
-- Paid access is 31 days from `Start Date`.
+- Paid access is calculated from Start Date and Plan. Supported plans are 1 Month, 3 Months, and 6 Months; blank paid plan cells default to 1 Month and are written back as 1 Month.
 - At 1 day remaining, status becomes `Needs Attention`.
 - At 0 days remaining, status becomes `Unpaid`.
 - After the grace period, the subscription bot bans the unpaid user from the group.
-- If a banned user pays, update `Start Date` and run `Update Subscription`; the bot unbans them and refreshes the sheet.
+- If a banned user pays, update `Start Date` and `Plan`, then run `Update Subscription`; the bot unbans them and refreshes the sheet.
 
 ## Updating The VPS Bot Later
 

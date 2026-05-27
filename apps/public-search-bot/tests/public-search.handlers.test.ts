@@ -17,8 +17,16 @@ const handles = {
   groupHandle: '@infinitylinks69'
 };
 
-const subscriptionRequiredMessage =
-  'You need a subscription to view and access download links. Contact @seinen_illuminatiks to keep you going.';
+const subscriptionRequiredMessage = [
+  'A subscription is required to view and access download links.',
+  '',
+  'Plans:',
+  '1 Month - ₱150',
+  '3 Months - ₱300',
+  '6 Months - ₱500',
+  '',
+  'Please contact @seinen_illuminatiks to continue.'
+].join('\n');
 const privateChatRequiredMessage = 'Open a private chat with this bot to view download links.';
 
 type SentMessage = {

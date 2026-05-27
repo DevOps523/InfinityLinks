@@ -49,7 +49,16 @@ export function formatClearMessage(): PublicBotMessage {
 
 export function formatSubscriptionRequiredMessage(adminContact: string): PublicBotMessage {
   return {
-    text: `You need a subscription to view and access download links. Contact ${adminContact} to keep you going.`
+    text: [
+      'A subscription is required to view and access download links.',
+      '',
+      'Plans:',
+      '1 Month - ₱ 150',
+      '3 Months - ₱ 300',
+      '6 Months - ₱ 600',
+      '',
+      `Please contact ${adminContact} to continue.`
+    ].join('\n')
   };
 }
 

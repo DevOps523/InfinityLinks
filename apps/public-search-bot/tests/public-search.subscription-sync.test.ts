@@ -3,7 +3,7 @@ import { createPublicSearchDatabase } from '../src/db/database.js';
 import { migratePublicSearchDatabase } from '../src/db/migrate.js';
 import { syncSubscriptionsFromSheet, moveKickedUsersToHistory } from '../src/subscriptions/sync.service.js';
 import { HISTORY_HEADER, USERS_HEADER } from '../src/subscriptions/sheet.mapper.js';
-import { getSubscriptionUser, markSubscriptionUserKicked } from '../src/subscriptions/repository.js';
+import { getSubscriptionUser, isKickStillDue, markSubscriptionUserKicked } from '../src/subscriptions/repository.js';
 import { createDailySubscriptionRefreshRun, runDailySubscriptionRefresh } from '../src/subscriptions/scheduler.js';
 
 function createDb() {
@@ -383,6 +383,52 @@ describe('subscription sync service', () => {
           historyExportedAt: '2026-06-27T00:01:00.000Z'
         })
       );
+      expect(sheets.replaceRows).toHaveBeenCalledWith('Users!A:H', [USERS_HEADER]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('exports pending history for an already kicked user on kick retry', async () => {
+    const db = createDb();
+    try {
+      db.prepare(
+        `INSERT INTO subscription_users (
+           telegram_user_id, username, subscription_start_date, subscription_end_date, days_remaining,
+           status, unpaid_since, removed_from_group, kicked_at, history_exported_at, created_at, updated_at
+         )
+         VALUES (
+           42, 'late_user', '2026-05-01', '2026-06-01', 0,
+           'Kicked', '2026-06-01', 1, '2026-06-02T00:00:00.000Z', NULL,
+           '2026-05-01T00:00:00.000Z', '2026-06-02T00:00:00.000Z'
+         )`
+      ).run();
+      const sheets = {
+        replaceRows: vi.fn(async () => undefined),
+        appendRows: vi.fn(async () => undefined)
+      };
+
+      const alreadyKickedUser = getSubscriptionUser(db, 42);
+      expect(isKickStillDue(db, 42, '2026-06-03', 1)).toBe(false);
+      expect(alreadyKickedUser).toEqual(
+        expect.objectContaining({
+          status: 'Kicked',
+          historyExportedAt: undefined
+        })
+      );
+
+      await expect(
+        moveKickedUsersToHistory(db, sheets, {
+          usersRange: 'Users!A:H',
+          historyRange: 'History!A:G',
+          users: alreadyKickedUser ? [alreadyKickedUser] : []
+        })
+      ).resolves.toEqual({ movedUsers: 1 });
+
+      expect(sheets.appendRows).toHaveBeenCalledWith('History!A:G', [
+        ['42', '@late_user', 'Kicked', '2026-06-02T00:00:00.000Z', '2026-05-01', '2026-06-01', 'Overdue subscription removed']
+      ]);
+      expect(getSubscriptionUser(db, 42)?.historyExportedAt).toEqual(expect.any(String));
       expect(sheets.replaceRows).toHaveBeenCalledWith('Users!A:H', [USERS_HEADER]);
     } finally {
       db.close();

@@ -19,6 +19,7 @@ import { createAsyncMutex } from './subscriptions/mutex.js';
 import { createSubscriptionRouter } from './subscriptions/routes.js';
 import { createDailySubscriptionRefreshRun, startDailySubscriptionRefreshLoop } from './subscriptions/scheduler.js';
 import {
+  getSubscriptionUser,
   isKickStillDue,
   markSubscriptionUserKickedIfStillDue,
   markSubscriptionUserUnbanned
@@ -168,6 +169,16 @@ async function main() {
           kickUser: async (telegramUserId) => {
             await subscriptionMutationMutex.run(async () => {
               await runSyncFromSheet();
+              const alreadyKickedUser = getSubscriptionUser(db, telegramUserId);
+              if (alreadyKickedUser?.status === 'Kicked' && !alreadyKickedUser.historyExportedAt) {
+                await moveKickedUsersToHistory(db, sheets, {
+                  usersRange: config.googleSheetsUsersRange,
+                  historyRange: config.googleSheetsHistoryRange,
+                  users: [alreadyKickedUser]
+                });
+                return;
+              }
+
               const now = new Date();
               if (
                 !isKickStillDue(

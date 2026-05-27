@@ -215,7 +215,7 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(deps, messageUpdate('/start'));
 
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
+      expect(sentMessages[0].text).toContain('Welcome to DownloadHub');
       expect(sentMessages[0].text).toContain('/search movie or tv show name');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
     } finally {
@@ -270,7 +270,7 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(deps, messageUpdate('/start', { from: { id: 99 } }));
 
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
+      expect(sentMessages[0].text).toContain('Welcome to DownloadHub');
     } finally {
       db.close();
     }
@@ -291,9 +291,9 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(second.deps, messageUpdate('/start', { from: { id: 99 } }));
 
       expect(first.sentMessages).toHaveLength(1);
-      expect(first.sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
+      expect(first.sentMessages[0].text).toContain('Welcome to DownloadHub');
       expect(second.sentMessages).toHaveLength(1);
-      expect(second.sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
+      expect(second.sentMessages[0].text).toContain('Welcome to DownloadHub');
     } finally {
       firstDb.close();
       secondDb.close();
@@ -314,7 +314,7 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(deps, messageUpdate('/start', { from: { id: 99 } }));
 
       expect(sentMessages).toHaveLength(2);
-      expect(sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
+      expect(sentMessages[0].text).toContain('Welcome to DownloadHub');
       expect(sentMessages[1].text).toBe('Please wait 60 seconds before trying again.');
     } finally {
       db.close();
@@ -362,7 +362,7 @@ describe('public search bot handlers', () => {
       await handleTelegramUpdate(deps, messageUpdate('/wat'));
 
       expect(sentMessages).toHaveLength(2);
-      expect(sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
+      expect(sentMessages[0].text).toContain('Welcome to DownloadHub');
       expect(sentMessages[1].text).toBe('Please wait 30 seconds before trying again.');
     } finally {
       db.close();
@@ -486,7 +486,7 @@ describe('public search bot handlers', () => {
       const row = db.prepare('SELECT telegram_user_id FROM subscription_users WHERE telegram_user_id = 42').get();
       expect(row).toBeUndefined();
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toContain('Welcome to DownloadHub Search.');
+      expect(sentMessages[0].text).toContain('Welcome to DownloadHub');
     } finally {
       db.close();
     }

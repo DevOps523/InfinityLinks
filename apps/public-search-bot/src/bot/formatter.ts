@@ -20,7 +20,7 @@ export type PublicBotMessage = {
 export function formatStartMessage(handles: PublicBotHandles): PublicBotMessage {
   return {
     text: [
-      '🎬 Welcome to DownloadHub Search.',
+      '🎬 Welcome to DownloadHub',
       '',
       '🔎 Use:',
       '/search movie or tv show name',

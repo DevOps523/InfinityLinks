@@ -46,7 +46,7 @@ GOOGLE_SERVICE_ACCOUNT_KEY_FILE=/opt/infinitylinks-public-search-bot/google-serv
 `PUBLIC_BOT_TOKEN` is the Telegram bot token for the public search bot.
 `PUBLIC_SEARCH_SYNC_TOKEN` authorizes local admin app writes to `/api/sync`.
 `PUBLIC_SEARCH_STATUS_TOKEN` is read-only and is used by `/api/status`.
-`PUBLIC_SEARCH_GROUP_HANDLE` is the public group shown in bot replies.
+`PUBLIC_SEARCH_GROUP_HANDLE` is the public group/channel handle used by the admin sync metadata and subscription checks.
 `SUBSCRIPTION_BOT_TOKEN` is the separate Telegram bot token used for subscription alerts and overdue removals.
 `SUBSCRIPTION_ADMIN_TOKEN` authorizes `/api/subscriptions/update` and `/api/subscriptions/send-alert`.
 `GOOGLE_SERVICE_ACCOUNT_KEY_FILE` points to the Google Cloud service account JSON key on the VPS.
@@ -93,17 +93,86 @@ Operational notes:
 
 ## Step By Step VPS Deployment
 
-### 1. Prepare The Public Bot Folder On Your PC
+These steps assume the VPS path is `/opt/infinitylinks-public-search-bot`, the app listens on `127.0.0.1:3001`, and Nginx exposes it through `https://your-vps.example.com`.
 
-From the full InfinityLinks repo, deploy only this folder:
+### 1. Prepare Telegram Bots And Group Permissions
+
+Create or confirm these two Telegram bots in BotFather:
+
+```text
+Public search bot: handles /start, /search, and result buttons
+Subscription bot: handles alerts, bans overdue users, and unbans paid users
+```
+
+Add both bots to the private group. The subscription bot must be an admin with permission to ban users. The public search bot needs to read/respond to user messages where it will receive `/search`.
+
+Record these values before continuing:
+
+```text
+PUBLIC_BOT_TOKEN
+SUBSCRIPTION_BOT_TOKEN
+SUBSCRIPTION_GROUP_CHAT_ID
+SUBSCRIPTION_ALERT_THREAD_ID
+SUBSCRIPTION_ADMIN_CONTACT
+```
+
+For the current setup, the alert topic is configured as:
+
+```text
+SUBSCRIPTION_GROUP_CHAT_ID=-1003963665033
+SUBSCRIPTION_ALERT_THREAD_ID=46
+```
+
+### 2. Prepare The Google Sheet
+
+Create a Google Sheet with these exact tabs and headers:
+
+```text
+Users: User ID | Username | Start Date | End Date | Days Remaining | Status | Last Updated
+History: User ID | Username | Last Status | Kicked At | Last Start Date | Last End Date | Notes
+```
+
+Copy the spreadsheet ID from the sheet URL:
+
+```text
+https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
+```
+
+Keep that value for `GOOGLE_SHEETS_SPREADSHEET_ID`.
+
+### 3. Create The Google Service Account JSON
+
+In Google Cloud:
+
+1. Create or open the project used for this bot.
+2. Enable the Google Sheets API.
+3. Create a service account.
+4. Create a JSON key for that service account.
+5. Download the JSON file.
+
+Open the JSON file and copy the `client_email` value. Share the Google Sheet with that service account email as an editor.
+
+On the VPS, place the JSON key here:
+
+```text
+/opt/infinitylinks-public-search-bot/google-service-account.json
+```
+
+The `.env` value must point to that same file:
+
+```env
+GOOGLE_SERVICE_ACCOUNT_KEY_FILE=/opt/infinitylinks-public-search-bot/google-service-account.json
+```
+
+Do not commit this JSON file. It is a secret.
+
+### 4. Upload The Public Bot App To The VPS
+
+Deploy only this folder from the full InfinityLinks repo:
 
 ```text
 apps/public-search-bot/
 ```
-
-The VPS does not need the root admin app. The standalone folder contains its own `package.json`, `package-lock.json`, source files, tests, deploy examples, and `.env.example`.
-
-### 2. Upload The Folder To The VPS
 
 Example from your PC:
 
@@ -121,7 +190,7 @@ rsync -av --delete \
 
 Create the production `.env` and Google service account JSON directly on the VPS; do not copy local secrets or local databases.
 
-Or upload it with your preferred SFTP/SSH tool. On the VPS, the folder should look like this:
+Or upload the folder with SFTP. On the VPS, the folder should contain:
 
 ```text
 /opt/infinitylinks-public-search-bot/
@@ -129,46 +198,55 @@ Or upload it with your preferred SFTP/SSH tool. On the VPS, the folder should lo
   package-lock.json
   .env.example
   src/
-  data/
   deploy/
+  google-apps-script/
 ```
 
-### 3. Install Node.js 22 And Nginx On The VPS
+The VPS does not need the root admin app.
 
-Use your preferred Node installer. On Ubuntu, install Node 22 from NodeSource, nvm, or another trusted source, then install Nginx:
+### 5. Install Node.js 22, Nginx, And Build Tools
+
+Use Node 22.x, not Node 24. This app uses `better-sqlite3`, which is native and must match the Node version.
+
+On Ubuntu:
 
 ```bash
 sudo apt update
-sudo apt install -y nginx
+sudo apt install -y nginx build-essential python3
 ```
 
-Check the installed version:
+Install Node 22 using NodeSource, nvm, or your preferred provider. Then verify:
 
 ```bash
 node -v
 npm -v
 ```
 
-Expected Node version:
+Expected:
 
 ```text
-v22.x.x
+node v22.x.x
 ```
 
-If Node is missing or the version is wrong, install Node 22 before continuing.
+If you previously installed dependencies with a different Node version, reinstall them after switching back to Node 22.
 
-### 4. Install App Dependencies
-
-Run these commands on the VPS:
+### 6. Install App Dependencies
 
 ```bash
 cd /opt/infinitylinks-public-search-bot
 npm ci
 ```
 
-Use `npm ci` on the VPS because it installs exactly from `package-lock.json`.
+If `better-sqlite3` complains about a wrong `NODE_MODULE_VERSION`, remove `node_modules` and reinstall with Node 22:
 
-### 5. Create The VPS `.env`
+```bash
+rm -rf node_modules
+npm ci
+```
+
+Prefer `npm ci` when `package-lock.json` is already correct.
+
+### 7. Create The VPS `.env`
 
 ```bash
 cd /opt/infinitylinks-public-search-bot
@@ -176,36 +254,76 @@ cp .env.example .env
 nano .env
 ```
 
-Set the real values:
+Fill in every value:
 
 ```env
-PUBLIC_BOT_TOKEN=1234567890:replace_with_real_bot_token
-PUBLIC_SEARCH_SYNC_TOKEN=replace_with_a_long_random_secret
-PUBLIC_SEARCH_STATUS_TOKEN=replace_with_a_different_long_random_secret
+PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
+PUBLIC_SEARCH_SYNC_TOKEN=replace_with_long_random_sync_secret
+PUBLIC_SEARCH_STATUS_TOKEN=replace_with_long_random_status_secret
 PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
 PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
 PUBLIC_SEARCH_HOST=127.0.0.1
 PUBLIC_SEARCH_PORT=3001
+SUBSCRIPTION_BOT_TOKEN=replace_with_subscription_bot_token
+SUBSCRIPTION_GROUP_CHAT_ID=-1003963665033
+SUBSCRIPTION_ALERT_THREAD_ID=46
+SUBSCRIPTION_ADMIN_CONTACT=@seinen_illuminatiks
+SUBSCRIPTION_TRIAL_HOURS=24
+SUBSCRIPTION_PERIOD_DAYS=31
+SUBSCRIPTION_OVERDUE_GRACE_DAYS=1
+SUBSCRIPTION_ADMIN_TOKEN=replace_with_long_random_subscription_secret
+GOOGLE_SHEETS_SPREADSHEET_ID=replace_with_google_sheet_id
+GOOGLE_SHEETS_USERS_RANGE=Users!A:G
+GOOGLE_SHEETS_HISTORY_RANGE=History!A:G
+GOOGLE_SERVICE_ACCOUNT_KEY_FILE=/opt/infinitylinks-public-search-bot/google-service-account.json
 ```
 
-Keep `PUBLIC_SEARCH_HOST=127.0.0.1` so the Node app is only reachable through Nginx.
+Rules:
 
-### 6. Prepare The Data Directory
+- Keep `PUBLIC_SEARCH_HOST=127.0.0.1`; Nginx is the public entry point.
+- Use different secrets for `PUBLIC_SEARCH_SYNC_TOKEN`, `PUBLIC_SEARCH_STATUS_TOKEN`, and `SUBSCRIPTION_ADMIN_TOKEN`.
+- `SUBSCRIPTION_ADMIN_TOKEN` must also be saved in Apps Script later.
 
-The SQLite database is created at runtime. Give the systemd service user write access to `data/` only:
+### 8. Set File Permissions
+
+Create the database folder and make it writable by the service user:
 
 ```bash
 sudo install -d -o www-data -g www-data /opt/infinitylinks-public-search-bot/data
 sudo chown -R www-data:www-data /opt/infinitylinks-public-search-bot/data
 ```
 
-Do not make source files, `node_modules`, `dist`, or `.env` writable by `www-data`.
+Protect secrets:
 
-### 7. Build And Test The App Manually
+```bash
+sudo chown root:www-data /opt/infinitylinks-public-search-bot/.env
+sudo chmod 640 /opt/infinitylinks-public-search-bot/.env
+sudo chown root:www-data /opt/infinitylinks-public-search-bot/google-service-account.json
+sudo chmod 640 /opt/infinitylinks-public-search-bot/google-service-account.json
+```
+
+### 9. Build And Migrate The Database
 
 ```bash
 cd /opt/infinitylinks-public-search-bot
+set -a; . ./.env; set +a
 npm run build
+npm run db:migrate
+sudo chown -R www-data:www-data /opt/infinitylinks-public-search-bot/data
+```
+
+The migration creates or updates:
+
+```text
+data/public-search.sqlite
+```
+
+### 10. Test The App Manually
+
+Start the app in the SSH terminal:
+
+```bash
+cd /opt/infinitylinks-public-search-bot
 npm start
 ```
 
@@ -215,7 +333,7 @@ Expected startup log:
 Public search sync API listening on http://127.0.0.1:3001
 ```
 
-In another SSH terminal, test the local status endpoint:
+Open a second SSH terminal and test status:
 
 ```bash
 cd /opt/infinitylinks-public-search-bot
@@ -223,16 +341,16 @@ set -a; . ./.env; set +a
 curl -H "Authorization: Bearer $PUBLIC_SEARCH_STATUS_TOKEN" http://127.0.0.1:3001/api/status
 ```
 
-Stop the manual app process with `Ctrl+C` before setting up systemd.
+Stop the manual app with `Ctrl+C` before setting up systemd.
 
-### 8. Install The systemd Service
+### 11. Install The systemd Service
 
 ```bash
 sudo cp /opt/infinitylinks-public-search-bot/deploy/public-search-bot.service.example /etc/systemd/system/public-search-bot.service
 sudo nano /etc/systemd/system/public-search-bot.service
 ```
 
-Confirm these values match your VPS path and runtime user:
+Confirm these values:
 
 ```ini
 WorkingDirectory=/opt/infinitylinks-public-search-bot
@@ -244,7 +362,15 @@ Group=www-data
 
 The example service uses `ProtectSystem=strict`, so only the SQLite data directory is writable by the app. If you place the database somewhere else, update `ReadWritePaths` to match.
 
-Enable and start the service:
+If `npm` is not at `/usr/bin/npm`, find it:
+
+```bash
+which npm
+```
+
+Then update `ExecStart` with the correct path.
+
+Enable and start:
 
 ```bash
 sudo systemctl daemon-reload
@@ -253,14 +379,14 @@ sudo systemctl start public-search-bot
 sudo systemctl status public-search-bot
 ```
 
-View logs:
+Logs:
 
 ```bash
 sudo journalctl -u public-search-bot -n 100 --no-pager
 sudo journalctl -u public-search-bot -f
 ```
 
-### 9. Configure Nginx
+### 12. Configure Nginx And HTTPS
 
 Copy the example config:
 
@@ -269,7 +395,7 @@ sudo cp /opt/infinitylinks-public-search-bot/deploy/nginx.conf.example /etc/ngin
 sudo nano /etc/nginx/sites-available/public-search-bot
 ```
 
-Change every `your-vps.example.com` value to your real domain. The proxy target should stay:
+Replace every `your-vps.example.com` with your real domain. Keep this proxy target:
 
 ```nginx
 proxy_pass http://127.0.0.1:3001;
@@ -283,18 +409,16 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-Use Certbot or your preferred TLS setup for HTTPS. On Ubuntu with Certbot, a common flow is:
+Install HTTPS with Certbot:
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d your-vps.example.com
 ```
 
-Do not expose `/api/sync` over plain HTTP because it uses a bearer token.
+Do not expose `/api/sync` or `/api/subscriptions/update` over plain HTTP. They use bearer tokens.
 
-The provided Nginx example caps `/api/sync` at `5m` and overwrites `X-Forwarded-For` with the real client IP. Keep both settings.
-
-### 10. Test The Public VPS API
+### 13. Test The Public VPS API
 
 From the VPS:
 
@@ -310,9 +434,35 @@ From your PC:
 curl -H "Authorization: Bearer replace_with_status_token" https://your-vps.example.com/api/status
 ```
 
-If the public HTTPS status check works, the local admin app can reach the VPS.
+Expected: JSON with bot status. If this works, the local admin app and Google Apps Script can reach the VPS.
 
-### 11. Configure The Local Admin App
+### 14. Configure Google Apps Script
+
+Open the Google Sheet, then open `Extensions > Apps Script`.
+
+Copy this file into Apps Script:
+
+```text
+apps/public-search-bot/google-apps-script/Code.gs
+```
+
+In Apps Script, open `Project Settings > Script Properties` and add:
+
+```text
+SUBSCRIPTION_API_BASE_URL=https://your-vps.example.com
+SUBSCRIPTION_ADMIN_TOKEN=same value as VPS SUBSCRIPTION_ADMIN_TOKEN
+```
+
+Save, reload the spreadsheet, then check for the `Subscriptions` menu.
+
+Use:
+
+- `Subscriptions > Update Subscription` after you add or change a user's `Start Date`.
+- `Subscriptions > Send Alert` when you want the alert topic updated immediately.
+
+The bot also refreshes the sheet after trial/search activity through queued jobs, so accidental deleted user rows should be restored from the database on refresh.
+
+### 15. Configure The Local Admin App On Your PC
 
 In the root InfinityLinks `.env` on your PC, set:
 
@@ -324,9 +474,9 @@ PUBLIC_SEARCH_STATUS_TOKEN=replace_with_the_same_status_token_from_the_vps
 PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
 ```
 
-The local admin app only needs the public search sync/status settings and the group handle.
+The local admin app stays on your PC. It only pushes the public catalog and checks bot status.
 
-### 12. Sync The Catalog
+### 16. Sync The Public Catalog
 
 On your PC:
 
@@ -334,17 +484,28 @@ On your PC:
 2. Open `Public Search`.
 3. Click `Sync Public Search`.
 4. Confirm the sync succeeds.
+5. Click `Check Bot Status`.
 
-The VPS bot database starts empty. The public bot will not return results until the first sync completes.
+The VPS database starts empty. The public bot will not return movie or TV results until this sync succeeds.
 
-### 13. Test In Telegram
+### 17. Test In Telegram
 
-1. Open the public Telegram bot.
+1. Open the public search bot.
 2. Send `/start`.
-3. Confirm the trial or subscription message is shown.
-4. Send `/search <movie or tv show name>`.
+3. Send `/search <movie or tv show name>`.
+4. Confirm a new trial user appears in the `Users` sheet after the delayed refresh job.
+5. Add a `Start Date` for a paid user in the sheet.
+6. Run `Subscriptions > Update Subscription`.
+7. Confirm `End Date`, `Days Remaining`, and `Status` are recalculated by the bot and written back to the sheet.
 
-The bot should start or validate subscription access, then return matching original posts and provider links for active users.
+Expected subscription behavior:
+
+- First search starts a 1-day trial.
+- Paid access is 31 days from `Start Date`.
+- At 1 day remaining, status becomes `Needs Attention`.
+- At 0 days remaining, status becomes `Unpaid`.
+- After the grace period, the subscription bot bans the unpaid user from the group.
+- If a banned user pays, update `Start Date` and run `Update Subscription`; the bot unbans them and refreshes the sheet.
 
 ## Updating The VPS Bot Later
 
@@ -352,28 +513,34 @@ When code changes are ready:
 
 ```bash
 cd /opt/infinitylinks-public-search-bot
-# replace the app files with the new apps/public-search-bot folder contents
+sudo systemctl stop public-search-bot
+# upload or replace the app files with the new apps/public-search-bot contents
 npm ci
+set -a; . ./.env; set +a
 npm run build
-sudo systemctl restart public-search-bot
+npm run db:migrate
+sudo chown -R www-data:www-data /opt/infinitylinks-public-search-bot/data
+sudo systemctl start public-search-bot
 sudo journalctl -u public-search-bot -n 100 --no-pager
 ```
 
-After restarting, run a status check and sync again from the local admin app if catalog behavior changed.
+After restarting, run a public status check and sync the catalog again from the local admin app if catalog behavior changed.
 
 ## Useful Commands
 
 ```bash
-npm run dev
+cd /opt/infinitylinks-public-search-bot
 npm run build
+npm run db:migrate
 npm start
 npm test
-npm run db:migrate
+sudo systemctl status public-search-bot
+sudo journalctl -u public-search-bot -f
 ```
 
 ## Troubleshooting
 
-If `npm ci` fails, confirm the VPS is using Node 22.x.
+If `npm ci` or `npm start` fails with `better-sqlite3` native binding errors, confirm the VPS is using Node 22.x, then reinstall dependencies with the same Node version.
 
 If the service starts but Telegram commands do not respond, check:
 
@@ -381,7 +548,7 @@ If the service starts but Telegram commands do not respond, check:
 sudo journalctl -u public-search-bot -n 100 --no-pager
 ```
 
-If `/api/status` returns unauthorized, confirm the status token in your curl command matches `PUBLIC_SEARCH_STATUS_TOKEN`.
+If `/api/status` returns unauthorized, confirm the bearer token matches `PUBLIC_SEARCH_STATUS_TOKEN`.
 
 If `Sync Public Search` fails from the local admin app, confirm:
 
@@ -390,4 +557,17 @@ If `Sync Public Search` fails from the local admin app, confirm:
 - Nginx is forwarding to `127.0.0.1:3001`
 - `sudo systemctl status public-search-bot` shows the service running
 
-If users are always blocked from search, confirm the public bot is an admin in `@infinitylinks69`.
+If `Update Subscription` fails from Google Sheets, confirm:
+
+- `SUBSCRIPTION_API_BASE_URL` has the public HTTPS VPS URL, not `localhost`
+- `SUBSCRIPTION_ADMIN_TOKEN` matches the VPS `.env`
+- `GOOGLE_SERVICE_ACCOUNT_KEY_FILE` exists on the VPS
+- the Google Sheet is shared with the service account `client_email`
+- the `Users` and `History` headers match exactly
+
+If users are always blocked from search, confirm:
+
+- The public bot is receiving `/search`.
+- The subscription database exists at `PUBLIC_SEARCH_DATABASE_PATH`.
+- The user has an active trial or paid subscription row.
+- The systemd logs do not show Google Sheets or Telegram API errors.

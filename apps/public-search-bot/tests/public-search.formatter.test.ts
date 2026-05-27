@@ -23,7 +23,7 @@ describe('public search bot formatter', () => {
   it('formats command and status messages', () => {
     expect(formatStartMessage(handles).text).toBe(
       [
-        '🎬 Welcome to DownloadHub Search.',
+        '🎬 Welcome to DownloadHub',
         '',
         '🔎 Use:',
         '/search movie or tv show name',

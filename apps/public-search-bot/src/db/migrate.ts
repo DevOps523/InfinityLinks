@@ -28,7 +28,7 @@ export function migratePublicSearchDatabase(db: PublicSearchDatabase) {
   addSubscriptionUsersHistoryExportedAtColumnIfNeeded(db);
   addSubscriptionUsersTrialSearchesUsedColumnIfNeeded(db);
   addSubscriptionUsersPlanMonthsColumnIfNeeded(db);
-  rebuildSubscriptionUsersBooleanConstraintIfNeeded(db);
+  rebuildSubscriptionUsersConstraintsIfNeeded(db);
   rebuildSubscriptionJobsLeaseShapeIfNeeded(db);
   db.exec(schema);
 }
@@ -124,10 +124,12 @@ function addSubscriptionUsersPlanMonthsColumnIfNeeded(db: PublicSearchDatabase) 
     return;
   }
 
-  db.exec('ALTER TABLE subscription_users ADD COLUMN subscription_plan_months INTEGER NOT NULL DEFAULT 1');
+  db.exec(
+    'ALTER TABLE subscription_users ADD COLUMN subscription_plan_months INTEGER NOT NULL DEFAULT 1 CHECK (subscription_plan_months IN (1, 3, 6))'
+  );
 }
 
-function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatabase) {
+function rebuildSubscriptionUsersConstraintsIfNeeded(db: PublicSearchDatabase) {
   const row = db
     .prepare(
       `SELECT sql
@@ -137,7 +139,10 @@ function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatab
     )
     .get() as { sql: string } | undefined;
 
-  if (!row || row.sql.includes('CHECK (removed_from_group IN (0, 1))')) {
+  const hasRemovedFromGroupConstraint = row?.sql.includes('CHECK (removed_from_group IN (0, 1))');
+  const hasSubscriptionPlanMonthsConstraint = row?.sql.includes('CHECK (subscription_plan_months IN (1, 3, 6))');
+
+  if (!row || (hasRemovedFromGroupConstraint && hasSubscriptionPlanMonthsConstraint)) {
     return;
   }
 
@@ -156,7 +161,7 @@ function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatab
         trial_searches_used INTEGER NOT NULL DEFAULT 0,
         subscription_start_date TEXT,
         subscription_end_date TEXT,
-        subscription_plan_months INTEGER NOT NULL DEFAULT 1,
+        subscription_plan_months INTEGER NOT NULL DEFAULT 1 CHECK (subscription_plan_months IN (1, 3, 6)),
         days_remaining INTEGER,
         status TEXT NOT NULL DEFAULT 'Unpaid'
           CHECK (status IN ('Trial', 'Subscribe', 'Needs Attention', 'Unpaid', 'Kicked')),
@@ -196,7 +201,7 @@ function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatab
         COALESCE(trial_searches_used, 0),
         subscription_start_date,
         subscription_end_date,
-        COALESCE(subscription_plan_months, 1),
+        CASE WHEN subscription_plan_months IN (1, 3, 6) THEN subscription_plan_months ELSE 1 END,
         days_remaining,
         status,
         unpaid_since,

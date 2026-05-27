@@ -114,6 +114,36 @@ describe('subscription repository', () => {
     }
   });
 
+  it('accepts legacy paid period arguments while using one-month plan calculations', () => {
+    const db = createDb();
+    try {
+      upsertSeenTelegramUser(db, { id: 42, username: 'paid_user' }, new Date('2026-05-26T00:00:00.000Z'));
+
+      const paid = applySubscriptionStartDate(
+        db,
+        42,
+        '2026-05-26',
+        new Date('2026-05-26T00:00:00.000Z'),
+        31
+      );
+
+      expect(paid).toMatchObject({
+        subscriptionPlanMonths: 1,
+        subscriptionEndDate: '2026-06-26',
+        daysRemaining: 31
+      });
+
+      recalculateSubscriptions(db, '2026-06-25', 31);
+      expect(getSubscriptionUser(db, 42)).toMatchObject({
+        subscriptionPlanMonths: 1,
+        daysRemaining: 1,
+        status: 'Needs Attention'
+      });
+    } finally {
+      db.close();
+    }
+  });
+
   it.each([
     [1, '2026-06-26', 31],
     [3, '2026-08-26', 92],
@@ -216,15 +246,6 @@ describe('subscription repository', () => {
           /Subscription plan months must be 1, 3, or 6/
         );
       }
-
-      db.prepare(
-        `UPDATE subscription_users
-         SET subscription_start_date = '2026-05-26',
-             subscription_plan_months = 2
-         WHERE telegram_user_id = 42`
-      ).run();
-
-      expect(() => recalculateSubscriptions(db, '2026-06-25')).toThrow(/Subscription plan months must be 1, 3, or 6/);
     } finally {
       db.close();
     }

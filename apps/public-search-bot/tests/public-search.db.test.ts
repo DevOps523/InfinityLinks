@@ -19,6 +19,14 @@ function columnNames(db: ReturnType<typeof createPublicSearchDatabase>, tableNam
   return (db.pragma(`table_info(${tableName})`) as Array<{ name: string }>).map((column) => column.name);
 }
 
+function tableSql(db: ReturnType<typeof createPublicSearchDatabase>, tableName: string) {
+  return (
+    db.prepare("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?").get(tableName) as
+      | { sql: string }
+      | undefined
+  )?.sql;
+}
+
 describe('public search database', () => {
   it('creates the public search service tables', () => {
     const db = createMigratedDatabase();
@@ -87,6 +95,25 @@ describe('public search database', () => {
         .get() as { subscriptionPlanMonths: number };
 
       expect(row.subscriptionPlanMonths).toBe(1);
+      expect(tableSql(db, 'subscription_users')).toContain('CHECK (subscription_plan_months IN (1, 3, 6))');
+      expect(() =>
+        db
+          .prepare(
+            `INSERT INTO subscription_users (
+               telegram_user_id,
+               subscription_plan_months,
+               status,
+               removed_from_group,
+               created_at,
+               updated_at
+             )
+             VALUES (43, 2, 'Unpaid', 0, '2026-05-26T00:00:00.000Z', '2026-05-26T00:00:00.000Z')`
+          )
+          .run()
+      ).toThrow();
+      expect(() =>
+        db.prepare('UPDATE subscription_users SET subscription_plan_months = 2 WHERE telegram_user_id = 42').run()
+      ).toThrow();
     } finally {
       db.close();
     }
@@ -147,6 +174,72 @@ describe('public search database', () => {
 
       expect(columnNames(db, 'subscription_users')).toContain('subscription_plan_months');
       expect(row.subscriptionPlanMonths).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('normalizes invalid legacy subscription plan months when adding the constraint', () => {
+    const db = createPublicSearchDatabase(':memory:');
+
+    try {
+      db.exec(`
+        CREATE TABLE subscription_users (
+          telegram_user_id INTEGER PRIMARY KEY,
+          username TEXT,
+          trial_started_at TEXT,
+          trial_expires_at TEXT,
+          trial_searches_used INTEGER NOT NULL DEFAULT 0,
+          subscription_start_date TEXT,
+          subscription_end_date TEXT,
+          subscription_plan_months INTEGER NOT NULL DEFAULT 1,
+          days_remaining INTEGER,
+          status TEXT NOT NULL DEFAULT 'Unpaid'
+            CHECK (status IN ('Trial', 'Subscribe', 'Needs Attention', 'Unpaid', 'Kicked')),
+          unpaid_since TEXT,
+          kicked_at TEXT,
+          history_exported_at TEXT,
+          removed_from_group INTEGER NOT NULL DEFAULT 0 CHECK (removed_from_group IN (0, 1)),
+          last_seen_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        INSERT INTO subscription_users (
+          telegram_user_id,
+          username,
+          subscription_start_date,
+          subscription_end_date,
+          subscription_plan_months,
+          status,
+          removed_from_group,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          42,
+          'legacy_user',
+          '2026-05-26',
+          '2026-06-26',
+          2,
+          'Subscribe',
+          0,
+          '2026-05-26T00:00:00.000Z',
+          '2026-05-26T00:00:00.000Z'
+        );
+      `);
+
+      migratePublicSearchDatabase(db);
+
+      const row = db
+        .prepare('SELECT subscription_plan_months AS subscriptionPlanMonths FROM subscription_users WHERE telegram_user_id = 42')
+        .get() as { subscriptionPlanMonths: number };
+
+      expect(row.subscriptionPlanMonths).toBe(1);
+      expect(tableSql(db, 'subscription_users')).toContain('CHECK (subscription_plan_months IN (1, 3, 6))');
+      expect(() =>
+        db.prepare('UPDATE subscription_users SET subscription_plan_months = 2 WHERE telegram_user_id = 42').run()
+      ).toThrow();
     } finally {
       db.close();
     }

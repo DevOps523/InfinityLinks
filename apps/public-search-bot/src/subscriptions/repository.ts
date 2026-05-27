@@ -183,7 +183,28 @@ export function applySubscriptionStartDate(
   startDate: string,
   planMonths: number,
   now: Date
+): SubscriptionUser;
+export function applySubscriptionStartDate(
+  db: PublicSearchDatabase,
+  telegramUserId: number,
+  startDate: string,
+  now: Date,
+  periodDays: number
+): SubscriptionUser;
+export function applySubscriptionStartDate(
+  db: PublicSearchDatabase,
+  telegramUserId: number,
+  startDate: string,
+  planMonthsOrNow: number | Date,
+  nowOrLegacyPeriodDays: Date | number
 ): SubscriptionUser {
+  const planMonths = planMonthsOrNow instanceof Date ? DEFAULT_SUBSCRIPTION_PLAN_MONTHS : planMonthsOrNow;
+  const now = planMonthsOrNow instanceof Date ? planMonthsOrNow : nowOrLegacyPeriodDays;
+
+  if (!(now instanceof Date)) {
+    throw new Error('Subscription update timestamp must be a Date');
+  }
+
   validateSubscriptionPlanMonths(planMonths);
   const current = getSubscriptionUser(db, telegramUserId);
 
@@ -262,7 +283,8 @@ export function markSubscriptionUserUnbanned(
   return result.changes === 1 ? requireSubscriptionUser(db, telegramUserId) : undefined;
 }
 
-export function recalculateSubscriptions(db: PublicSearchDatabase, today: string): void {
+export function recalculateSubscriptions(db: PublicSearchDatabase, today: string, _legacyPeriodDays?: number): void {
+  void _legacyPeriodDays;
   validateDateOnly(today);
 
   const updatedAt = `${today}T00:00:00.000Z`;

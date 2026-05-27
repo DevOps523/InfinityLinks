@@ -400,7 +400,7 @@ td {
   grid-template-columns: repeat(2, minmax(120px, 1fr));
   gap: 12px;
   margin: 0;
-  padding: 16px 18px 0;
+  padding: 16px 18px 18px;
 }
 
 .public-search-preview__counts div {
@@ -419,31 +419,6 @@ td {
   color: #0f172a;
   font-size: 1.35rem;
   font-weight: 800;
-}
-
-.public-search-preview__samples {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 16px;
-  padding: 16px 18px 18px;
-}
-
-.public-search-preview__samples strong {
-  color: #0f172a;
-}
-
-.public-search-preview__samples ul,
-.public-search-preview__samples p {
-  margin: 8px 0 0;
-  color: #334155;
-}
-
-.public-search-preview__samples ul {
-  padding-left: 18px;
-}
-
-.public-search-preview__samples li + li {
-  margin-top: 4px;
 }
 
 .action-menu {

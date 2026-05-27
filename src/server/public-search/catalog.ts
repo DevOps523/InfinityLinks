@@ -49,8 +49,6 @@ export type PublicSearchCatalog = {
 export type PublicSearchCatalogPreview = {
   movies: number;
   tvShows: number;
-  sampleMovies: string[];
-  sampleTvShows: string[];
 };
 
 type MovieCatalogRow = {
@@ -130,9 +128,7 @@ export function createPublicSearchCatalogFingerprint(catalog: PublicSearchCatalo
 export function buildPublicSearchCatalogPreview(catalog: PublicSearchCatalog): PublicSearchCatalogPreview {
   return {
     movies: catalog.movies.length,
-    tvShows: catalog.tvShows.length,
-    sampleMovies: catalog.movies.slice(0, 5).map((movie) => movie.title),
-    sampleTvShows: catalog.tvShows.slice(0, 5).map((tvShow) => tvShow.title)
+    tvShows: catalog.tvShows.length
   };
 }
 

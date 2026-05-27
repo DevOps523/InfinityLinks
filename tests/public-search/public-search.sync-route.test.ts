@@ -165,7 +165,7 @@ describe('public search sync route', () => {
     });
   });
 
-  it('returns a public search catalog preview with counts and sample titles', async () => {
+  it('returns a public search catalog preview with counts only', async () => {
     const movieTitles = ['Zulu Movie', 'Alpha Movie', 'Beta Movie', 'Delta Movie', 'Echo Movie', 'Foxtrot Movie'];
 
     for (const [index, title] of movieTitles.entries()) {
@@ -188,9 +188,7 @@ describe('public search sync route', () => {
     expect(response.body).toEqual({
       preview: {
         movies: 6,
-        tvShows: 6,
-        sampleMovies: ['Alpha Movie', 'Beta Movie', 'Delta Movie', 'Echo Movie', 'Foxtrot Movie'],
-        sampleTvShows: ['Alpha Show', 'Beta Show', 'Delta Show', 'Echo Show', 'Foxtrot Show']
+        tvShows: 6
       }
     });
   });

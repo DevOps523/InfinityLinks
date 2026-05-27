@@ -29,8 +29,6 @@ type PublicSearchSyncStatus = {
 type PublicSearchPreview = {
   movies: number;
   tvShows: number;
-  sampleMovies: string[];
-  sampleTvShows: string[];
 };
 
 type PublicSearchPreviewResponse = {
@@ -133,17 +131,11 @@ function isSyncResponse(value: unknown): value is SyncResponse {
   return isRecord(value) && isSyncResult(value.sync) && isPublicSearchSyncStatus(value.status);
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
-}
-
 function isPublicSearchPreview(value: unknown): value is PublicSearchPreview {
   return (
     isRecord(value) &&
     typeof value.movies === 'number' &&
-    typeof value.tvShows === 'number' &&
-    isStringArray(value.sampleMovies) &&
-    isStringArray(value.sampleTvShows)
+    typeof value.tvShows === 'number'
   );
 }
 
@@ -404,32 +396,6 @@ export function PublicSearchPage() {
                   <dd>{preview.tvShows}</dd>
                 </div>
               </dl>
-              <div className="public-search-preview__samples">
-                <div>
-                  <strong>Sample movies</strong>
-                  {preview.sampleMovies.length > 0 ? (
-                    <ul>
-                      {preview.sampleMovies.map((title) => (
-                        <li key={title}>{title}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p>No movies in the public catalog.</p>
-                  )}
-                </div>
-                <div>
-                  <strong>Sample TV shows</strong>
-                  {preview.sampleTvShows.length > 0 ? (
-                    <ul>
-                      {preview.sampleTvShows.map((title) => (
-                        <li key={title}>{title}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p>No TV shows in the public catalog.</p>
-                  )}
-                </div>
-              </div>
             </>
           ) : null}
         </div>

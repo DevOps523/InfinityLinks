@@ -27,8 +27,6 @@ type PublicSearchSyncStatusFixture = {
 type PublicSearchPreviewFixture = {
   movies: number;
   tvShows: number;
-  sampleMovies: string[];
-  sampleTvShows: string[];
 };
 
 function createPublicSearchSyncStatus(
@@ -57,8 +55,6 @@ function createPublicSearchPreview(overrides: Partial<PublicSearchPreviewFixture
   return {
     movies: 1,
     tvShows: 0,
-    sampleMovies: ['Inception'],
-    sampleTvShows: [],
     ...overrides
   };
 }
@@ -635,9 +631,7 @@ describe('App', () => {
           json: async () => ({
             preview: createPublicSearchPreview({
               movies: 3,
-              tvShows: 2,
-              sampleMovies: ['Alpha Movie', 'Beta Movie'],
-              sampleTvShows: ['Alpha Show']
+              tvShows: 2
             })
           })
         };
@@ -657,9 +651,8 @@ describe('App', () => {
     const previewSection = (await screen.findByText('Catalog preview')).closest('.public-search-preview') as HTMLElement;
     expect(within(previewSection).getByText('3')).toBeInTheDocument();
     expect(within(previewSection).getByText('2')).toBeInTheDocument();
-    expect(within(previewSection).getByText('Alpha Movie')).toBeInTheDocument();
-    expect(within(previewSection).getByText('Beta Movie')).toBeInTheDocument();
-    expect(within(previewSection).getByText('Alpha Show')).toBeInTheDocument();
+    expect(within(previewSection).queryByText('Sample movies')).not.toBeInTheDocument();
+    expect(within(previewSection).queryByText('Sample TV shows')).not.toBeInTheDocument();
   });
 
   it('shows a public search preview error when the preview cannot be loaded', async () => {
@@ -881,9 +874,7 @@ describe('App', () => {
           json: async () => ({
             preview: createPublicSearchPreview({
               movies: previewRequests > 1 ? 12 : 1,
-              tvShows: previewRequests > 1 ? 4 : 0,
-              sampleMovies: previewRequests > 1 ? ['Synced Movie'] : ['Pending Movie'],
-              sampleTvShows: previewRequests > 1 ? ['Synced Show'] : []
+              tvShows: previewRequests > 1 ? 4 : 0
             })
           })
         };
@@ -900,6 +891,7 @@ describe('App', () => {
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
     expect(await screen.findByText('1 movie ready to sync')).toBeInTheDocument();
+    const previewSection = (await screen.findByText('Catalog preview')).closest('.public-search-preview') as HTMLElement;
     fireEvent.click(screen.getByRole('button', { name: /^sync public search$/i }));
 
     await waitFor(() =>
@@ -909,8 +901,8 @@ describe('App', () => {
     expect(screen.getByText(/4 tv shows/i)).toBeInTheDocument();
     expect(screen.getByText('Everything is synced')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^sync public search$/i })).toBeDisabled();
-    expect(await screen.findByText('Synced Movie')).toBeInTheDocument();
-    expect(screen.getByText('Synced Show')).toBeInTheDocument();
+    await waitFor(() => expect(within(previewSection).getByText('12')).toBeInTheDocument());
+    expect(within(previewSection).getByText('4')).toBeInTheDocument();
     expect(previewRequests).toBe(2);
   });
 

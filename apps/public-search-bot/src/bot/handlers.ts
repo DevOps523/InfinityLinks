@@ -7,7 +7,7 @@ import {
   searchPublicCatalog,
   type PublicSearchResult
 } from '../search.repository.js';
-import { evaluateSearchAccess } from '../subscriptions/access.service.js';
+import { consumeSuccessfulSearchAccess, evaluateSearchAccess } from '../subscriptions/access.service.js';
 import type { TelegramUserIdentity } from '../subscriptions/repository.js';
 import { decodeSeasonCallback } from './callback-data.js';
 import {
@@ -178,8 +178,13 @@ async function handleSearch(deps: HandlerDeps, chat: MessageChat, user: Telegram
     return;
   }
 
+  if (results.length === 0) {
+    await sendBotMessage(deps, chatId, formatNoResultsMessage(getHandles(deps)));
+    return;
+  }
+
   const now = deps.subscription.now();
-  const access = evaluateSearchAccess(deps.db, {
+  const access = consumeSuccessfulSearchAccess(deps.db, {
     user,
     now,
     trialSearchLimit: deps.subscription.trialSearchLimit
@@ -192,8 +197,7 @@ async function handleSearch(deps: HandlerDeps, chat: MessageChat, user: Telegram
 
   deps.subscription.scheduleSheetRefresh?.(now);
 
-  const messages =
-    results.length > 0 ? formatSearchResults(results, getHandles(deps)) : [formatNoResultsMessage(getHandles(deps))];
+  const messages = formatSearchResults(results, getHandles(deps));
 
   for (const message of messages) {
     await sendBotMessage(deps, chatId, message);

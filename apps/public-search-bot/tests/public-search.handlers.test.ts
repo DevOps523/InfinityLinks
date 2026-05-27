@@ -4,7 +4,9 @@ import { createPublicSearchDatabase, type PublicSearchDatabase } from '../src/db
 import { migratePublicSearchDatabase } from '../src/db/migrate.js';
 import {
   applySubscriptionStartDate,
+  consumeTrialSearchIfAllowed,
   markSubscriptionUserKicked,
+  startTrialIfEligible,
   upsertSeenTelegramUser
 } from '../src/subscriptions/repository.js';
 import { createReplyThrottleState, handleTelegramUpdate, type HandlerDeps } from '../src/bot/handlers.js';
@@ -182,7 +184,7 @@ function createDeps(db: PublicSearchDatabase, overrides: Partial<HandlerDeps> = 
     db,
     subscription: {
       now: () => new Date('2026-05-26T00:00:00.000Z'),
-      trialHours: 24,
+      trialSearchLimit: 5,
       adminContact: '@seinen_illuminatiks',
       scheduleSheetRefresh: vi.fn()
     },
@@ -203,6 +205,12 @@ function createDeps(db: PublicSearchDatabase, overrides: Partial<HandlerDeps> = 
   };
 
   return { deps, sentMessages, callbackAnswers };
+}
+
+function seedTrialSearchAccess(db: PublicSearchDatabase, userId = 42) {
+  const now = new Date('2026-05-26T00:00:00.000Z');
+  startTrialIfEligible(db, { id: userId, username: 'trial_user' }, now);
+  consumeTrialSearchIfAllowed(db, userId, now, 5);
 }
 
 describe('public search bot handlers', () => {
@@ -439,37 +447,43 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('blocks /search when the user has an expired trial', async () => {
+  it('blocks /search after five successful trial searches', async () => {
     const db = createMigratedDatabase();
-    let accessNow = new Date('2026-05-26T00:00:00.000Z');
 
     try {
       seedCatalog(db);
-      const { deps, sentMessages } = createDeps(db, {
-        subscription: {
-          now: () => accessNow,
-          trialHours: 24,
-          adminContact: '@seinen_illuminatiks'
-        }
-      });
+      const { deps, sentMessages } = createDeps(db);
 
-      await handleTelegramUpdate(deps, messageUpdate('/search inception'));
+      for (let index = 0; index < 5; index += 1) {
+        await handleTelegramUpdate(
+          deps,
+          messageUpdate('/search inception', { from: { id: 42, username: 'trial_user' } })
+        );
+      }
+
       sentMessages.length = 0;
-      accessNow = new Date('2026-05-27T00:00:01.000Z');
       await handleTelegramUpdate(
         deps,
         messageUpdate('/search inception', { from: { id: 42, username: 'trial_user' } })
       );
 
       const row = db
-        .prepare('SELECT status, trial_started_at AS trialStartedAt FROM subscription_users WHERE telegram_user_id = 42')
-        .get() as { status: string; trialStartedAt: string | null } | undefined;
-      expect(row).toMatchObject({ status: 'Trial' });
-      expect(row?.trialStartedAt).toBe('2026-05-26T00:00:00.000Z');
-      expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toBe(subscriptionRequiredMessage);
-      expect(sentMessages[0].text).not.toContain('providers.example');
-      expect(sentMessages[0].replyMarkup).toBeUndefined();
+        .prepare(
+          `SELECT status, trial_searches_used AS trialSearchesUsed
+         FROM subscription_users
+         WHERE telegram_user_id = 42`
+        )
+        .get() as { status: string; trialSearchesUsed: number } | undefined;
+
+      expect(row).toMatchObject({ status: 'Trial', trialSearchesUsed: 5 });
+      expect(sentMessages).toEqual([
+        {
+          chatId: 500,
+          text: subscriptionRequiredMessage,
+          replyMarkup: undefined
+        }
+      ]);
+      expect(JSON.stringify(sentMessages)).not.toContain('providers.example');
     } finally {
       db.close();
     }
@@ -505,9 +519,15 @@ describe('public search bot handlers', () => {
       );
 
       const row = db
-        .prepare('SELECT status, trial_started_at AS trialStartedAt FROM subscription_users WHERE telegram_user_id = 42')
-        .get() as { status: string; trialStartedAt: string | null } | undefined;
-      expect(row).toMatchObject({ status: 'Trial' });
+        .prepare(
+          `SELECT status,
+            trial_started_at AS trialStartedAt,
+            trial_searches_used AS trialSearchesUsed
+     FROM subscription_users
+     WHERE telegram_user_id = 42`
+        )
+        .get() as { status: string; trialStartedAt: string | null; trialSearchesUsed: number } | undefined;
+      expect(row).toMatchObject({ status: 'Trial', trialSearchesUsed: 1 });
       expect(row?.trialStartedAt).toBe('2026-05-26T00:00:00.000Z');
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0].text).toContain('🎬 Movie');
@@ -520,6 +540,28 @@ describe('public search bot handlers', () => {
       expect(sentMessages[0].text).not.toContain('📢 Channel:');
       expect(sentMessages[0].text).not.toContain('👥 Group: @infinitylinks69');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not consume trial quota for no-result searches', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      const { deps, sentMessages } = createDeps(db);
+
+      await handleTelegramUpdate(
+        deps,
+        messageUpdate('/search definitely-not-in-catalog', { from: { id: 42, username: 'trial_user' } })
+      );
+
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0].text).toBe('No results found. Try checking the spelling or using fewer words.');
+      expect(
+        db.prepare('SELECT telegram_user_id FROM subscription_users WHERE telegram_user_id = 42').get()
+      ).toBeUndefined();
     } finally {
       db.close();
     }
@@ -696,22 +738,20 @@ describe('public search bot handlers', () => {
 
   it('does not leak provider links when subscription is required during /search', async () => {
     const db = createMigratedDatabase();
-    let accessNow = new Date('2026-05-26T00:00:00.000Z');
 
     try {
       seedCatalog(db);
-      const { deps, sentMessages } = createDeps(db, {
-        subscription: {
-          now: () => accessNow,
-          trialHours: 24,
-          adminContact: '@seinen_illuminatiks'
-        }
-      });
+      const now = new Date('2026-05-26T00:00:00.000Z');
+      startTrialIfEligible(db, { id: 42, username: 'trial_user' }, now);
+      for (let index = 0; index < 5; index += 1) {
+        consumeTrialSearchIfAllowed(db, 42, now, 5);
+      }
+      const { deps, sentMessages } = createDeps(db);
 
-      await handleTelegramUpdate(deps, messageUpdate('/search inception'));
-      sentMessages.length = 0;
-      accessNow = new Date('2026-05-27T00:00:01.000Z');
-      await handleTelegramUpdate(deps, messageUpdate('/search inception'));
+      await handleTelegramUpdate(
+        deps,
+        messageUpdate('/search inception', { from: { id: 42, username: 'trial_user' } })
+      );
 
       expect(sentMessages).toEqual([
         {
@@ -768,6 +808,7 @@ describe('public search bot handlers', () => {
 
     try {
       seedCatalog(db);
+      seedTrialSearchAccess(db);
       const { deps } = createDeps(db);
 
       await handleTelegramUpdate(deps, callbackUpdate('season:30'));
@@ -785,6 +826,7 @@ describe('public search bot handlers', () => {
 
     try {
       seedCatalog(db);
+      seedTrialSearchAccess(db);
       const { deps } = createDeps(db);
 
       await handleTelegramUpdate(
@@ -901,6 +943,7 @@ describe('public search bot handlers', () => {
 
     try {
       seedCatalog(db);
+      seedTrialSearchAccess(db);
       const callbackAnswers: CallbackAnswer[] = [];
       const { deps } = createDeps(db, {
         replies: {
@@ -921,25 +964,42 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('does not leak provider links when subscription is required during a season callback', async () => {
+  it('does not consume trial quota for season callbacks', async () => {
     const db = createMigratedDatabase();
-    let accessNow = new Date('2026-05-26T00:00:00.000Z');
 
     try {
       seedCatalog(db);
-      const { deps, sentMessages, callbackAnswers } = createDeps(db, {
-        subscription: {
-          now: () => accessNow,
-          trialHours: 24,
-          adminContact: '@seinen_illuminatiks'
-        }
-      });
+      const { deps } = createDeps(db);
 
-      await handleTelegramUpdate(deps, callbackUpdate('season:30'));
-      sentMessages.length = 0;
-      callbackAnswers.length = 0;
-      accessNow = new Date('2026-05-27T00:00:01.000Z');
-      await handleTelegramUpdate(deps, callbackUpdate('season:30'));
+      await handleTelegramUpdate(
+        deps,
+        messageUpdate('/search breaking', { from: { id: 42, username: 'trial_user' } })
+      );
+      await handleTelegramUpdate(deps, callbackUpdate('season:30', { from: { id: 42, username: 'trial_user' } }));
+
+      const row = db
+        .prepare('SELECT trial_searches_used AS trialSearchesUsed FROM subscription_users WHERE telegram_user_id = 42')
+        .get() as { trialSearchesUsed: number };
+
+      expect(row.trialSearchesUsed).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not leak provider links when subscription is required during a season callback', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      upsertSeenTelegramUser(db, { id: 42, username: 'kicked_user' }, new Date('2026-05-26T00:00:00.000Z'));
+      markSubscriptionUserKicked(db, 42, new Date('2026-05-26T00:00:00.000Z'));
+      const { deps, sentMessages, callbackAnswers } = createDeps(db);
+
+      await handleTelegramUpdate(
+        deps,
+        callbackUpdate('season:30', { from: { id: 42, username: 'kicked_user' } })
+      );
 
       expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'Subscription required.' }]);
       expect(sentMessages).toEqual([
@@ -957,23 +1017,17 @@ describe('public search bot handlers', () => {
 
   it('checks subscription again before showing season callback results', async () => {
     const db = createMigratedDatabase();
-    let accessNow = new Date('2026-05-26T00:00:00.000Z');
 
     try {
       seedCatalog(db);
-      const { deps, sentMessages, callbackAnswers } = createDeps(db, {
-        subscription: {
-          now: () => accessNow,
-          trialHours: 24,
-          adminContact: '@seinen_illuminatiks'
-        }
-      });
+      upsertSeenTelegramUser(db, { id: 42, username: 'kicked_user' }, new Date('2026-05-26T00:00:00.000Z'));
+      markSubscriptionUserKicked(db, 42, new Date('2026-05-26T00:00:00.000Z'));
+      const { deps, sentMessages, callbackAnswers } = createDeps(db);
 
-      await handleTelegramUpdate(deps, callbackUpdate('season:30'));
-      sentMessages.length = 0;
-      callbackAnswers.length = 0;
-      accessNow = new Date('2026-05-27T00:00:01.000Z');
-      await handleTelegramUpdate(deps, callbackUpdate('season:30'));
+      await handleTelegramUpdate(
+        deps,
+        callbackUpdate('season:30', { from: { id: 42, username: 'kicked_user' } })
+      );
 
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0].text).toBe(subscriptionRequiredMessage);
@@ -990,6 +1044,7 @@ describe('public search bot handlers', () => {
 
     try {
       seedCatalog(db);
+      seedTrialSearchAccess(db);
       const { deps, sentMessages, callbackAnswers } = createDeps(db);
 
       await handleTelegramUpdate(deps, callbackUpdate('season:30'));

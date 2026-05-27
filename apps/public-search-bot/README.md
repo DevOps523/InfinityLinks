@@ -242,6 +242,8 @@ User=www-data
 Group=www-data
 ```
 
+The example service uses `ProtectSystem=strict`, so only the SQLite data directory is writable by the app. If you place the database somewhere else, update `ReadWritePaths` to match.
+
 Enable and start the service:
 
 ```bash

@@ -15,6 +15,10 @@ function tableNames(db: ReturnType<typeof createPublicSearchDatabase>) {
     .map((row) => (row as { name: string }).name);
 }
 
+function columnNames(db: ReturnType<typeof createPublicSearchDatabase>, tableName: string) {
+  return (db.pragma(`table_info(${tableName})`) as Array<{ name: string }>).map((column) => column.name);
+}
+
 describe('public search database', () => {
   it('creates the public search service tables', () => {
     const db = createMigratedDatabase();
@@ -33,6 +37,31 @@ describe('public search database', () => {
         'subscription_jobs',
         'subscription_users'
       ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('creates trial search quota state on subscription users', () => {
+    const db = createMigratedDatabase();
+
+    try {
+      expect(columnNames(db, 'subscription_users')).toContain('trial_searches_used');
+      const row = db
+        .prepare(
+          `INSERT INTO subscription_users (
+             telegram_user_id,
+             status,
+             removed_from_group,
+             created_at,
+             updated_at
+           )
+           VALUES (42, 'Unpaid', 0, '2026-05-26T00:00:00.000Z', '2026-05-26T00:00:00.000Z')
+           RETURNING trial_searches_used AS trialSearchesUsed`
+        )
+        .get() as { trialSearchesUsed: number };
+
+      expect(row.trialSearchesUsed).toBe(0);
     } finally {
       db.close();
     }

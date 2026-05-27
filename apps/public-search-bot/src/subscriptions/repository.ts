@@ -13,6 +13,7 @@ export type SubscriptionUser = {
   username?: string | undefined;
   trialStartedAt?: string | undefined;
   trialExpiresAt?: string | undefined;
+  trialSearchesUsed: number;
   subscriptionStartDate?: string | undefined;
   subscriptionEndDate?: string | undefined;
   daysRemaining?: number | undefined;
@@ -31,6 +32,7 @@ type SubscriptionUserRow = {
   username: string | null;
   trialStartedAt: string | null;
   trialExpiresAt: string | null;
+  trialSearchesUsed: number;
   subscriptionStartDate: string | null;
   subscriptionEndDate: string | null;
   daysRemaining: number | null;
@@ -52,6 +54,7 @@ export function getSubscriptionUser(db: PublicSearchDatabase, telegramUserId: nu
          username,
          trial_started_at AS trialStartedAt,
          trial_expires_at AS trialExpiresAt,
+         trial_searches_used AS trialSearchesUsed,
          subscription_start_date AS subscriptionStartDate,
          subscription_end_date AS subscriptionEndDate,
          days_remaining AS daysRemaining,
@@ -105,8 +108,7 @@ export function upsertSeenTelegramUser(
 export function startTrialIfEligible(
   db: PublicSearchDatabase,
   identity: TelegramUserIdentity,
-  now: Date,
-  trialHours: number
+  now: Date
 ): { started: boolean; user: SubscriptionUser } {
   const trial = db.transaction(() => {
     const existing = upsertSeenTelegramUser(db, identity, now);
@@ -116,25 +118,55 @@ export function startTrialIfEligible(
     }
 
     const trialStartedAt = now.toISOString();
-    const trialExpiresAt = new Date(now.getTime() + trialHours * 60 * 60 * 1000).toISOString();
 
     db.prepare(
       `UPDATE subscription_users
        SET trial_started_at = @trialStartedAt,
-           trial_expires_at = @trialExpiresAt,
+           trial_expires_at = NULL,
+           trial_searches_used = 0,
            status = 'Trial',
            updated_at = @trialStartedAt
        WHERE telegram_user_id = @telegramUserId`
     ).run({
       telegramUserId: identity.id,
-      trialStartedAt,
-      trialExpiresAt
+      trialStartedAt
     });
 
     return { started: true, user: requireSubscriptionUser(db, identity.id) };
   });
 
   return trial();
+}
+
+export function consumeTrialSearchIfAllowed(
+  db: PublicSearchDatabase,
+  telegramUserId: number,
+  now: Date,
+  trialSearchLimit: number
+): SubscriptionUser | undefined {
+  validateTrialSearchLimit(trialSearchLimit);
+  const consume = db.transaction(() => {
+    const nowIso = now.toISOString();
+    const result = db
+      .prepare(
+        `UPDATE subscription_users
+         SET trial_searches_used = trial_searches_used + 1,
+             updated_at = @nowIso
+         WHERE telegram_user_id = @telegramUserId
+           AND status = 'Trial'
+           AND removed_from_group = 0
+           AND trial_searches_used < @trialSearchLimit`
+      )
+      .run({
+        telegramUserId,
+        trialSearchLimit,
+        nowIso
+      });
+
+    return result.changes === 1 ? requireSubscriptionUser(db, telegramUserId) : undefined;
+  });
+
+  return consume();
 }
 
 export function applySubscriptionStartDate(
@@ -422,6 +454,7 @@ function listSubscriptionUsers(db: PublicSearchDatabase, whereClause: string, pa
          username,
          trial_started_at AS trialStartedAt,
          trial_expires_at AS trialExpiresAt,
+         trial_searches_used AS trialSearchesUsed,
          subscription_start_date AS subscriptionStartDate,
          subscription_end_date AS subscriptionEndDate,
          days_remaining AS daysRemaining,
@@ -473,12 +506,19 @@ function validateSubscriptionPeriodDays(periodDays: number) {
   }
 }
 
+export function validateTrialSearchLimit(trialSearchLimit: number) {
+  if (!Number.isInteger(trialSearchLimit) || trialSearchLimit <= 0) {
+    throw new Error('Trial search limit must be a positive integer');
+  }
+}
+
 function mapSubscriptionUser(row: SubscriptionUserRow): SubscriptionUser {
   return {
     telegramUserId: row.telegramUserId,
     username: row.username ?? undefined,
     trialStartedAt: row.trialStartedAt ?? undefined,
     trialExpiresAt: row.trialExpiresAt ?? undefined,
+    trialSearchesUsed: row.trialSearchesUsed,
     subscriptionStartDate: row.subscriptionStartDate ?? undefined,
     subscriptionEndDate: row.subscriptionEndDate ?? undefined,
     daysRemaining: row.daysRemaining ?? undefined,

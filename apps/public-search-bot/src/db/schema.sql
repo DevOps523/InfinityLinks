@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS subscription_users (
   username TEXT,
   trial_started_at TEXT,
   trial_expires_at TEXT,
+  trial_searches_used INTEGER NOT NULL DEFAULT 0,
   subscription_start_date TEXT,
   subscription_end_date TEXT,
   days_remaining INTEGER,

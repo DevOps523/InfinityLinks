@@ -26,6 +26,7 @@ export function migratePublicSearchDatabase(db: PublicSearchDatabase) {
   addSubscriptionJobsClaimedAtColumnIfNeeded(db);
   db.exec(schema);
   addSubscriptionUsersHistoryExportedAtColumnIfNeeded(db);
+  addSubscriptionUsersTrialSearchesUsedColumnIfNeeded(db);
   rebuildSubscriptionUsersBooleanConstraintIfNeeded(db);
   rebuildSubscriptionJobsLeaseShapeIfNeeded(db);
   db.exec(schema);
@@ -81,6 +82,28 @@ function addSubscriptionUsersHistoryExportedAtColumnIfNeeded(db: PublicSearchDat
   db.exec('ALTER TABLE subscription_users ADD COLUMN history_exported_at TEXT');
 }
 
+function addSubscriptionUsersTrialSearchesUsedColumnIfNeeded(db: PublicSearchDatabase) {
+  const row = db
+    .prepare(
+      `SELECT 1
+       FROM sqlite_schema
+       WHERE type = 'table'
+         AND name = 'subscription_users'`
+    )
+    .get();
+
+  if (!row) {
+    return;
+  }
+
+  const columns = db.pragma('table_info(subscription_users)') as Array<{ name: string }>;
+  if (columns.some((column) => column.name === 'trial_searches_used')) {
+    return;
+  }
+
+  db.exec('ALTER TABLE subscription_users ADD COLUMN trial_searches_used INTEGER NOT NULL DEFAULT 0');
+}
+
 function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatabase) {
   const row = db
     .prepare(
@@ -107,6 +130,7 @@ function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatab
         username TEXT,
         trial_started_at TEXT,
         trial_expires_at TEXT,
+        trial_searches_used INTEGER NOT NULL DEFAULT 0,
         subscription_start_date TEXT,
         subscription_end_date TEXT,
         days_remaining INTEGER,
@@ -126,6 +150,7 @@ function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatab
         username,
         trial_started_at,
         trial_expires_at,
+        trial_searches_used,
         subscription_start_date,
         subscription_end_date,
         days_remaining,
@@ -143,6 +168,7 @@ function rebuildSubscriptionUsersBooleanConstraintIfNeeded(db: PublicSearchDatab
         username,
         trial_started_at,
         trial_expires_at,
+        COALESCE(trial_searches_used, 0),
         subscription_start_date,
         subscription_end_date,
         days_remaining,

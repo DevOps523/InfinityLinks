@@ -8,6 +8,7 @@ import {
 } from '../src/subscriptions/date.js';
 import {
   applySubscriptionStartDate,
+  consumeTrialSearchIfAllowed,
   getSubscriptionUser,
   isKickStillDue,
   listActiveSubscriptionRows,
@@ -36,11 +37,11 @@ describe('subscription repository', () => {
     expect(() => addDateDays('2026-02-31', 1)).toThrow(/Invalid date-only value/);
   });
 
-  it('starts one trial once and keeps username keyed by user id', () => {
+  it('starts one quota trial once and keeps username keyed by user id', () => {
     const db = createDb();
     try {
-      const first = startTrialIfEligible(db, { id: 42, username: 'first_name' }, new Date('2026-05-26T00:00:00.000Z'), 24);
-      const second = startTrialIfEligible(db, { id: 42, username: 'new_name' }, new Date('2026-05-26T01:00:00.000Z'), 24);
+      const first = startTrialIfEligible(db, { id: 42, username: 'first_name' }, new Date('2026-05-26T00:00:00.000Z'));
+      const second = startTrialIfEligible(db, { id: 42, username: 'new_name' }, new Date('2026-05-26T01:00:00.000Z'));
 
       expect(first.started).toBe(true);
       expect(second.started).toBe(false);
@@ -49,8 +50,27 @@ describe('subscription repository', () => {
         username: 'new_name',
         status: 'Trial',
         trialStartedAt: '2026-05-26T00:00:00.000Z',
-        trialExpiresAt: '2026-05-27T00:00:00.000Z'
+        trialExpiresAt: undefined,
+        trialSearchesUsed: 0
       });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('consumes trial searches only up to the configured limit', () => {
+    const db = createDb();
+    try {
+      startTrialIfEligible(db, { id: 42, username: 'trial_user' }, new Date('2026-05-26T00:00:00.000Z'));
+
+      expect(consumeTrialSearchIfAllowed(db, 42, new Date('2026-05-26T00:01:00.000Z'), 2)).toMatchObject({
+        trialSearchesUsed: 1
+      });
+      expect(consumeTrialSearchIfAllowed(db, 42, new Date('2026-05-26T00:02:00.000Z'), 2)).toMatchObject({
+        trialSearchesUsed: 2
+      });
+      expect(consumeTrialSearchIfAllowed(db, 42, new Date('2026-05-26T00:03:00.000Z'), 2)).toBeUndefined();
+      expect(getSubscriptionUser(db, 42)).toMatchObject({ trialSearchesUsed: 2 });
     } finally {
       db.close();
     }
@@ -211,6 +231,51 @@ describe('subscription repository', () => {
     }
   });
 
+  it('adds trial search usage to legacy subscription users tables', () => {
+    const db = createPublicSearchDatabase(':memory:');
+    try {
+      db.exec(`
+        CREATE TABLE subscription_users (
+          telegram_user_id INTEGER PRIMARY KEY,
+          username TEXT,
+          trial_started_at TEXT,
+          trial_expires_at TEXT,
+          subscription_start_date TEXT,
+          subscription_end_date TEXT,
+          days_remaining INTEGER,
+          status TEXT NOT NULL DEFAULT 'Unpaid'
+            CHECK (status IN ('Trial', 'Subscribe', 'Needs Attention', 'Unpaid', 'Kicked')),
+          unpaid_since TEXT,
+          kicked_at TEXT,
+          history_exported_at TEXT,
+          removed_from_group INTEGER NOT NULL DEFAULT 0 CHECK (removed_from_group IN (0, 1)),
+          last_seen_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        INSERT INTO subscription_users (
+          telegram_user_id,
+          username,
+          status,
+          removed_from_group,
+          created_at,
+          updated_at
+        )
+        VALUES (42, 'legacy_user', 'Trial', 0, '2026-05-26T00:00:00.000Z', '2026-05-26T00:00:00.000Z');
+      `);
+
+      migratePublicSearchDatabase(db);
+
+      expect(getSubscriptionUser(db, 42)).toMatchObject({
+        telegramUserId: 42,
+        trialSearchesUsed: 0
+      });
+    } finally {
+      db.close();
+    }
+  });
+
   it('marks kicked users without deleting permanent history', () => {
     const db = createDb();
     try {
@@ -226,7 +291,7 @@ describe('subscription repository', () => {
         removedFromGroup: true,
         kickedAt: '2026-06-27T00:00:00.000Z'
       });
-      expect(startTrialIfEligible(db, { id: 42, username: 'late_user' }, new Date('2026-06-28T00:00:00.000Z'), 24).started).toBe(false);
+      expect(startTrialIfEligible(db, { id: 42, username: 'late_user' }, new Date('2026-06-28T00:00:00.000Z')).started).toBe(false);
     } finally {
       db.close();
     }

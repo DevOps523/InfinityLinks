@@ -408,7 +408,6 @@ export function markSubscriptionUserKickedIfStillDue(
   if (
     !current ||
     current.status !== 'Unpaid' ||
-    current.removedFromGroup ||
     !current.unpaidSince ||
     dateDifferenceDays(current.unpaidSince, today) < graceDays
   ) {
@@ -425,7 +424,6 @@ export function markSubscriptionUserKickedIfStillDue(
            updated_at = @nowIso
        WHERE telegram_user_id = @telegramUserId
          AND status = 'Unpaid'
-         AND removed_from_group = 0
          AND unpaid_since = @unpaidSince`
     )
     .run({

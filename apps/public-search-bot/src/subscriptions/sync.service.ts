@@ -53,6 +53,7 @@ export async function syncSubscriptionsFromSheet(
 
     if (current.subscriptionStartDate === row.startDate && current.subscriptionPlanMonths === planMonths) {
       if (current.removedFromGroup) {
+        await exportPendingKickedHistory(db, sheets, options, current);
         const paidUser = applySubscriptionStartDate(
           db,
           row.telegramUserId,
@@ -67,6 +68,7 @@ export async function syncSubscriptionsFromSheet(
       continue;
     }
 
+    await exportPendingKickedHistory(db, sheets, options, current);
     const paidUser = applySubscriptionStartDate(db, row.telegramUserId, row.startDate, planMonths, options.now);
     if (needsUnban(paidUser)) {
       paidUsers.push(paidUser);
@@ -81,6 +83,23 @@ export async function syncSubscriptionsFromSheet(
 
 function needsUnban(user: SubscriptionUser) {
   return user.removedFromGroup && (user.status === 'Subscribe' || user.status === 'Needs Attention');
+}
+
+async function exportPendingKickedHistory(
+  db: PublicSearchDatabase,
+  sheets: Pick<GoogleSheetsClient, 'replaceRows' | 'appendRows'>,
+  options: Pick<SyncSubscriptionsFromSheetOptions, 'usersRange' | 'historyRange'>,
+  user: SubscriptionUser
+) {
+  if (user.status !== 'Kicked' || user.historyExportedAt) {
+    return;
+  }
+
+  await moveKickedUsersToHistory(db, sheets, {
+    usersRange: options.usersRange,
+    historyRange: options.historyRange,
+    users: [user]
+  });
 }
 
 export async function moveKickedUsersToHistory(

@@ -297,6 +297,60 @@ describe('subscription sync service', () => {
     }
   });
 
+  it('exports pending kicked history before renewing a kicked user', async () => {
+    const db = createDb();
+    try {
+      db.prepare(
+        `INSERT INTO subscription_users (
+           telegram_user_id, username, subscription_start_date, subscription_end_date, days_remaining,
+           status, unpaid_since, removed_from_group, kicked_at, history_exported_at, created_at, updated_at
+         )
+         VALUES (
+           42, 'returning_user', '2026-05-01', '2026-06-01', 0,
+           'Kicked', '2026-06-01', 1, '2026-06-02T00:00:00.000Z', NULL,
+           '2026-05-01T00:00:00.000Z', '2026-06-02T00:00:00.000Z'
+         )`
+      ).run();
+      const sheets = {
+        readRows: vi.fn(async () => [USERS_HEADER, ['42', '@returning_user', '2026-06-28', '1 Month', '', '', '', '']]),
+        replaceRows: vi.fn(async () => undefined),
+        appendRows: vi.fn(async () => undefined)
+      };
+
+      const result = await syncSubscriptionsFromSheet(db, sheets, {
+        usersRange: 'Users!A:H',
+        historyRange: 'History!A:G',
+        now: new Date('2026-06-28T00:00:00.000Z')
+      });
+
+      expect(result).toEqual({
+        updatedUsers: 1,
+        skippedUnknownUsers: 0,
+        paidUsers: [
+          expect.objectContaining({
+            telegramUserId: 42,
+            status: 'Subscribe',
+            removedFromGroup: true,
+            historyExportedAt: expect.any(String)
+          })
+        ]
+      });
+      expect(sheets.appendRows).toHaveBeenCalledWith('History!A:G', [
+        ['42', '@returning_user', 'Kicked', '2026-06-02T00:00:00.000Z', '2026-05-01', '2026-06-01', 'Overdue subscription removed']
+      ]);
+      expect(sheets.replaceRows).toHaveBeenNthCalledWith(1, 'Users!A:H', [USERS_HEADER]);
+      expect(sheets.replaceRows).toHaveBeenLastCalledWith('Users!A:H', [
+        USERS_HEADER,
+        ['42', '@returning_user', '2026-06-28', '1 Month', '2026-07-28', '30', 'Subscribe', '2026-06-28T00:00:00.000Z']
+      ]);
+      expect(sheets.appendRows.mock.invocationCallOrder[0]).toBeLessThan(
+        sheets.replaceRows.mock.invocationCallOrder[1] ?? 0
+      );
+    } finally {
+      db.close();
+    }
+  });
+
   it('returns kicked active paid removed users again when the start date is already applied', async () => {
     const db = createDb();
     try {

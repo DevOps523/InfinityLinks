@@ -434,4 +434,32 @@ describe('subscription repository', () => {
       db.close();
     }
   });
+
+  it('marks an overdue unpaid user kicked after the group removal race is observed', () => {
+    const db = createDb();
+    try {
+      upsertSeenTelegramUser(db, { id: 42, username: 'late_user' }, new Date('2026-05-26T00:00:00.000Z'));
+      applySubscriptionStartDate(db, 42, '2026-05-26', 1, new Date('2026-05-26T00:00:00.000Z'));
+      recalculateSubscriptions(db, '2026-06-26');
+      db.prepare('UPDATE subscription_users SET removed_from_group = 1 WHERE telegram_user_id = 42').run();
+
+      expect(isKickStillDue(db, 42, '2026-06-27', 1)).toBe(false);
+      expect(
+        markSubscriptionUserKickedIfStillDue(
+          db,
+          42,
+          new Date('2026-06-27T00:00:00.000Z'),
+          '2026-06-27',
+          1
+        )
+      ).toMatchObject({
+        telegramUserId: 42,
+        status: 'Kicked',
+        removedFromGroup: true,
+        kickedAt: '2026-06-27T00:00:00.000Z'
+      });
+    } finally {
+      db.close();
+    }
+  });
 });

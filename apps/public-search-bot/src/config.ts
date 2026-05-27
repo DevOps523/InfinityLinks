@@ -45,7 +45,7 @@ const PublicSearchEnvSchema = z.object({
   SUBSCRIPTION_OVERDUE_GRACE_DAYS: numberWithDefault(1),
   SUBSCRIPTION_ADMIN_TOKEN: requiredSecret('SUBSCRIPTION_ADMIN_TOKEN'),
   GOOGLE_SHEETS_SPREADSHEET_ID: requiredSecret('GOOGLE_SHEETS_SPREADSHEET_ID'),
-  GOOGLE_SHEETS_USERS_RANGE: trimmedStringWithDefault('Users!A:G'),
+  GOOGLE_SHEETS_USERS_RANGE: trimmedStringWithDefault('Users!A:H'),
   GOOGLE_SHEETS_HISTORY_RANGE: trimmedStringWithDefault('History!A:G'),
   GOOGLE_SERVICE_ACCOUNT_KEY_FILE: requiredSecret('GOOGLE_SERVICE_ACCOUNT_KEY_FILE')
 }).refine((env) => env.PUBLIC_SEARCH_SYNC_TOKEN !== env.PUBLIC_SEARCH_STATUS_TOKEN, {

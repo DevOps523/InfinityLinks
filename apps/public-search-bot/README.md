@@ -38,7 +38,7 @@ SUBSCRIPTION_PERIOD_DAYS=31
 SUBSCRIPTION_OVERDUE_GRACE_DAYS=1
 SUBSCRIPTION_ADMIN_TOKEN=replace_with_subscription_admin_secret
 GOOGLE_SHEETS_SPREADSHEET_ID=replace_with_google_sheet_id
-GOOGLE_SHEETS_USERS_RANGE=Users!A:G
+GOOGLE_SHEETS_USERS_RANGE=Users!A:H
 GOOGLE_SHEETS_HISTORY_RANGE=History!A:G
 GOOGLE_SERVICE_ACCOUNT_KEY_FILE=/opt/infinitylinks-public-search-bot/google-service-account.json
 ```
@@ -273,7 +273,7 @@ SUBSCRIPTION_PERIOD_DAYS=31
 SUBSCRIPTION_OVERDUE_GRACE_DAYS=1
 SUBSCRIPTION_ADMIN_TOKEN=replace_with_long_random_subscription_secret
 GOOGLE_SHEETS_SPREADSHEET_ID=replace_with_google_sheet_id
-GOOGLE_SHEETS_USERS_RANGE=Users!A:G
+GOOGLE_SHEETS_USERS_RANGE=Users!A:H
 GOOGLE_SHEETS_HISTORY_RANGE=History!A:G
 GOOGLE_SERVICE_ACCOUNT_KEY_FILE=/opt/infinitylinks-public-search-bot/google-service-account.json
 ```

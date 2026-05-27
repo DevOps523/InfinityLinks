@@ -75,7 +75,7 @@ describe('loadPublicSearchConfig', () => {
       subscriptionOverdueGraceDays: 1,
       subscriptionAdminToken: 'admin-token',
       googleSheetsSpreadsheetId: 'sheet-id',
-      googleSheetsUsersRange: 'Users!A:G',
+      googleSheetsUsersRange: 'Users!A:H',
       googleSheetsHistoryRange: 'History!A:G',
       googleServiceAccountKeyFile: '/secure/google.json'
     });
@@ -215,7 +215,7 @@ describe('loadPublicSearchConfig', () => {
       subscriptionOverdueGraceDays: 1,
       subscriptionAdminToken: 'admin-token',
       googleSheetsSpreadsheetId: 'sheet-id',
-      googleSheetsUsersRange: 'Users!A:G',
+      googleSheetsUsersRange: 'Users!A:H',
       googleSheetsHistoryRange: 'History!A:G',
       googleServiceAccountKeyFile: '/secure/google.json'
     });

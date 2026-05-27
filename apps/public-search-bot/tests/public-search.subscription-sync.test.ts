@@ -4,7 +4,7 @@ import { migratePublicSearchDatabase } from '../src/db/migrate.js';
 import { syncSubscriptionsFromSheet, moveKickedUsersToHistory } from '../src/subscriptions/sync.service.js';
 import { HISTORY_HEADER, USERS_HEADER } from '../src/subscriptions/sheet.mapper.js';
 import { getSubscriptionUser, markSubscriptionUserKicked } from '../src/subscriptions/repository.js';
-import { runDailySubscriptionRefresh } from '../src/subscriptions/scheduler.js';
+import { createDailySubscriptionRefreshRun, runDailySubscriptionRefresh } from '../src/subscriptions/scheduler.js';
 
 function createDb() {
   const db = createPublicSearchDatabase(':memory:');
@@ -26,7 +26,6 @@ describe('subscription sync service', () => {
 
       const result = await runDailySubscriptionRefresh(db, {
         today: '2026-06-27',
-        periodDays: 31,
         overdueGraceDays: 1,
         enqueueAt: new Date('2026-06-27T00:00:00.000Z')
       });
@@ -55,13 +54,11 @@ describe('subscription sync service', () => {
 
       await runDailySubscriptionRefresh(db, {
         today: '2026-06-27',
-        periodDays: 31,
         overdueGraceDays: 1,
         enqueueAt: new Date('2026-06-27T00:00:00.000Z')
       });
       const duplicate = await runDailySubscriptionRefresh(db, {
         today: '2026-06-27',
-        periodDays: 31,
         overdueGraceDays: 1,
         enqueueAt: new Date('2026-06-27T01:00:00.000Z')
       });
@@ -78,13 +75,11 @@ describe('subscription sync service', () => {
     try {
       await runDailySubscriptionRefresh(db, {
         today: '2026-06-27',
-        periodDays: 31,
         overdueGraceDays: 1,
         enqueueAt: new Date('2026-06-27T00:00:00.000Z')
       });
       const nextDay = await runDailySubscriptionRefresh(db, {
         today: '2026-06-28',
-        periodDays: 31,
         overdueGraceDays: 1,
         enqueueAt: new Date('2026-06-28T00:00:00.000Z')
       });
@@ -101,7 +96,35 @@ describe('subscription sync service', () => {
     }
   });
 
-  it('applies manual start dates and writes refreshed active rows', async () => {
+  it('builds daily refresh runners without fixed period days', async () => {
+    const db = createDb();
+    try {
+      db.prepare(
+        `INSERT INTO subscription_users (
+           telegram_user_id, username, subscription_start_date, subscription_end_date, days_remaining,
+           status, unpaid_since, removed_from_group, created_at, updated_at
+         )
+         VALUES (42, 'late_user', '2026-05-26', '2026-06-26', 0, 'Unpaid', '2026-06-26', 0, '2026-05-26T00:00:00.000Z', '2026-06-26T00:00:00.000Z')`
+      ).run();
+
+      const run = createDailySubscriptionRefreshRun({
+        db,
+        overdueGraceDays: 1,
+        now: () => new Date('2026-06-27T00:00:00.000Z')
+      });
+
+      await expect(run()).resolves.toEqual({ queuedKicks: 1, skipped: false });
+      expect(db.prepare('SELECT type, payload_json FROM subscription_jobs').all()).toEqual([
+        { type: 'kick-user', payload_json: '{"telegramUserId":42}' },
+        { type: 'refresh-alert', payload_json: '{}' },
+        { type: 'refresh-sheet', payload_json: '{}' }
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('applies manual 3-month start dates and writes refreshed active rows', async () => {
     const db = createDb();
     try {
       db.prepare(
@@ -109,16 +132,15 @@ describe('subscription sync service', () => {
          VALUES (42, 'paid_user', 'Unpaid', 0, '2026-05-26T00:00:00.000Z', '2026-05-26T00:00:00.000Z')`
       ).run();
       const sheets = {
-        readRows: vi.fn(async () => [USERS_HEADER, ['42', '@paid_user', '2026-05-26', '', '', '', '']]),
+        readRows: vi.fn(async () => [USERS_HEADER, ['42', '@paid_user', '2026-05-26', '3 Months', '', '', '', '']]),
         replaceRows: vi.fn(async () => undefined),
         appendRows: vi.fn(async () => undefined)
       };
 
       const result = await syncSubscriptionsFromSheet(db, sheets, {
-        usersRange: 'Users!A:G',
+        usersRange: 'Users!A:H',
         historyRange: 'History!A:G',
-        now: new Date('2026-05-26T00:00:00.000Z'),
-        periodDays: 31
+        now: new Date('2026-05-26T00:00:00.000Z')
       });
 
       expect(result).toEqual({
@@ -126,9 +148,89 @@ describe('subscription sync service', () => {
         skippedUnknownUsers: 0,
         paidUsers: []
       });
-      expect(sheets.replaceRows).toHaveBeenCalledWith('Users!A:G', [
+      expect(sheets.replaceRows).toHaveBeenCalledWith('Users!A:H', [
         USERS_HEADER,
-        ['42', '@paid_user', '2026-05-26', '2026-06-26', '31', 'Subscribe', expect.any(String)]
+        ['42', '@paid_user', '2026-05-26', '3 Months', '2026-08-26', '92', 'Subscribe', expect.any(String)]
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('updates an existing subscription when only the plan changes', async () => {
+    const db = createDb();
+    try {
+      db.prepare(
+        `INSERT INTO subscription_users (
+           telegram_user_id, username, subscription_start_date, subscription_end_date, days_remaining,
+           status, removed_from_group, created_at, updated_at
+         )
+         VALUES (42, 'paid_user', '2026-05-26', '2026-06-26', 31, 'Subscribe', 0, '2026-05-26T00:00:00.000Z', '2026-05-26T00:00:00.000Z')`
+      ).run();
+      const sheets = {
+        readRows: vi.fn(async () => [USERS_HEADER, ['42', '@paid_user', '2026-05-26', '3 Months', '', '', '', '']]),
+        replaceRows: vi.fn(async () => undefined),
+        appendRows: vi.fn(async () => undefined)
+      };
+
+      const result = await syncSubscriptionsFromSheet(db, sheets, {
+        usersRange: 'Users!A:H',
+        historyRange: 'History!A:G',
+        now: new Date('2026-05-26T00:00:00.000Z')
+      });
+
+      expect(result).toEqual({
+        updatedUsers: 1,
+        skippedUnknownUsers: 0,
+        paidUsers: []
+      });
+      expect(getSubscriptionUser(db, 42)).toEqual(
+        expect.objectContaining({
+          subscriptionStartDate: '2026-05-26',
+          subscriptionPlanMonths: 3,
+          subscriptionEndDate: '2026-08-26',
+          daysRemaining: 92,
+          status: 'Subscribe'
+        })
+      );
+      expect(sheets.replaceRows).toHaveBeenCalledWith('Users!A:H', [
+        USERS_HEADER,
+        ['42', '@paid_user', '2026-05-26', '3 Months', '2026-08-26', '92', 'Subscribe', expect.any(String)]
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('defaults blank paid plan cells to one month and writes the canonical plan label', async () => {
+    const db = createDb();
+    try {
+      db.prepare(
+        `INSERT INTO subscription_users (telegram_user_id, username, status, removed_from_group, created_at, updated_at)
+         VALUES (42, 'paid_user', 'Unpaid', 0, '2026-05-26T00:00:00.000Z', '2026-05-26T00:00:00.000Z')`
+      ).run();
+      const sheets = {
+        readRows: vi.fn(async () => [USERS_HEADER, ['42', '@paid_user', '2026-05-26', '', '', '', '', '']]),
+        replaceRows: vi.fn(async () => undefined),
+        appendRows: vi.fn(async () => undefined)
+      };
+
+      const result = await syncSubscriptionsFromSheet(db, sheets, {
+        usersRange: 'Users!A:H',
+        historyRange: 'History!A:G',
+        now: new Date('2026-05-26T00:00:00.000Z')
+      });
+
+      expect(result.updatedUsers).toBe(1);
+      expect(getSubscriptionUser(db, 42)).toEqual(
+        expect.objectContaining({
+          subscriptionPlanMonths: 1,
+          subscriptionEndDate: '2026-06-26'
+        })
+      );
+      expect(sheets.replaceRows).toHaveBeenCalledWith('Users!A:H', [
+        USERS_HEADER,
+        ['42', '@paid_user', '2026-05-26', '1 Month', '2026-06-26', '31', 'Subscribe', expect.any(String)]
       ]);
     } finally {
       db.close();
@@ -139,20 +241,19 @@ describe('subscription sync service', () => {
     const db = createDb();
     try {
       const sheets = {
-        readRows: vi.fn(async () => [USERS_HEADER, ['99', '@stranger', '2026-05-26', '', '', '', '']]),
+        readRows: vi.fn(async () => [USERS_HEADER, ['99', '@stranger', '2026-05-26', '1 Month', '', '', '', '']]),
         replaceRows: vi.fn(async () => undefined),
         appendRows: vi.fn(async () => undefined)
       };
 
       await expect(
         syncSubscriptionsFromSheet(db, sheets, {
-          usersRange: 'Users!A:G',
+          usersRange: 'Users!A:H',
           historyRange: 'History!A:G',
-          now: new Date('2026-05-26T00:00:00.000Z'),
-          periodDays: 31
+          now: new Date('2026-05-26T00:00:00.000Z')
         })
       ).resolves.toEqual({ updatedUsers: 0, skippedUnknownUsers: 1, paidUsers: [] });
-      expect(sheets.replaceRows).toHaveBeenCalledWith('Users!A:G', [USERS_HEADER]);
+      expect(sheets.replaceRows).toHaveBeenCalledWith('Users!A:H', [USERS_HEADER]);
     } finally {
       db.close();
     }
@@ -170,16 +271,15 @@ describe('subscription sync service', () => {
            '2026-05-26T00:00:00.000Z', '2026-06-27T00:00:00.000Z')`
       ).run();
       const sheets = {
-        readRows: vi.fn(async () => [USERS_HEADER, ['42', '@returning_user', '2026-06-28', '', '', '', '']]),
+        readRows: vi.fn(async () => [USERS_HEADER, ['42', '@returning_user', '2026-06-28', '1 Month', '', '', '', '']]),
         replaceRows: vi.fn(async () => undefined),
         appendRows: vi.fn(async () => undefined)
       };
 
       const result = await syncSubscriptionsFromSheet(db, sheets, {
-        usersRange: 'Users!A:G',
+        usersRange: 'Users!A:H',
         historyRange: 'History!A:G',
-        now: new Date('2026-06-28T00:00:00.000Z'),
-        periodDays: 31
+        now: new Date('2026-06-28T00:00:00.000Z')
       });
 
       expect(result.updatedUsers).toBe(1);
@@ -212,16 +312,15 @@ describe('subscription sync service', () => {
          )`
       ).run();
       const sheets = {
-        readRows: vi.fn(async () => [USERS_HEADER, ['42', '@returning_user', '2026-06-28', '', '', '', '']]),
+        readRows: vi.fn(async () => [USERS_HEADER, ['42', '@returning_user', '2026-06-28', '1 Month', '', '', '', '']]),
         replaceRows: vi.fn(async () => undefined),
         appendRows: vi.fn(async () => undefined)
       };
 
       const result = await syncSubscriptionsFromSheet(db, sheets, {
-        usersRange: 'Users!A:G',
+        usersRange: 'Users!A:H',
         historyRange: 'History!A:G',
-        now: new Date('2026-06-28T00:00:00.000Z'),
-        periodDays: 31
+        now: new Date('2026-06-28T00:00:00.000Z')
       });
 
       expect(result).toEqual({
@@ -260,16 +359,15 @@ describe('subscription sync service', () => {
            '2026-05-26T00:00:00.000Z', '2026-06-27T00:00:00.000Z')`
       ).run();
       const sheets = {
-        readRows: vi.fn(async () => [USERS_HEADER, ['42', '@returning_user', '2026-05-01', '', '', '', '']]),
+        readRows: vi.fn(async () => [USERS_HEADER, ['42', '@returning_user', '2026-05-01', '1 Month', '', '', '', '']]),
         replaceRows: vi.fn(async () => undefined),
         appendRows: vi.fn(async () => undefined)
       };
 
       const result = await syncSubscriptionsFromSheet(db, sheets, {
-        usersRange: 'Users!A:G',
+        usersRange: 'Users!A:H',
         historyRange: 'History!A:G',
-        now: new Date('2026-06-28T00:00:00.000Z'),
-        periodDays: 31
+        now: new Date('2026-06-28T00:00:00.000Z')
       });
 
       expect(result).toEqual({ updatedUsers: 1, skippedUnknownUsers: 0, paidUsers: [] });
@@ -285,7 +383,7 @@ describe('subscription sync service', () => {
           historyExportedAt: '2026-06-27T00:01:00.000Z'
         })
       );
-      expect(sheets.replaceRows).toHaveBeenCalledWith('Users!A:G', [USERS_HEADER]);
+      expect(sheets.replaceRows).toHaveBeenCalledWith('Users!A:H', [USERS_HEADER]);
     } finally {
       db.close();
     }
@@ -311,7 +409,7 @@ describe('subscription sync service', () => {
 
       await expect(
         moveKickedUsersToHistory(db, sheets, {
-          usersRange: 'Users!A:G',
+          usersRange: 'Users!A:H',
           historyRange: 'History!A:G',
           users: [kicked]
         })
@@ -321,9 +419,9 @@ describe('subscription sync service', () => {
       expect(sheets.appendRows).toHaveBeenCalledWith('History!A:G', [
         ['42', '@late_user', 'Kicked', '2026-06-02T00:00:00.000Z', '2026-05-01', '2026-06-01', 'Overdue subscription removed']
       ]);
-      expect(sheets.replaceRows).toHaveBeenCalledWith('Users!A:G', [
+      expect(sheets.replaceRows).toHaveBeenCalledWith('Users!A:H', [
         USERS_HEADER,
-        ['43', '@active_user', '2026-05-26', '2026-06-26', '31', 'Subscribe', '2026-05-26T00:00:00.000Z']
+        ['43', '@active_user', '2026-05-26', '1 Month', '2026-06-26', '31', 'Subscribe', '2026-05-26T00:00:00.000Z']
       ]);
     } finally {
       db.close();
@@ -353,7 +451,7 @@ describe('subscription sync service', () => {
 
       await expect(
         moveKickedUsersToHistory(db, sheets, {
-          usersRange: 'Users!A:G',
+          usersRange: 'Users!A:H',
           historyRange: 'History!A:G',
           users: [kicked]
         })
@@ -364,7 +462,7 @@ describe('subscription sync service', () => {
 
       await expect(
         moveKickedUsersToHistory(db, sheets, {
-          usersRange: 'Users!A:G',
+          usersRange: 'Users!A:H',
           historyRange: 'History!A:G',
           users: [kicked]
         })
@@ -372,9 +470,9 @@ describe('subscription sync service', () => {
 
       expect(sheets.appendRows).toHaveBeenCalledTimes(1);
       expect(sheets.replaceRows).toHaveBeenCalledTimes(2);
-      expect(sheets.replaceRows).toHaveBeenLastCalledWith('Users!A:G', [
+      expect(sheets.replaceRows).toHaveBeenLastCalledWith('Users!A:H', [
         USERS_HEADER,
-        ['43', '@active_user', '2026-05-26', '2026-06-26', '31', 'Subscribe', '2026-05-26T00:00:00.000Z']
+        ['43', '@active_user', '2026-05-26', '1 Month', '2026-06-26', '31', 'Subscribe', '2026-05-26T00:00:00.000Z']
       ]);
     } finally {
       db.close();

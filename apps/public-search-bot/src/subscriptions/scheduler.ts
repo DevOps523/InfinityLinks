@@ -5,7 +5,6 @@ import { listKickCandidates, recalculateSubscriptions } from './repository.js';
 
 export type DailySubscriptionRefreshOptions = {
   today: string;
-  periodDays: number;
   overdueGraceDays: number;
   enqueueAt: Date;
 };
@@ -29,7 +28,7 @@ export async function runDailySubscriptionRefresh(
       return { queuedKicks: 0, skipped: true };
     }
 
-    recalculateSubscriptions(db, options.today, options.periodDays);
+    recalculateSubscriptions(db, options.today);
     const kickCandidates = listKickCandidates(db, options.today, options.overdueGraceDays);
 
     for (const user of kickCandidates) {
@@ -55,7 +54,6 @@ export function startDailySubscriptionRefreshLoop(input: StartDailySubscriptionR
 
 export function createDailySubscriptionRefreshRun(input: {
   db: PublicSearchDatabase;
-  periodDays: number;
   overdueGraceDays: number;
   now?: (() => Date) | undefined;
 }) {
@@ -65,7 +63,6 @@ export function createDailySubscriptionRefreshRun(input: {
     const enqueueAt = now();
     return runDailySubscriptionRefresh(input.db, {
       today: todayDateString(enqueueAt),
-      periodDays: input.periodDays,
       overdueGraceDays: input.overdueGraceDays,
       enqueueAt
     });

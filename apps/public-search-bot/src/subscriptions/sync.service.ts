@@ -11,6 +11,7 @@ import {
 } from './repository.js';
 import { todayDateString } from './date.js';
 import { parseUsersSheetRows, toHistorySheetRow, toUsersSheetRows } from './sheet.mapper.js';
+import { DEFAULT_SUBSCRIPTION_PLAN_MONTHS } from './plan.js';
 
 type SyncSheetsClient = Pick<GoogleSheetsClient, 'readRows' | 'replaceRows' | 'appendRows'>;
 
@@ -18,7 +19,6 @@ export type SyncSubscriptionsFromSheetOptions = {
   usersRange: string;
   historyRange: string;
   now: Date;
-  periodDays: number;
 };
 
 export type SyncSubscriptionsFromSheetResult = {
@@ -34,7 +34,7 @@ export async function syncSubscriptionsFromSheet(
 ): Promise<SyncSubscriptionsFromSheetResult> {
   const rows = await sheets.readRows(options.usersRange);
   const parsedRows = parseUsersSheetRows(rows);
-  recalculateSubscriptions(db, todayDateString(options.now), options.periodDays);
+  recalculateSubscriptions(db, todayDateString(options.now));
   let updatedUsers = 0;
   let skippedUnknownUsers = 0;
   const paidUsers: SubscriptionUser[] = [];
@@ -44,20 +44,21 @@ export async function syncSubscriptionsFromSheet(
       continue;
     }
 
+    const planMonths = row.planMonths ?? DEFAULT_SUBSCRIPTION_PLAN_MONTHS;
     const current = getSubscriptionUser(db, row.telegramUserId);
     if (!current) {
       skippedUnknownUsers += 1;
       continue;
     }
 
-    if (current.subscriptionStartDate === row.startDate) {
+    if (current.subscriptionStartDate === row.startDate && current.subscriptionPlanMonths === planMonths) {
       if (current.removedFromGroup) {
         const paidUser = applySubscriptionStartDate(
           db,
           row.telegramUserId,
           row.startDate,
-          options.now,
-          options.periodDays
+          planMonths,
+          options.now
         );
         if (needsUnban(paidUser)) {
           paidUsers.push(paidUser);
@@ -66,7 +67,7 @@ export async function syncSubscriptionsFromSheet(
       continue;
     }
 
-    const paidUser = applySubscriptionStartDate(db, row.telegramUserId, row.startDate, options.now, options.periodDays);
+    const paidUser = applySubscriptionStartDate(db, row.telegramUserId, row.startDate, planMonths, options.now);
     if (needsUnban(paidUser)) {
       paidUsers.push(paidUser);
     }

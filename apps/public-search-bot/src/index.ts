@@ -56,8 +56,7 @@ async function main() {
     const result = await syncSubscriptionsFromSheet(db, sheets, {
       usersRange: config.googleSheetsUsersRange,
       historyRange: config.googleSheetsHistoryRange,
-      now: new Date(),
-      periodDays: config.subscriptionPeriodDays
+      now: new Date()
     });
 
     for (const user of result.paidUsers) {
@@ -227,7 +226,6 @@ async function main() {
       try {
         await createDailySubscriptionRefreshRun({
           db,
-          periodDays: config.subscriptionPeriodDays,
           overdueGraceDays: config.subscriptionOverdueGraceDays
         })();
         statusTracker.clearError('subscription_daily_refresh');

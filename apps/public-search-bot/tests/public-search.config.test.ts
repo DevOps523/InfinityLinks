@@ -70,7 +70,7 @@ describe('loadPublicSearchConfig', () => {
       subscriptionGroupChatId: -1003963665033,
       subscriptionAlertThreadId: 46,
       subscriptionAdminContact: '@seinen_illuminatiks',
-      subscriptionTrialHours: 24,
+      subscriptionTrialSearchLimit: 5,
       subscriptionPeriodDays: 31,
       subscriptionOverdueGraceDays: 1,
       subscriptionAdminToken: 'admin-token',
@@ -210,7 +210,7 @@ describe('loadPublicSearchConfig', () => {
       subscriptionGroupChatId: -1003963665033,
       subscriptionAlertThreadId: 46,
       subscriptionAdminContact: '@seinen_illuminatiks',
-      subscriptionTrialHours: 24,
+      subscriptionTrialSearchLimit: 5,
       subscriptionPeriodDays: 31,
       subscriptionOverdueGraceDays: 1,
       subscriptionAdminToken: 'admin-token',
@@ -231,7 +231,7 @@ describe('loadPublicSearchConfig', () => {
         SUBSCRIPTION_GROUP_CHAT_ID: '-100123',
         SUBSCRIPTION_ALERT_THREAD_ID: '47',
         SUBSCRIPTION_ADMIN_CONTACT: ' @admin_contact ',
-        SUBSCRIPTION_TRIAL_HOURS: '12',
+        SUBSCRIPTION_TRIAL_SEARCH_LIMIT: '7',
         SUBSCRIPTION_PERIOD_DAYS: '30',
         SUBSCRIPTION_OVERDUE_GRACE_DAYS: '2',
         SUBSCRIPTION_ADMIN_TOKEN: 'admin-token',
@@ -244,11 +244,26 @@ describe('loadPublicSearchConfig', () => {
       subscriptionGroupChatId: -100123,
       subscriptionAlertThreadId: 47,
       subscriptionAdminContact: '@admin_contact',
-      subscriptionTrialHours: 12,
+      subscriptionTrialSearchLimit: 7,
       subscriptionPeriodDays: 30,
       subscriptionOverdueGraceDays: 2,
       googleSheetsUsersRange: 'Members!A:G',
       googleSheetsHistoryRange: 'Payments!A:G'
     });
   });
+
+  it.each(['0', '-1', '1.5', 'not-a-number'])(
+    'rejects invalid SUBSCRIPTION_TRIAL_SEARCH_LIMIT %s',
+    (limit) => {
+      expect(() =>
+        loadPublicSearchConfig({
+          ...subscriptionEnv,
+          PUBLIC_BOT_TOKEN: 'bot-token',
+          PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
+          PUBLIC_SEARCH_STATUS_TOKEN: 'status-token',
+          SUBSCRIPTION_TRIAL_SEARCH_LIMIT: limit
+        })
+      ).toThrow();
+    }
+  );
 });

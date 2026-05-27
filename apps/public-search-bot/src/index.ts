@@ -108,7 +108,7 @@ async function main() {
                 db,
                 subscription: {
                   now: () => new Date(),
-                  trialHours: config.subscriptionTrialHours,
+                  trialSearchLimit: config.subscriptionTrialSearchLimit,
                   adminContact: config.subscriptionAdminContact,
                   scheduleSheetRefresh
                 },

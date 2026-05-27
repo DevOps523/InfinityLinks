@@ -40,7 +40,7 @@ const PublicSearchEnvSchema = z.object({
   SUBSCRIPTION_GROUP_CHAT_ID: integerWithDefault(-1003963665033),
   SUBSCRIPTION_ALERT_THREAD_ID: numberWithDefault(46),
   SUBSCRIPTION_ADMIN_CONTACT: trimmedStringWithDefault('@seinen_illuminatiks'),
-  SUBSCRIPTION_TRIAL_HOURS: numberWithDefault(24),
+  SUBSCRIPTION_TRIAL_SEARCH_LIMIT: numberWithDefault(5),
   SUBSCRIPTION_PERIOD_DAYS: numberWithDefault(31),
   SUBSCRIPTION_OVERDUE_GRACE_DAYS: numberWithDefault(1),
   SUBSCRIPTION_ADMIN_TOKEN: requiredSecret('SUBSCRIPTION_ADMIN_TOKEN'),
@@ -68,7 +68,7 @@ export type PublicSearchConfig = {
   subscriptionGroupChatId: number;
   subscriptionAlertThreadId: number;
   subscriptionAdminContact: string;
-  subscriptionTrialHours: number;
+  subscriptionTrialSearchLimit: number;
   subscriptionPeriodDays: number;
   subscriptionOverdueGraceDays: number;
   subscriptionAdminToken: string;
@@ -93,7 +93,7 @@ export function loadPublicSearchConfig(env: NodeJS.ProcessEnv): PublicSearchConf
     subscriptionGroupChatId: parsed.SUBSCRIPTION_GROUP_CHAT_ID,
     subscriptionAlertThreadId: parsed.SUBSCRIPTION_ALERT_THREAD_ID,
     subscriptionAdminContact: parsed.SUBSCRIPTION_ADMIN_CONTACT,
-    subscriptionTrialHours: parsed.SUBSCRIPTION_TRIAL_HOURS,
+    subscriptionTrialSearchLimit: parsed.SUBSCRIPTION_TRIAL_SEARCH_LIMIT,
     subscriptionPeriodDays: parsed.SUBSCRIPTION_PERIOD_DAYS,
     subscriptionOverdueGraceDays: parsed.SUBSCRIPTION_OVERDUE_GRACE_DAYS,
     subscriptionAdminToken: parsed.SUBSCRIPTION_ADMIN_TOKEN,

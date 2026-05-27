@@ -43,7 +43,7 @@ export type HandlerDeps = {
   db: AppDatabase;
   subscription: {
     now: () => Date;
-    trialHours: number;
+    trialSearchLimit: number;
     adminContact: string;
     scheduleSheetRefresh?: ((now: Date) => void) | undefined;
   };
@@ -182,7 +182,7 @@ async function handleSearch(deps: HandlerDeps, chat: MessageChat, user: Telegram
   const access = evaluateSearchAccess(deps.db, {
     user,
     now,
-    trialHours: deps.subscription.trialHours
+    trialSearchLimit: deps.subscription.trialSearchLimit
   });
 
   if (!access.allowed) {
@@ -235,7 +235,7 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
   const access = evaluateSearchAccess(deps.db, {
     user: getTelegramUser(callbackQuery.from),
     now,
-    trialHours: deps.subscription.trialHours
+    trialSearchLimit: deps.subscription.trialSearchLimit
   });
 
   if (!access.allowed) {

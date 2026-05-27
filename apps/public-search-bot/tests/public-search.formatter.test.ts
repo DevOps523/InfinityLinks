@@ -32,8 +32,8 @@ describe('public search bot formatter', () => {
         '/search inception',
         '/search breaking bad',
         '',
-        'You have 1 day free trial access when you search.',
-        'After the trial, subscription is required to view download links.'
+        'You get 5 free movie or TV searches.',
+        'After that, subscription is required to keep going.'
       ].join('\n')
     );
     expect(formatStartMessage(handles).replyMarkup).toBeUndefined();

@@ -1,9 +1,20 @@
 import type { PublicSearchDatabase } from '../db/database.js';
 import type { SubscriptionStatus, TelegramUserIdentity } from './repository.js';
-import { getSubscriptionUser, startTrialIfEligible, upsertSeenTelegramUser } from './repository.js';
+import {
+  consumeTrialSearchIfAllowed,
+  getSubscriptionUser,
+  startTrialIfEligible,
+  upsertSeenTelegramUser,
+  validateTrialSearchLimit
+} from './repository.js';
 
 export type SearchAccessResult =
-  | { allowed: true; status: SubscriptionStatus; trialStarted: boolean }
+  | {
+      allowed: true;
+      status: SubscriptionStatus;
+      trialStarted: boolean;
+      trialSearchesUsed?: number | undefined;
+    }
   | {
       allowed: false;
       reason: 'subscription-required';
@@ -16,18 +27,35 @@ export function evaluateSearchAccess(
   input: {
     user: TelegramUserIdentity | undefined;
     now: Date;
-    trialHours: number;
+    trialSearchLimit: number;
   }
 ): SearchAccessResult {
   if (!input.user) {
     return { allowed: false, reason: 'subscription-required', trialStarted: false };
   }
 
-  const trialHours = validateTrialHours(input.trialHours);
-  // Public /search and callback interactions refresh the latest Telegram username here; Telegram does not emit
-  // chat_member updates for username-only changes.
+  validateTrialSearchLimit(input.trialSearchLimit);
   upsertSeenTelegramUser(db, input.user, input.now);
-  const trial = startTrialIfEligible(db, input.user, input.now, trialHours);
+  const user = getSubscriptionUser(db, input.user.id);
+
+  return evaluateExistingUser(user);
+}
+
+export function consumeSuccessfulSearchAccess(
+  db: PublicSearchDatabase,
+  input: {
+    user: TelegramUserIdentity | undefined;
+    now: Date;
+    trialSearchLimit: number;
+  }
+): SearchAccessResult {
+  if (!input.user) {
+    return { allowed: false, reason: 'subscription-required', trialStarted: false };
+  }
+
+  validateTrialSearchLimit(input.trialSearchLimit);
+  upsertSeenTelegramUser(db, input.user, input.now);
+  const trial = startTrialIfEligible(db, input.user, input.now);
   const user = getSubscriptionUser(db, input.user.id);
 
   if (!user) {
@@ -42,17 +70,44 @@ export function evaluateSearchAccess(
     return { allowed: true, status: user.status, trialStarted: false };
   }
 
-  if (user.status === 'Trial' && user.trialExpiresAt && input.now.getTime() <= Date.parse(user.trialExpiresAt)) {
-    return { allowed: true, status: 'Trial', trialStarted: trial.started };
+  if (user.status === 'Trial') {
+    const consumed = consumeTrialSearchIfAllowed(db, input.user.id, input.now, input.trialSearchLimit);
+    if (consumed) {
+      return {
+        allowed: true,
+        status: 'Trial',
+        trialStarted: trial.started,
+        trialSearchesUsed: consumed.trialSearchesUsed
+      };
+    }
+
+    return { allowed: false, reason: 'subscription-required', status: 'Trial', trialStarted: false };
   }
 
   return { allowed: false, reason: 'subscription-required', status: user.status, trialStarted: false };
 }
 
-function validateTrialHours(trialHours: number) {
-  if (!Number.isInteger(trialHours) || trialHours <= 0) {
-    throw new Error('trialHours must be a positive integer');
+function evaluateExistingUser(user: ReturnType<typeof getSubscriptionUser>): SearchAccessResult {
+  if (!user) {
+    return { allowed: false, reason: 'subscription-required', trialStarted: false };
   }
 
-  return trialHours;
+  if (user.status === 'Kicked' || user.removedFromGroup) {
+    return { allowed: false, reason: 'subscription-required', status: user.status, trialStarted: false };
+  }
+
+  if (user.status === 'Subscribe' || user.status === 'Needs Attention') {
+    return { allowed: true, status: user.status, trialStarted: false };
+  }
+
+  if (user.status === 'Trial') {
+    return {
+      allowed: true,
+      status: 'Trial',
+      trialStarted: false,
+      trialSearchesUsed: user.trialSearchesUsed
+    };
+  }
+
+  return { allowed: false, reason: 'subscription-required', status: user.status, trialStarted: false };
 }

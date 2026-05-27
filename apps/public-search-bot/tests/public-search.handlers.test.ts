@@ -618,6 +618,10 @@ describe('public search bot handlers', () => {
       expect(sentMessages[0].chatId).toBe(groupChatId);
       expect(sentMessages[0].text).toBe(privateChatRequiredMessage);
       expect(JSON.stringify(sentMessages)).not.toContain('providers.example');
+      expect(deps.subscription.scheduleSheetRefresh).not.toHaveBeenCalled();
+      expect(
+        db.prepare('SELECT telegram_user_id FROM subscription_users WHERE telegram_user_id = 42').get()
+      ).toBeUndefined();
     } finally {
       db.close();
     }

@@ -166,6 +166,18 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
 
 async function handleSearch(deps: HandlerDeps, chat: MessageChat, user: TelegramUserIdentity | undefined, query: string) {
   const chatId = chat.id;
+
+  if (!hasPublicCatalog(deps.db)) {
+    await sendBotMessage(deps, chatId, formatUnavailableMessage());
+    return;
+  }
+
+  const results = searchPublicCatalog(deps.db, query, 10);
+  if (hasProviderLinks(results) && !isPrivateChat(chat)) {
+    await sendBotMessage(deps, chatId, formatPrivateChatRequiredMessage());
+    return;
+  }
+
   const now = deps.subscription.now();
   const access = evaluateSearchAccess(deps.db, {
     user,
@@ -179,17 +191,6 @@ async function handleSearch(deps: HandlerDeps, chat: MessageChat, user: Telegram
   }
 
   deps.subscription.scheduleSheetRefresh?.(now);
-
-  if (!hasPublicCatalog(deps.db)) {
-    await sendBotMessage(deps, chatId, formatUnavailableMessage());
-    return;
-  }
-
-  const results = searchPublicCatalog(deps.db, query, 10);
-  if (hasProviderLinks(results) && !isPrivateChat(chat)) {
-    await sendBotMessage(deps, chatId, formatPrivateChatRequiredMessage());
-    return;
-  }
 
   const messages =
     results.length > 0 ? formatSearchResults(results, getHandles(deps)) : [formatNoResultsMessage(getHandles(deps))];

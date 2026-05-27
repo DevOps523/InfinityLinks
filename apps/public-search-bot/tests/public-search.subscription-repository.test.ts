@@ -443,7 +443,8 @@ describe('subscription repository', () => {
       recalculateSubscriptions(db, '2026-06-26');
       db.prepare('UPDATE subscription_users SET removed_from_group = 1 WHERE telegram_user_id = 42').run();
 
-      expect(isKickStillDue(db, 42, '2026-06-27', 1)).toBe(false);
+      expect(listKickCandidates(db, '2026-06-27', 1).map((user) => user.telegramUserId)).toEqual([]);
+      expect(isKickStillDue(db, 42, '2026-06-27', 1)).toBe(true);
       expect(
         markSubscriptionUserKickedIfStillDue(
           db,

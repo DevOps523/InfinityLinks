@@ -368,7 +368,6 @@ export function isKickStillDue(
   return Boolean(
     user &&
       user.status === 'Unpaid' &&
-      !user.removedFromGroup &&
       user.unpaidSince &&
       dateDifferenceDays(user.unpaidSince, today) >= graceDays
   );

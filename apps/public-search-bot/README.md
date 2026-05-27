@@ -1,8 +1,8 @@
 # Public Search Bot
 
-Standalone VPS app for the public InfinityLinks Telegram search bot. This app runs only the public bot and sync API. The private InfinityLinks admin app stays on your local machine.
+Standalone VPS app for the public InfinityLinks Telegram search bot. This app runs only the public bot, sync API, and subscription admin API. The private InfinityLinks admin app stays on your local machine.
 
-The public bot uses Telegram long polling, so you do not need to configure a Telegram webhook. The VPS only needs to expose the HTTP API used by the local admin app for catalog sync and status checks.
+The public bot uses Telegram long polling, so you do not need to configure a Telegram webhook. The VPS only needs to expose the HTTP APIs used by the local admin app for catalog sync and status checks, plus the subscription admin endpoints used by Google Apps Script.
 
 ## Requirements
 
@@ -306,7 +306,7 @@ sudo chmod 640 /opt/infinitylinks-public-search-bot/google-service-account.json
 
 ```bash
 cd /opt/infinitylinks-public-search-bot
-set -a; . ./.env; set +a
+set -a; set +H; . ./.env; set +a
 npm run build
 npm run db:migrate
 sudo chown -R www-data:www-data /opt/infinitylinks-public-search-bot/data
@@ -337,7 +337,7 @@ Open a second SSH terminal and test status:
 
 ```bash
 cd /opt/infinitylinks-public-search-bot
-set -a; . ./.env; set +a
+set -a; set +H; . ./.env; set +a
 curl -H "Authorization: Bearer $PUBLIC_SEARCH_STATUS_TOKEN" http://127.0.0.1:3001/api/status
 ```
 
@@ -424,7 +424,7 @@ From the VPS:
 
 ```bash
 cd /opt/infinitylinks-public-search-bot
-set -a; . ./.env; set +a
+set -a; set +H; . ./.env; set +a
 curl -H "Authorization: Bearer $PUBLIC_SEARCH_STATUS_TOKEN" http://127.0.0.1:3001/api/status
 ```
 
@@ -519,7 +519,7 @@ cd /opt/infinitylinks-public-search-bot
 sudo systemctl stop public-search-bot
 # upload or replace the app files with the new apps/public-search-bot contents
 npm ci
-set -a; . ./.env; set +a
+set -a; set +H; . ./.env; set +a
 npm run build
 npm run db:migrate
 sudo chown -R www-data:www-data /opt/infinitylinks-public-search-bot/data

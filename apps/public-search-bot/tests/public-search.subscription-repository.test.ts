@@ -119,13 +119,7 @@ describe('subscription repository', () => {
     try {
       upsertSeenTelegramUser(db, { id: 42, username: 'paid_user' }, new Date('2026-05-26T00:00:00.000Z'));
 
-      const paid = applySubscriptionStartDate(
-        db,
-        42,
-        '2026-05-26',
-        new Date('2026-05-26T00:00:00.000Z'),
-        31
-      );
+      const paid = applySubscriptionStartDate(db, 42, '2026-05-26', 1, new Date('2026-05-26T00:00:00.000Z'));
 
       expect(paid).toMatchObject({
         subscriptionPlanMonths: 1,
@@ -133,7 +127,7 @@ describe('subscription repository', () => {
         daysRemaining: 31
       });
 
-      recalculateSubscriptions(db, '2026-06-25', 31);
+      recalculateSubscriptions(db, '2026-06-25');
       expect(getSubscriptionUser(db, 42)).toMatchObject({
         subscriptionPlanMonths: 1,
         daysRemaining: 1,

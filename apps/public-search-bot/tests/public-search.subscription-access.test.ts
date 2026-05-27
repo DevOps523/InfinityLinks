@@ -64,7 +64,7 @@ describe('subscription access service', () => {
         now: new Date('2026-05-26T00:00:00.000Z'),
         trialSearchLimit: 5
       });
-      applySubscriptionStartDate(db, 42, '2026-05-26', new Date('2026-05-26T00:00:00.000Z'), 31);
+      applySubscriptionStartDate(db, 42, '2026-05-26', 1, new Date('2026-05-26T00:00:00.000Z'));
 
       expect(
         consumeSuccessfulSearchAccess(db, {

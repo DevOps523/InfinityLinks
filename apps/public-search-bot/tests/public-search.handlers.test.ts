@@ -623,7 +623,7 @@ describe('public search bot handlers', () => {
         deps,
         messageUpdate('/search inception', { from: { id: 42, username: 'paid_user' } })
       );
-      applySubscriptionStartDate(db, 42, '2026-05-26', new Date('2026-05-26T00:00:00.000Z'), 31);
+      applySubscriptionStartDate(db, 42, '2026-05-26', 1, new Date('2026-05-26T00:00:00.000Z'));
       sentMessages.length = 0;
 
       await handleTelegramUpdate(

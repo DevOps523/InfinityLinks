@@ -236,7 +236,7 @@ describe('loadPublicSearchConfig', () => {
         SUBSCRIPTION_OVERDUE_GRACE_DAYS: '2',
         SUBSCRIPTION_ADMIN_TOKEN: 'admin-token',
         GOOGLE_SHEETS_SPREADSHEET_ID: 'sheet-id',
-        GOOGLE_SHEETS_USERS_RANGE: ' Members!A:G ',
+        GOOGLE_SHEETS_USERS_RANGE: ' Members!A:H ',
         GOOGLE_SHEETS_HISTORY_RANGE: ' Payments!A:G ',
         GOOGLE_SERVICE_ACCOUNT_KEY_FILE: '/secure/google.json'
       })
@@ -247,7 +247,7 @@ describe('loadPublicSearchConfig', () => {
       subscriptionTrialSearchLimit: 7,
       subscriptionPeriodDays: 30,
       subscriptionOverdueGraceDays: 2,
-      googleSheetsUsersRange: 'Members!A:G',
+      googleSheetsUsersRange: 'Members!A:H',
       googleSheetsHistoryRange: 'Payments!A:G'
     });
   });

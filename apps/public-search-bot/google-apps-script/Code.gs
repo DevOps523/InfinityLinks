@@ -7,6 +7,10 @@ function getSubscriptionApiConfig_() {
     throw new Error('Set SUBSCRIPTION_API_BASE_URL and SUBSCRIPTION_ADMIN_TOKEN in Script Properties.');
   }
 
+  if (!/^https:\/\//i.test(baseUrl)) {
+    throw new Error('SUBSCRIPTION_API_BASE_URL must use https.');
+  }
+
   return { baseUrl: baseUrl.replace(/\/$/, ''), token };
 }
 

@@ -17,6 +17,26 @@ function trimmedStringWithDefault(defaultValue: string) {
   return z.preprocess(emptyStringToUndefined, z.string().trim().min(1).default(defaultValue));
 }
 
+function httpsUrl(name: string) {
+  return z.preprocess(
+    emptyStringToUndefined,
+    z
+      .string()
+      .trim()
+      .url()
+      .refine((value) => {
+        try {
+          return new URL(value).protocol === 'https:';
+        } catch {
+          return false;
+        }
+      }, {
+        message: `${name} must use https`
+      })
+      .optional()
+  );
+}
+
 const EnvSchema = z.object({
   TMDB_API_KEY: requiredSecret('TMDB_API_KEY'),
   TELEGRAM_BOT_TOKEN: requiredSecret('TELEGRAM_BOT_TOKEN'),
@@ -30,9 +50,9 @@ const EnvSchema = z.object({
     }),
   PORT: z.coerce.number().int().positive().default(3000),
   DATABASE_PATH: z.string().trim().min(1).default('./data/infinitylinks.sqlite'),
-  PUBLIC_SEARCH_SYNC_URL: OptionalTrimmedString,
+  PUBLIC_SEARCH_SYNC_URL: httpsUrl('PUBLIC_SEARCH_SYNC_URL'),
   PUBLIC_SEARCH_SYNC_TOKEN: OptionalTrimmedString,
-  PUBLIC_SEARCH_STATUS_URL: OptionalTrimmedString,
+  PUBLIC_SEARCH_STATUS_URL: httpsUrl('PUBLIC_SEARCH_STATUS_URL'),
   PUBLIC_SEARCH_STATUS_TOKEN: OptionalTrimmedString,
   PUBLIC_SEARCH_GROUP_HANDLE: trimmedStringWithDefault('@infinitylinks69')
 }).refine(

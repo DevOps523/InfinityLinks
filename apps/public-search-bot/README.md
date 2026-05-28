@@ -361,10 +361,13 @@ Confirm these values:
 ```ini
 WorkingDirectory=/opt/infinitylinks-public-search-bot
 EnvironmentFile=/opt/infinitylinks-public-search-bot/.env
+Environment=NODE_OPTIONS=--dns-result-order=ipv4first
 ExecStart=/usr/bin/npm start
 User=infinitylinks
 Group=infinitylinks
 ```
+
+`NODE_OPTIONS=--dns-result-order=ipv4first` makes Node try IPv4 before IPv6. Keep this line if the VPS logs frequent Telegram `ConnectTimeoutError` messages against IPv6 addresses.
 
 The example service uses `ProtectSystem=strict`, so only the SQLite data directory is writable by the app. If you place the database somewhere else, update `ReadWritePaths` to match. Do not run the app service as `www-data` on shared hosts; Nginx proxies requests and does not need access to the bot `.env` or Google service account JSON.
 
@@ -555,6 +558,19 @@ If the service starts but Telegram commands do not respond, check:
 
 ```bash
 sudo journalctl -u public-search-bot -n 100 --no-pager
+```
+
+If logs often show `ConnectTimeoutError` with an IPv6 address such as `2001:...:443`, add this line under `[Service]` in `/etc/systemd/system/public-search-bot.service`:
+
+```ini
+Environment=NODE_OPTIONS=--dns-result-order=ipv4first
+```
+
+Then reload and restart:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart public-search-bot
 ```
 
 If `/api/status` returns unauthorized, confirm the bearer token matches `PUBLIC_SEARCH_STATUS_TOKEN`.

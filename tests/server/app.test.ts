@@ -88,6 +88,25 @@ describe('admin API request guard', () => {
     }
   });
 
+  it('rejects bodyless mutating requests without browser provenance before sync work runs', async () => {
+    const db = createGuardDb();
+    const fetchMock = vi.fn<typeof fetch>();
+
+    try {
+      const guardedApp = createApp({ db, config: guardConfig, fetcher: fetchMock });
+
+      const response = await request(guardedApp)
+        .post('/api/public-search/sync')
+        .set('Host', '127.0.0.1:3000')
+        .expect(403);
+
+      expect(response.body).toEqual({ error: 'Cross-site request blocked' });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      db.close();
+    }
+  });
+
   it('rejects browser requests with a non-loopback host even when the browser reports same-origin', async () => {
     const db = createGuardDb();
 

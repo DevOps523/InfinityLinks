@@ -59,17 +59,12 @@ export function createAdminApiRequestGuard(options: AdminApiRequestGuardOptions 
       return;
     }
 
-    if (!hasBrowserProvenance(req)) {
-      next();
-      return;
-    }
-
-    if (isCrossSite(req)) {
+    if (MUTATING_METHODS.has(req.method) && req.get(ADMIN_REQUEST_HEADER) !== ADMIN_REQUEST_VALUE) {
       res.status(403).json(CROSS_SITE_BLOCKED_RESPONSE);
       return;
     }
 
-    if (MUTATING_METHODS.has(req.method) && req.get(ADMIN_REQUEST_HEADER) !== ADMIN_REQUEST_VALUE) {
+    if (hasBrowserProvenance(req) && isCrossSite(req)) {
       res.status(403).json(CROSS_SITE_BLOCKED_RESPONSE);
       return;
     }

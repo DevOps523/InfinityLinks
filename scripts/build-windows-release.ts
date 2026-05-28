@@ -68,6 +68,15 @@ async function obfuscateJavaScriptFiles(directory: string): Promise<void> {
   }));
 }
 
+async function removeUnusedExpressViewEngineDynamicRequire(filePath: string): Promise<void> {
+  const source = await fs.readFile(filePath, 'utf8');
+  await fs.writeFile(
+    filePath,
+    source.replace('var fn = require(mod).__express;', 'var fn = undefined;'),
+    'utf8'
+  );
+}
+
 function runPkg(): void {
   const args = [
     pkgBinPath,
@@ -166,13 +175,14 @@ async function main(): Promise<void> {
     target: `node${pkgNodeMajor}`,
     format: 'cjs',
     sourcemap: false,
+    legalComments: 'none',
     define: {
       'import.meta.url': JSON.stringify(pathToFileURL(bundledServerPath).href)
     },
     external: ['better-sqlite3']
   });
 
-  await obfuscateFile(bundledServerPath);
+  await removeUnusedExpressViewEngineDynamicRequire(bundledServerPath);
   await ensureBetterSqliteNativeAddon();
   await writePkgConfig();
 

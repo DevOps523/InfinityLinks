@@ -50,6 +50,20 @@ describe('loadPublicSearchConfig', () => {
     ).toThrow(/PUBLIC_SEARCH_STATUS_TOKEN must be different from PUBLIC_SEARCH_SYNC_TOKEN/);
   });
 
+  it('rejects reusing the status token as the subscription admin token after trimming', () => {
+    expect(() =>
+      loadPublicSearchConfig({
+        PUBLIC_BOT_TOKEN: 'bot-token',
+        PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
+        PUBLIC_SEARCH_STATUS_TOKEN: ' shared-token ',
+        SUBSCRIPTION_BOT_TOKEN: 'subscription-token',
+        SUBSCRIPTION_ADMIN_TOKEN: 'shared-token',
+        GOOGLE_SHEETS_SPREADSHEET_ID: 'sheet-id',
+        GOOGLE_SERVICE_ACCOUNT_KEY_FILE: '/secure/google.json'
+      })
+    ).toThrow(/SUBSCRIPTION_ADMIN_TOKEN must be different from PUBLIC_SEARCH_STATUS_TOKEN/);
+  });
+
   it('returns required secrets and default public search settings', () => {
     expect(
       loadPublicSearchConfig({

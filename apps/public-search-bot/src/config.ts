@@ -53,6 +53,9 @@ const PublicSearchEnvSchema = z.object({
 }).refine((env) => env.SUBSCRIPTION_ADMIN_TOKEN !== env.PUBLIC_SEARCH_SYNC_TOKEN, {
   message: 'SUBSCRIPTION_ADMIN_TOKEN must be different from PUBLIC_SEARCH_SYNC_TOKEN',
   path: ['SUBSCRIPTION_ADMIN_TOKEN']
+}).refine((env) => env.SUBSCRIPTION_ADMIN_TOKEN !== env.PUBLIC_SEARCH_STATUS_TOKEN, {
+  message: 'SUBSCRIPTION_ADMIN_TOKEN must be different from PUBLIC_SEARCH_STATUS_TOKEN',
+  path: ['SUBSCRIPTION_ADMIN_TOKEN']
 });
 
 export type PublicSearchConfig = {

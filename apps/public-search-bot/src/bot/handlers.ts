@@ -16,8 +16,8 @@ import {
 import type { TelegramUserIdentity } from '../subscriptions/repository.js';
 import { decodeSeasonCallback } from './callback-data.js';
 import {
-  formatClearMessage,
   formatNoResultsMessage,
+  formatPlansMessage,
   formatPrivateChatRequiredMessage,
   formatSearchValidationMessage,
   formatSearchResults,
@@ -127,12 +127,12 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
     return;
   }
 
-  if (isCommand(text, 'clear')) {
+  if (isCommand(text, 'plans')) {
     if (!(await replyIfAllowed(deps, message.chat.id, message.from?.id))) {
       return;
     }
 
-    await sendBotMessage(deps, message.chat.id, formatClearMessage());
+    await sendBotMessage(deps, message.chat.id, formatPlansMessage(deps.subscription.adminContact));
     return;
   }
 

@@ -26,6 +26,7 @@ type AppActions = {
   setSelectedTvShowId: (id: number | null) => void;
   setSelectedSeasonId: (id: number | null) => void;
   setOpenSeasonDialogOnEntry: (open: boolean) => void;
+  setFailedTelegramJobCount: (count: number) => void;
 };
 
 const refreshSafePages = new Set<PageKey>([
@@ -49,7 +50,15 @@ function pageToHash(page: PageKey) {
 
 function renderPage(page: PageKey, state: AppState, actions: AppActions) {
   const { editingMovieId, editingTvShowId, selectedTvShowId, selectedSeasonId, openSeasonDialogOnEntry } = state;
-  const { setPage, setEditingMovieId, setEditingTvShowId, setSelectedTvShowId, setSelectedSeasonId, setOpenSeasonDialogOnEntry } = actions;
+  const {
+    setPage,
+    setEditingMovieId,
+    setEditingTvShowId,
+    setSelectedTvShowId,
+    setSelectedSeasonId,
+    setOpenSeasonDialogOnEntry,
+    setFailedTelegramJobCount
+  } = actions;
 
   if (page === 'dashboard') {
     return <DashboardPage />;
@@ -116,7 +125,7 @@ function renderPage(page: PageKey, state: AppState, actions: AppActions) {
   }
 
   if (page === 'telegram-jobs') {
-    return <TelegramJobsPage />;
+    return <TelegramJobsPage onFailedJobCountChange={setFailedTelegramJobCount} />;
   }
 
   return (
@@ -140,6 +149,7 @@ export function App() {
   const [selectedTvShowId, setSelectedTvShowId] = useState<number | null>(null);
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
   const [openSeasonDialogOnEntry, setOpenSeasonDialogOnEntry] = useState(false);
+  const [failedTelegramJobCount, setFailedTelegramJobCount] = useState(0);
   const setPage = useCallback((nextPage: PageKey) => {
     setPageState(nextPage);
 
@@ -170,6 +180,7 @@ export function App() {
       <div className="app-shell">
         <Sidebar
           currentPage={page}
+          failedTelegramJobCount={failedTelegramJobCount}
           onNavigate={(nextPage) => {
             setEditingMovieId(null);
             setEditingTvShowId(null);
@@ -213,7 +224,8 @@ export function App() {
               setEditingTvShowId,
               setSelectedTvShowId,
               setSelectedSeasonId,
-              setOpenSeasonDialogOnEntry
+              setOpenSeasonDialogOnEntry,
+              setFailedTelegramJobCount
             }
           )}
         </main>

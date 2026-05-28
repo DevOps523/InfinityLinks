@@ -28,6 +28,14 @@ const subscriptionRequiredMessage = [
   '',
   'Please contact @seinen_illuminatiks to continue.'
 ].join('\n');
+const plansMessage = [
+  'Plans:',
+  '1 Month - ₱150',
+  '3 Months - ₱300',
+  '6 Months - ₱500',
+  '',
+  'Please contact @seinen_illuminatiks to subscribe.'
+].join('\n');
 const privateChatRequiredMessage = 'Open a private chat with this bot to view download links.';
 
 type SentMessage = {
@@ -234,6 +242,7 @@ describe('public search bot handlers', () => {
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0].text).toContain('Welcome to DownloadHub');
       expect(sentMessages[0].text).toContain('/search movie or tv show name');
+      expect(sentMessages[0].text).toContain('/plans');
       expect(sentMessages[0].replyMarkup).toBeUndefined();
     } finally {
       db.close();
@@ -258,16 +267,16 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('replies to /clear with a clear message without requiring subscription access', async () => {
+  it('replies to /plans with plan pricing without requiring subscription access', async () => {
     const db = createMigratedDatabase();
 
     try {
       const { deps, sentMessages } = createDeps(db);
 
-      await handleTelegramUpdate(deps, messageUpdate('/clear'));
+      await handleTelegramUpdate(deps, messageUpdate('/plans'));
 
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toBe('🧹 Cleared. Search anytime with /search movie or tv show name.');
+      expect(sentMessages[0].text).toBe(plansMessage);
       expect(sentMessages[0].replyMarkup).toBeUndefined();
     } finally {
       db.close();
@@ -351,11 +360,11 @@ describe('public search bot handlers', () => {
         }
       });
 
-      await handleTelegramUpdate(deps, messageUpdate('/clear'));
-      await handleTelegramUpdate(deps, messageUpdate('/clear'));
+      await handleTelegramUpdate(deps, messageUpdate('/plans'));
+      await handleTelegramUpdate(deps, messageUpdate('/plans'));
 
       expect(sentMessages).toHaveLength(2);
-      expect(sentMessages[0].text).toContain('Cleared');
+      expect(sentMessages[0].text).toContain('Plans:');
       expect(sentMessages[1].text).toBe('Please wait 30 seconds before trying again.');
     } finally {
       db.close();
@@ -396,8 +405,8 @@ describe('public search bot handlers', () => {
         }
       });
 
-      await handleTelegramUpdate(deps, messageUpdate('/clear'));
-      await handleTelegramUpdate(deps, messageUpdate('/clear'));
+      await handleTelegramUpdate(deps, messageUpdate('/plans'));
+      await handleTelegramUpdate(deps, messageUpdate('/plans'));
 
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0].text).toBe('Please wait 30 seconds before trying again.');
@@ -418,10 +427,10 @@ describe('public search bot handlers', () => {
         replyThrottleState: createReplyThrottleState({ now: () => now })
       });
 
-      await handleTelegramUpdate(deps, messageUpdate('/clear'));
-      await handleTelegramUpdate(deps, messageUpdate('/clear'));
+      await handleTelegramUpdate(deps, messageUpdate('/plans'));
+      await handleTelegramUpdate(deps, messageUpdate('/plans'));
       now += 30_000;
-      await handleTelegramUpdate(deps, messageUpdate('/clear'));
+      await handleTelegramUpdate(deps, messageUpdate('/plans'));
 
       expect(sentMessages).toHaveLength(2);
       expect(sentMessages[0].text).toBe('Please wait 30 seconds before trying again.');

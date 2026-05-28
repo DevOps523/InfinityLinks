@@ -13,6 +13,7 @@ export type PageKey =
 
 type SidebarProps = {
   currentPage: PageKey;
+  failedTelegramJobCount?: number;
   onNavigate: (page: PageKey) => void;
 };
 
@@ -26,7 +27,7 @@ const items: Array<{ key: PageKey; label: string; icon: typeof Film }> = [
   { key: 'telegram-jobs', label: 'Telegram Jobs', icon: Send }
 ];
 
-export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
+export function Sidebar({ currentPage, failedTelegramJobCount = 0, onNavigate }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
@@ -39,6 +40,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       <nav className="sidebar__nav" aria-label="Media navigation">
         {items.map((item) => {
           const Icon = item.icon;
+          const badgeCount = item.key === 'telegram-jobs' ? failedTelegramJobCount : 0;
           return (
             <button
               key={item.key}
@@ -48,7 +50,12 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
               onClick={() => onNavigate(item.key)}
             >
               <Icon aria-hidden="true" size={18} />
-              <span>{item.label}</span>
+              <span className="sidebar__button-label">{item.label}</span>
+              {badgeCount > 0 ? (
+                <span className="sidebar__badge" aria-hidden="true">
+                  {badgeCount}
+                </span>
+              ) : null}
             </button>
           );
         })}

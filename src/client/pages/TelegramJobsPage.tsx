@@ -17,6 +17,10 @@ type FailedTelegramJobsResponse = {
   jobs: FailedTelegramJob[];
 };
 
+type TelegramJobsPageProps = {
+  onFailedJobCountChange?: (count: number) => void;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -52,7 +56,7 @@ function formatJobLabel(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-export function TelegramJobsPage() {
+export function TelegramJobsPage({ onFailedJobCountChange }: TelegramJobsPageProps = {}) {
   const { showToast } = useToast();
   const [jobs, setJobs] = useState<FailedTelegramJob[]>([]);
   const [retryingJobId, setRetryingJobId] = useState<number | null>(null);
@@ -64,7 +68,9 @@ export function TelegramJobsPage() {
     setError('');
 
     try {
-      setJobs(await fetchFailedTelegramJobs());
+      const nextJobs = await fetchFailedTelegramJobs();
+      setJobs(nextJobs);
+      onFailedJobCountChange?.(nextJobs.length);
     } catch (jobsError) {
       const message = jobsError instanceof Error ? jobsError.message : 'Failed Telegram jobs could not be loaded';
       setJobs([]);
@@ -72,7 +78,7 @@ export function TelegramJobsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [onFailedJobCountChange]);
 
   useEffect(() => {
     void loadJobs();
@@ -99,7 +105,14 @@ export function TelegramJobsPage() {
     <section className="page-section">
       <header className="page-header">
         <div>
-          <h1>Telegram Jobs</h1>
+          <h1 className="page-title-with-badge">
+            <span>Telegram Jobs</span>
+            {jobs.length > 0 ? (
+              <span className="count-badge" aria-hidden="true">
+                {jobs.length}
+              </span>
+            ) : null}
+          </h1>
           <p>Failed publish jobs waiting for admin review.</p>
         </div>
         <button className="button button--secondary" type="button" onClick={() => void loadJobs()} disabled={isLoading}>

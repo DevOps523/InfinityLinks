@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { PublicSearchResult, PublicSeasonDetails } from '../src/search.repository.js';
 import {
-  formatClearMessage,
   formatNoResultsMessage,
+  formatPlansMessage,
   formatSearchResults,
   formatSearchValidationMessage,
   formatSeasonDetails,
@@ -27,12 +27,13 @@ describe('public search bot formatter', () => {
         '',
         '🔎 Use:',
         '/search movie or tv show name',
+        '/plans',
         '',
         '✨ Examples:',
         '/search inception',
         '/search breaking bad',
         '',
-        'You get 5 free movie or TV searches.',
+        'You get 10 free movie or TV searches.',
         'After that, subscription is required to keep going.'
       ].join('\n')
     );
@@ -43,8 +44,17 @@ describe('public search bot formatter', () => {
     );
     expect(formatSearchValidationMessage().replyMarkup).toBeUndefined();
 
-    expect(formatClearMessage().text).toBe('🧹 Cleared. Search anytime with /search movie or tv show name.');
-    expect(formatClearMessage().replyMarkup).toBeUndefined();
+    expect(formatPlansMessage('@seinen_illuminatiks').text).toBe(
+      [
+        'Plans:',
+        '1 Month - ₱150',
+        '3 Months - ₱300',
+        '6 Months - ₱500',
+        '',
+        'Please contact @seinen_illuminatiks to subscribe.'
+      ].join('\n')
+    );
+    expect(formatPlansMessage('@seinen_illuminatiks').replyMarkup).toBeUndefined();
 
     expect(formatSubscriptionRequiredMessage('@seinen_illuminatiks').text).toBe(
       [

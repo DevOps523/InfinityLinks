@@ -24,12 +24,13 @@ export function formatStartMessage(handles: PublicBotHandles): PublicBotMessage 
       '',
       '🔎 Use:',
       '/search movie or tv show name',
+      '/plans',
       '',
       '✨ Examples:',
       '/search inception',
       '/search breaking bad',
       '',
-      'You get 5 free movie or TV searches.',
+      'You get 10 free movie or TV searches.',
       'After that, subscription is required to keep going.'
     ].join('\n')
   };
@@ -41,9 +42,16 @@ export function formatSearchValidationMessage(): PublicBotMessage {
   };
 }
 
-export function formatClearMessage(): PublicBotMessage {
+export function formatPlansMessage(adminContact: string): PublicBotMessage {
   return {
-    text: '🧹 Cleared. Search anytime with /search movie or tv show name.'
+    text: [
+      'Plans:',
+      '1 Month - ₱150',
+      '3 Months - ₱300',
+      '6 Months - ₱500',
+      '',
+      `Please contact ${adminContact} to subscribe.`
+    ].join('\n')
   };
 }
 

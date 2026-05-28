@@ -325,10 +325,14 @@ describe('App', () => {
     render(<App />);
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
-    fireEvent.click(within(navigation).getByRole('button', { name: /^telegram jobs$/i }));
+    const telegramJobsButton = within(navigation).getByRole('button', { name: /^telegram jobs$/i });
+    fireEvent.click(telegramJobsButton);
 
     expect(await screen.findByRole('heading', { name: /^telegram jobs$/i })).toBeInTheDocument();
     expect(await screen.findByText('Telegram failed')).toBeInTheDocument();
+    await waitFor(() => expect(within(telegramJobsButton).getByText('1')).toBeInTheDocument());
+    expect(within(screen.getByRole('heading', { name: /^telegram jobs$/i })).getByText('1')).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: /^retry$/i }));
 
     await waitFor(() =>
@@ -336,6 +340,8 @@ describe('App', () => {
     );
     expect(await screen.findByText('Telegram job queued for retry.')).toBeInTheDocument();
     expect(await screen.findByText('No failed Telegram jobs.')).toBeInTheDocument();
+    await waitFor(() => expect(within(telegramJobsButton).queryByText('1')).not.toBeInTheDocument());
+    expect(within(screen.getByRole('heading', { name: /^telegram jobs$/i })).queryByText('1')).not.toBeInTheDocument();
     expect(failedJobsRequests).toBe(2);
   });
 

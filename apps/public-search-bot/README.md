@@ -286,19 +286,25 @@ Rules:
 
 ### 8. Set File Permissions
 
+Create the dedicated service user and group if they do not already exist:
+
+```bash
+sudo adduser --system --group --home /opt/infinitylinks-public-search-bot --no-create-home infinitylinks
+```
+
 Create the database folder and make it writable by the service user:
 
 ```bash
-sudo install -d -o www-data -g www-data /opt/infinitylinks-public-search-bot/data
-sudo chown -R www-data:www-data /opt/infinitylinks-public-search-bot/data
+sudo install -d -o infinitylinks -g infinitylinks /opt/infinitylinks-public-search-bot/data
+sudo chown -R infinitylinks:infinitylinks /opt/infinitylinks-public-search-bot/data
 ```
 
-Protect secrets:
+Protect secrets while keeping them readable by the app service group:
 
 ```bash
-sudo chown root:www-data /opt/infinitylinks-public-search-bot/.env
+sudo chown root:infinitylinks /opt/infinitylinks-public-search-bot/.env
 sudo chmod 640 /opt/infinitylinks-public-search-bot/.env
-sudo chown root:www-data /opt/infinitylinks-public-search-bot/google-service-account.json
+sudo chown root:infinitylinks /opt/infinitylinks-public-search-bot/google-service-account.json
 sudo chmod 640 /opt/infinitylinks-public-search-bot/google-service-account.json
 ```
 
@@ -309,7 +315,7 @@ cd /opt/infinitylinks-public-search-bot
 set -a; set +H; . ./.env; set +a
 npm run build
 npm run db:migrate
-sudo chown -R www-data:www-data /opt/infinitylinks-public-search-bot/data
+sudo chown -R infinitylinks:infinitylinks /opt/infinitylinks-public-search-bot/data
 ```
 
 The migration creates or updates:
@@ -356,11 +362,11 @@ Confirm these values:
 WorkingDirectory=/opt/infinitylinks-public-search-bot
 EnvironmentFile=/opt/infinitylinks-public-search-bot/.env
 ExecStart=/usr/bin/npm start
-User=www-data
-Group=www-data
+User=infinitylinks
+Group=infinitylinks
 ```
 
-The example service uses `ProtectSystem=strict`, so only the SQLite data directory is writable by the app. If you place the database somewhere else, update `ReadWritePaths` to match.
+The example service uses `ProtectSystem=strict`, so only the SQLite data directory is writable by the app. If you place the database somewhere else, update `ReadWritePaths` to match. Do not run the app service as `www-data` on shared hosts; Nginx proxies requests and does not need access to the bot `.env` or Google service account JSON.
 
 If `npm` is not at `/usr/bin/npm`, find it:
 
@@ -522,7 +528,7 @@ npm ci
 set -a; set +H; . ./.env; set +a
 npm run build
 npm run db:migrate
-sudo chown -R www-data:www-data /opt/infinitylinks-public-search-bot/data
+sudo chown -R infinitylinks:infinitylinks /opt/infinitylinks-public-search-bot/data
 sudo systemctl start public-search-bot
 sudo journalctl -u public-search-bot -n 100 --no-pager
 ```

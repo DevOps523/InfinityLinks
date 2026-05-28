@@ -218,6 +218,16 @@ async function handleSearch(deps: HandlerDeps, chat: MessageChat, user: Telegram
 
 async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable<TelegramUpdate['callback_query']>) {
   const callbackQueryId = callbackQuery.id;
+  const seasonId = callbackQuery.data ? decodeSeasonCallback(callbackQuery.data) : undefined;
+
+  if (!seasonId) {
+    await deps.replies.enqueueAnswerCallbackQuery({
+      callbackQueryId,
+      text: 'That button is no longer available.'
+    });
+    return;
+  }
+
   const callbackUser = getTelegramUser(callbackQuery.from);
   const accessClass = classifyPublicSearchAccess(deps.db, {
     user: callbackUser,
@@ -225,16 +235,7 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
   });
 
   if (accessClass === 'blocked') {
-    const chat = callbackQuery.message?.chat;
-    if (!chat || !isPrivateChat(chat)) {
-      await deps.replies.enqueueAnswerCallbackQuery({
-        callbackQueryId,
-        text: 'Open a private chat with this bot to view download links.'
-      });
-      return;
-    }
-
-    await answerSubscriptionRequiredIfAllowed(deps, callbackQueryId, chat.id, callbackUser?.id);
+    await answerSubscriptionRequiredIfAllowed(deps, callbackQueryId, callbackQuery.message?.chat.id, callbackUser?.id);
     return;
   }
 
@@ -247,16 +248,6 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
     await deps.replies.enqueueAnswerCallbackQuery({
       callbackQueryId,
       text: formatWaitMessage(rateLimit.retryAfterMs)
-    });
-    return;
-  }
-
-  const seasonId = callbackQuery.data ? decodeSeasonCallback(callbackQuery.data) : undefined;
-
-  if (!seasonId) {
-    await deps.replies.enqueueAnswerCallbackQuery({
-      callbackQueryId,
-      text: 'That button is no longer available.'
     });
     return;
   }

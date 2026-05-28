@@ -857,7 +857,26 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('rate limits invalid callback data before the invalid-callback response path', async () => {
+  it('preserves invalid callback responses for blocked users', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      upsertSeenTelegramUser(db, { id: 42, username: 'kicked_user' }, new Date('2026-05-26T00:00:00.000Z'));
+      markSubscriptionUserKicked(db, 42, new Date('2026-05-26T00:00:00.000Z'));
+      const { deps, sentMessages, callbackAnswers } = createDeps(db);
+
+      await handleTelegramUpdate(deps, callbackUpdate('movie:1', { from: { id: 42, username: 'kicked_user' } }));
+
+      expect(sentMessages).toEqual([]);
+      expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'That button is no longer available.' }]);
+      expect(deps.rateLimiter.check).not.toHaveBeenCalled();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rate limits season callbacks with structured policy input before loading details', async () => {
     const db = createMigratedDatabase();
 
     try {
@@ -868,7 +887,7 @@ describe('public search bot handlers', () => {
         }
       });
 
-      await handleTelegramUpdate(deps, callbackUpdate('movie:1'));
+      await handleTelegramUpdate(deps, callbackUpdate('season:30'));
 
       expect(deps.rateLimiter.check).toHaveBeenCalledWith({
         action: 'season',
@@ -973,7 +992,99 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('answers group season callbacks before access and catalog failure paths can send messages', async () => {
+  it('answers blocked group season callbacks with subscription required without leaking provider links', async () => {
+    const db = createMigratedDatabase();
+    const groupChatId = -100502;
+
+    try {
+      seedCatalog(db);
+      upsertSeenTelegramUser(db, { id: 42, username: 'kicked_user' }, new Date('2026-05-26T00:00:00.000Z'));
+      markSubscriptionUserKicked(db, 42, new Date('2026-05-26T00:00:00.000Z'));
+      const { deps, sentMessages, callbackAnswers } = createDeps(db);
+
+      await handleTelegramUpdate(
+        deps,
+        callbackUpdate('season:30', {
+          from: { id: 42, username: 'kicked_user' },
+          message: {
+            message_id: 11,
+            chat: { id: groupChatId, type: 'group' }
+          }
+        })
+      );
+
+      expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'Subscription required.' }]);
+      expect(sentMessages).toEqual([
+        {
+          chatId: groupChatId,
+          text: subscriptionRequiredMessage,
+          replyMarkup: undefined
+        }
+      ]);
+      expect(JSON.stringify({ sentMessages, callbackAnswers })).not.toContain('providers.example');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('answers blocked season callbacks without a message with subscription required only', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      upsertSeenTelegramUser(db, { id: 42, username: 'kicked_user' }, new Date('2026-05-26T00:00:00.000Z'));
+      markSubscriptionUserKicked(db, 42, new Date('2026-05-26T00:00:00.000Z'));
+      const { deps, sentMessages, callbackAnswers } = createDeps(db);
+
+      await handleTelegramUpdate(
+        deps,
+        callbackUpdate('season:30', {
+          from: { id: 42, username: 'kicked_user' },
+          message: undefined
+        })
+      );
+
+      expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'Subscription required.' }]);
+      expect(sentMessages).toEqual([]);
+      expect(JSON.stringify({ sentMessages, callbackAnswers })).not.toContain('providers.example');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('throttles blocked season callback answers without leaking provider links', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      upsertSeenTelegramUser(db, { id: 42, username: 'kicked_user' }, new Date('2026-05-26T00:00:00.000Z'));
+      markSubscriptionUserKicked(db, 42, new Date('2026-05-26T00:00:00.000Z'));
+      const { deps, sentMessages, callbackAnswers } = createDeps(db, {
+        rateLimiter: createPublicSearchInteractionRateLimiter({ now: () => 0 })
+      });
+
+      for (let index = 0; index < 3; index += 1) {
+        await handleTelegramUpdate(deps, callbackUpdate('season:30', { from: { id: 42, username: 'kicked_user' } }));
+      }
+
+      callbackAnswers.length = 0;
+      sentMessages.length = 0;
+      await handleTelegramUpdate(deps, callbackUpdate('season:30', { from: { id: 42, username: 'kicked_user' } }));
+
+      expect(callbackAnswers).toEqual([
+        {
+          callbackQueryId: 'callback-1',
+          text: 'Please wait 60 seconds before trying again.'
+        }
+      ]);
+      expect(sentMessages).toEqual([]);
+      expect(JSON.stringify({ sentMessages, callbackAnswers })).not.toContain('providers.example');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('answers allowed group season callbacks before catalog failure paths can send messages', async () => {
     const deniedDb = createMigratedDatabase();
     const unavailableDb = createMigratedDatabase();
     const groupChatId = -100502;
@@ -987,12 +1098,6 @@ describe('public search bot handlers', () => {
 
     try {
       seedCatalog(deniedDb);
-      upsertSeenTelegramUser(
-        deniedDb,
-        { id: 42, username: 'kicked_user' },
-        new Date('2026-05-26T00:00:00.000Z')
-      );
-      markSubscriptionUserKicked(deniedDb, 42, new Date('2026-05-26T00:00:00.000Z'));
       const denied = createDeps(deniedDb);
 
       await handleTelegramUpdate(denied.deps, callbackUpdate('season:30', groupSeasonCallback));

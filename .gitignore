@@ -6,6 +6,7 @@ apps/public-search-bot/google-service-account.json
 .env.*
 !.env.example
 dist/
+release/
 *.sqlite
 *.sqlite-*
 *.sqlite3

@@ -1,12 +1,17 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { createDatabase } from './db/database.js';
 import { migrate } from './db/migrate.js';
+import { resolveClientDistPath, resolveRuntimePath } from './runtime/paths.js';
 import { createTelegramClient } from './telegram/telegram.client.js';
 import { processNextTelegramJob } from './telegram/telegram.queue.js';
 
+dotenv.config({ path: resolveRuntimePath('.env') });
+
 const config = loadConfig(process.env);
+resolveClientDistPath();
+
 const db = createDatabase(config.databasePath);
 migrate(db);
 

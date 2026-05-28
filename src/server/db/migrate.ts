@@ -1,17 +1,29 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isPackagedRuntime, resolveSchemaAssetPath } from '../runtime/paths.js';
 import { createDatabase, type AppDatabase } from './database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export function resolveSchemaPath() {
-  const candidates = [
+  if (isPackagedRuntime()) {
+    const schemaPath = resolveSchemaAssetPath();
+
+    if (!fs.existsSync(schemaPath)) {
+      throw new Error(`Missing packaged schema.sql. Expected ${schemaPath}`);
+    }
+
+    return schemaPath;
+  }
+
+  const sourceOrBuildCandidates = [
     path.join(__dirname, 'schema.sql'),
     path.resolve(__dirname, '../../../src/server/db/schema.sql'),
     path.resolve(process.cwd(), 'src/server/db/schema.sql')
   ];
+  const candidates = [...sourceOrBuildCandidates, resolveSchemaAssetPath()];
 
   const schemaPath = candidates.find((candidate) => fs.existsSync(candidate));
 

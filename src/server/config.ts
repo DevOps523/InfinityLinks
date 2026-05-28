@@ -1,4 +1,6 @@
+import path from 'node:path';
 import { z } from 'zod';
+import { resolveRuntimePath } from './runtime/paths.js';
 
 function requiredSecret(name: string) {
   return z.string({ required_error: `${name} is required` }).trim().min(1, `${name} is required`);
@@ -82,6 +84,11 @@ export type AppConfig = {
 
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   const parsed = EnvSchema.parse(env);
+  const databasePath = parsed.DATABASE_PATH === ':memory:'
+    ? parsed.DATABASE_PATH
+    : path.isAbsolute(parsed.DATABASE_PATH)
+    ? parsed.DATABASE_PATH
+    : resolveRuntimePath(parsed.DATABASE_PATH);
 
   return {
     tmdbApiKey: parsed.TMDB_API_KEY,
@@ -89,7 +96,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     telegramChannelId: parsed.TELEGRAM_CHANNEL_ID,
     host: parsed.HOST,
     port: parsed.PORT,
-    databasePath: parsed.DATABASE_PATH,
+    databasePath,
     publicSearchSyncUrl: parsed.PUBLIC_SEARCH_SYNC_URL,
     publicSearchSyncToken: parsed.PUBLIC_SEARCH_SYNC_TOKEN,
     publicSearchStatusUrl: parsed.PUBLIC_SEARCH_STATUS_URL,

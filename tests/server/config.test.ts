@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import path from 'node:path';
 import { loadConfig } from '../../src/server/config.js';
 
 function captureError(callback: () => unknown) {
@@ -28,7 +29,7 @@ describe('loadConfig', () => {
       telegramChannelId: '@channel',
       host: 'localhost',
       port: 4321,
-      databasePath: './data/test.sqlite',
+      databasePath: path.resolve(process.cwd(), './data/test.sqlite'),
       publicSearchSyncUrl: undefined,
       publicSearchSyncToken: undefined,
       publicSearchStatusUrl: undefined,

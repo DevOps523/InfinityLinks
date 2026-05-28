@@ -8,7 +8,7 @@
     "rootDir": "src/server",
     "noEmit": false,
     "declaration": false,
-    "sourceMap": true,
+    "sourceMap": false,
     "isolatedModules": false
   },
   "include": ["src/server/**/*.ts"]

@@ -6,7 +6,8 @@ export default defineConfig({
   root: '.',
   build: {
     outDir: 'dist/client',
-    emptyOutDir: true
+    emptyOutDir: true,
+    sourcemap: false
   },
   server: {
     host: '127.0.0.1',

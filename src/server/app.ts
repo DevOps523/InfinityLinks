@@ -1,6 +1,5 @@
 import express from 'express';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { ZodError } from 'zod';
 import { createAdminRouter } from './admin/admin.routes.js';
 import type { AppConfig } from './config.js';
@@ -9,11 +8,9 @@ import { createMediaRouter } from './media/media.routes.js';
 import { createPublicSearchRouter } from './public-search/public-search.routes.js';
 import { createAdminApiRequestGuard, getLoopbackAdminApiAllowedHosts } from './security/api-request-guard.js';
 import type { PublicSearchStatusServiceOptions } from './public-search/status.service.js';
+import { resolveClientDistPath } from './runtime/paths.js';
 import { createTelegramAdminRouter } from './telegram/telegram.admin.routes.js';
 import { createTmdbRouter, type TmdbRouterOptions } from './tmdb/tmdb.routes.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 type CreateAppOptions = {
   db?: AppDatabase;
@@ -86,7 +83,7 @@ export function createApp(options: CreateAppOptions = {}) {
     res.status(500).json({ error: message });
   });
 
-  const clientDist = path.resolve(__dirname, '../../dist/client');
+  const clientDist = resolveClientDistPath();
   app.use(express.static(clientDist));
 
   app.get('*', (_req, res) => {

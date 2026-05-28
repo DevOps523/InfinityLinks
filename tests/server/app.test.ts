@@ -79,6 +79,7 @@ describe('admin API request guard', () => {
         .set('Host', '127.0.0.1:3000')
         .set('Origin', 'https://evil.example')
         .set('Sec-Fetch-Site', 'cross-site')
+        .set('X-InfinityLinks-Request', 'fetch')
         .expect(403);
 
       expect(response.body).toEqual({ error: 'Cross-site request blocked' });

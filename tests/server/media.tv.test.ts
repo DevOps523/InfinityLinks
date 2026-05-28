@@ -1,3 +1,4 @@
+import express from 'express';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/server/app.js';
@@ -18,7 +19,13 @@ const config: AppConfig = {
 let db: AppDatabase;
 
 function app() {
-  return createApp({ db, config });
+  const testApp = express();
+  testApp.use((req, _res, next) => {
+    req.headers['x-infinitylinks-request'] = 'fetch';
+    next();
+  });
+  testApp.use(createApp({ db, config }));
+  return testApp;
 }
 
 function getTelegramJobs() {

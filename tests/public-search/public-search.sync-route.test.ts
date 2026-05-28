@@ -1,3 +1,4 @@
+import express from 'express';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/server/app.js';
@@ -18,7 +19,13 @@ const baseConfig: AppConfig = {
 let db: AppDatabase;
 
 function app(config: AppConfig, fetcher: typeof fetch = vi.fn<typeof fetch>()) {
-  return createApp({ db, config, fetcher });
+  const testApp = express();
+  testApp.use((req, _res, next) => {
+    req.headers['x-infinitylinks-request'] = 'fetch';
+    next();
+  });
+  testApp.use(createApp({ db, config, fetcher }));
+  return testApp;
 }
 
 function createMigratedDatabase() {

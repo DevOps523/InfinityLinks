@@ -1,3 +1,4 @@
+import express from 'express';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/server/app.js';
@@ -18,6 +19,16 @@ const config: AppConfig = {
   publicSearchStatusToken: undefined,
   publicSearchGroupHandle: '@infinitylinks69'
 };
+
+function app(db: AppDatabase) {
+  const testApp = express();
+  testApp.use((req, _res, next) => {
+    req.headers['x-infinitylinks-request'] = 'fetch';
+    next();
+  });
+  testApp.use(createApp({ db, config }));
+  return testApp;
+}
 
 describe('telegram admin jobs', () => {
   let db: AppDatabase;
@@ -46,8 +57,7 @@ describe('telegram admin jobs', () => {
        VALUES ('edit', 'movie', 999, '{}', 'queued', 'Not failed', '2026-05-26 11:59:00')`
     ).run();
 
-    const app = createApp({ db, config });
-    const response = await request(app).get('/api/telegram/jobs/failed').expect(200);
+    const response = await request(app(db)).get('/api/telegram/jobs/failed').expect(200);
 
     expect(response.body.jobs).toHaveLength(50);
     expect(response.body.jobs[0]).toEqual({
@@ -73,9 +83,7 @@ describe('telegram admin jobs', () => {
       )
       .run();
 
-    const app = createApp({ db, config });
-
-    await request(app).post(`/api/telegram/jobs/${insert.lastInsertRowid}/retry`).expect(200, { ok: true });
+    await request(app(db)).post(`/api/telegram/jobs/${insert.lastInsertRowid}/retry`).expect(200, { ok: true });
 
     const job = db.prepare('SELECT status, attempts, last_error, next_run_at FROM telegram_jobs WHERE id = ?').get(
       insert.lastInsertRowid
@@ -95,8 +103,6 @@ describe('telegram admin jobs', () => {
       )
       .run();
 
-    const app = createApp({ db, config });
-
-    await request(app).post(`/api/telegram/jobs/${insert.lastInsertRowid}/retry`).expect(404);
+    await request(app(db)).post(`/api/telegram/jobs/${insert.lastInsertRowid}/retry`).expect(404);
   });
 });

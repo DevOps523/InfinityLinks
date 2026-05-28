@@ -1084,7 +1084,83 @@ describe('public search bot handlers', () => {
     }
   });
 
-  it('answers allowed group season callbacks before catalog failure paths can send messages', async () => {
+  it('answers stale season callbacks before blocked access gates', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      upsertSeenTelegramUser(db, { id: 42, username: 'kicked_user' }, new Date('2026-05-26T00:00:00.000Z'));
+      markSubscriptionUserKicked(db, 42, new Date('2026-05-26T00:00:00.000Z'));
+      const { deps, sentMessages, callbackAnswers } = createDeps(db);
+
+      await handleTelegramUpdate(
+        deps,
+        callbackUpdate('season:999', { from: { id: 42, username: 'kicked_user' } })
+      );
+
+      expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'That button is no longer available.' }]);
+      expect(sentMessages).toEqual([]);
+      expect(JSON.stringify({ sentMessages, callbackAnswers })).not.toContain(subscriptionRequiredMessage);
+      expect(JSON.stringify({ sentMessages, callbackAnswers })).not.toContain('providers.example');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('answers stale season callbacks before private chat gates', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      const { deps, sentMessages, callbackAnswers } = createDeps(db);
+
+      await handleTelegramUpdate(
+        deps,
+        callbackUpdate('season:999', {
+          message: {
+            message_id: 11,
+            chat: { id: -100502, type: 'group' }
+          }
+        })
+      );
+
+      expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'That button is no longer available.' }]);
+      expect(callbackAnswers).not.toEqual([{ callbackQueryId: 'callback-1', text: privateChatRequiredMessage }]);
+      expect(sentMessages).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('answers stale season callbacks before rate limits', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      const rateLimitCheck = vi.fn(() => ({ allowed: false as const, retryAfterMs: 4500 }));
+      const { deps, sentMessages, callbackAnswers } = createDeps(db, {
+        rateLimiter: {
+          check: rateLimitCheck
+        }
+      });
+
+      await handleTelegramUpdate(deps, callbackUpdate('season:999'));
+
+      expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'That button is no longer available.' }]);
+      expect(callbackAnswers).not.toEqual([
+        {
+          callbackQueryId: 'callback-1',
+          text: 'Please wait 5 seconds before trying again.'
+        }
+      ]);
+      expect(sentMessages).toEqual([]);
+      expect(rateLimitCheck).not.toHaveBeenCalled();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('answers allowed group season callbacks after checking stale season details', async () => {
     const deniedDb = createMigratedDatabase();
     const unavailableDb = createMigratedDatabase();
     const groupChatId = -100502;
@@ -1110,7 +1186,9 @@ describe('public search bot handlers', () => {
 
       await handleTelegramUpdate(unavailable.deps, callbackUpdate('season:30', groupSeasonCallback));
 
-      expect(unavailable.callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: privateChatRequiredMessage }]);
+      expect(unavailable.callbackAnswers).toEqual([
+        { callbackQueryId: 'callback-1', text: 'That button is no longer available.' }
+      ]);
       expect(unavailable.sentMessages).toHaveLength(0);
       expect(unavailable.deps.subscription.scheduleSheetRefresh).not.toHaveBeenCalled();
       expect(

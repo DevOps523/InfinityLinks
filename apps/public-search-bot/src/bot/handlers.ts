@@ -228,6 +228,16 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
     return;
   }
 
+  const details = getPublicSeasonDetails(deps.db, seasonId);
+
+  if (!details) {
+    await deps.replies.enqueueAnswerCallbackQuery({
+      callbackQueryId,
+      text: 'That button is no longer available.'
+    });
+    return;
+  }
+
   const callbackUser = getTelegramUser(callbackQuery.from);
   const accessClass = classifyPublicSearchAccess(deps.db, {
     user: callbackUser,
@@ -284,16 +294,6 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
     if (chatId !== undefined) {
       await sendBotMessage(deps, chatId, formatUnavailableMessage());
     }
-    return;
-  }
-
-  const details = getPublicSeasonDetails(deps.db, seasonId);
-
-  if (!details) {
-    await deps.replies.enqueueAnswerCallbackQuery({
-      callbackQueryId,
-      text: 'That button is no longer available.'
-    });
     return;
   }
 

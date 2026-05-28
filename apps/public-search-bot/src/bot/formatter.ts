@@ -53,9 +53,9 @@ export function formatSubscriptionRequiredMessage(adminContact: string): PublicB
       'A subscription is required to view and access download links.',
       '',
       'Plans:',
-      '1 Month - ₱ 150',
-      '3 Months - ₱ 300',
-      '6 Months - ₱ 600',
+      '1 Month - ₱150',
+      '3 Months - ₱300',
+      '6 Months - ₱500',
       '',
       `Please contact ${adminContact} to continue.`
     ].join('\n')

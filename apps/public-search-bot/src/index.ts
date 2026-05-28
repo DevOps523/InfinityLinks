@@ -3,10 +3,10 @@ import { createPublicSearchApp } from './app.js';
 import { loadPublicSearchConfig } from './config.js';
 import { createPublicSearchDatabase } from './db/database.js';
 import { migratePublicSearchDatabase } from './db/migrate.js';
-import { createFixedWindowRateLimiter } from './rate-limit.js';
 import { createPublicTelegramClient } from './telegram.client.js';
 import { createTelegramReplyQueue } from './telegram.reply-queue.js';
 import { createReplyThrottleState, handleTelegramUpdate } from './bot/handlers.js';
+import { createPublicSearchInteractionRateLimiter } from './bot/rate-policy.js';
 import { pollOnce, type PollState } from './poller.js';
 import { createPublicSearchStatusTracker } from './status-tracker.js';
 import { todayDateString } from './subscriptions/date.js';
@@ -88,10 +88,7 @@ async function main() {
   });
 
   const replies = createTelegramReplyQueue(publicTelegram);
-  const rateLimiter = createFixedWindowRateLimiter({
-    limit: 5,
-    windowMs: 60_000
-  });
+  const rateLimiter = createPublicSearchInteractionRateLimiter();
   const replyThrottleState = createReplyThrottleState();
   const publicPollState: PollState = {};
   const subscriptionPollState: PollState = {};

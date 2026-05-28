@@ -10,6 +10,7 @@ import {
   upsertSeenTelegramUser
 } from '../src/subscriptions/repository.js';
 import { createReplyThrottleState, handleTelegramUpdate, type HandlerDeps } from '../src/bot/handlers.js';
+import { createPublicSearchInteractionRateLimiter } from '../src/bot/rate-policy.js';
 import type { PublicSearchCatalog } from '../src/catalog.schema.js';
 import type { InlineKeyboardMarkup, TelegramUpdate } from '../src/telegram.client.js';
 
@@ -497,6 +498,34 @@ describe('public search bot handlers', () => {
     }
   });
 
+  it('blocks exhausted trial users from season details', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      const now = new Date('2026-05-26T00:00:00.000Z');
+      startTrialIfEligible(db, { id: 42, username: 'trial_user' }, now);
+      for (let index = 0; index < 5; index += 1) {
+        consumeTrialSearchIfAllowed(db, 42, now, 5);
+      }
+      const { deps, sentMessages, callbackAnswers } = createDeps(db);
+
+      await handleTelegramUpdate(deps, callbackUpdate('season:30', { from: { id: 42, username: 'trial_user' } }));
+
+      expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'Subscription required.' }]);
+      expect(sentMessages).toEqual([
+        {
+          chatId: 500,
+          text: subscriptionRequiredMessage,
+          replyMarkup: undefined
+        }
+      ]);
+      expect(JSON.stringify({ sentMessages, callbackAnswers })).not.toContain('providers.example');
+    } finally {
+      db.close();
+    }
+  });
+
   it('does not start a trial from /start', async () => {
     const db = createMigratedDatabase();
 
@@ -774,6 +803,44 @@ describe('public search bot handlers', () => {
     }
   });
 
+  it('throttles repeated subscription messages for blocked users', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      const now = new Date('2026-05-26T00:00:00.000Z');
+      startTrialIfEligible(db, { id: 42, username: 'trial_user' }, now);
+      for (let index = 0; index < 5; index += 1) {
+        consumeTrialSearchIfAllowed(db, 42, now, 5);
+      }
+
+      const { deps, sentMessages } = createDeps(db, {
+        rateLimiter: createPublicSearchInteractionRateLimiter({ now: () => 0 })
+      });
+
+      for (let index = 0; index < 3; index += 1) {
+        await handleTelegramUpdate(
+          deps,
+          messageUpdate('/search inception', { from: { id: 42, username: 'trial_user' } })
+        );
+      }
+
+      await handleTelegramUpdate(
+        deps,
+        messageUpdate('/search inception', { from: { id: 42, username: 'trial_user' } })
+      );
+
+      expect(sentMessages.map((message) => message.text)).toEqual([
+        subscriptionRequiredMessage,
+        subscriptionRequiredMessage,
+        subscriptionRequiredMessage,
+        'Please wait 60 seconds before trying again.'
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
   it('answers invalid callback data without leaking provider links', async () => {
     const db = createMigratedDatabase();
 
@@ -803,7 +870,11 @@ describe('public search bot handlers', () => {
 
       await handleTelegramUpdate(deps, callbackUpdate('movie:1'));
 
-      expect(deps.rateLimiter.check).toHaveBeenCalledWith('callback:42');
+      expect(deps.rateLimiter.check).toHaveBeenCalledWith({
+        action: 'season',
+        accessClass: 'trial-active',
+        userId: 42
+      });
       expect(sentMessages).toEqual([]);
       expect(callbackAnswers).toEqual([{ callbackQueryId: 'callback-1', text: 'Please wait 4 seconds before trying again.' }]);
     } finally {
@@ -1095,6 +1166,63 @@ describe('public search bot handlers', () => {
           text: 'Please wait 5 seconds before trying again.'
         }
       ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('uses paid search and season rate limits for subscribed users', async () => {
+    const db = createMigratedDatabase();
+
+    try {
+      seedCatalog(db);
+      const now = new Date('2026-05-26T00:00:00.000Z');
+      startTrialIfEligible(db, { id: 42, username: 'paid_user' }, now);
+      applySubscriptionStartDate(db, 42, '2026-05-26', 1, now);
+
+      let nowMs = 0;
+      const { deps, sentMessages, callbackAnswers } = createDeps(db, {
+        subscription: {
+          now: () => now,
+          trialSearchLimit: 5,
+          adminContact: '@seinen_illuminatiks',
+          scheduleSheetRefresh: vi.fn()
+        },
+        rateLimiter: createPublicSearchInteractionRateLimiter({ now: () => nowMs })
+      });
+
+      for (let index = 0; index < 10; index += 1) {
+        await handleTelegramUpdate(deps, messageUpdate('/search inception', { from: { id: 42, username: 'paid_user' } }));
+      }
+
+      sentMessages.length = 0;
+      await handleTelegramUpdate(deps, messageUpdate('/search inception', { from: { id: 42, username: 'paid_user' } }));
+
+      expect(sentMessages).toEqual([
+        {
+          chatId: 500,
+          text: 'Please wait 60 seconds before trying again.'
+        }
+      ]);
+
+      nowMs = 60_000;
+      sentMessages.length = 0;
+
+      for (let index = 0; index < 20; index += 1) {
+        await handleTelegramUpdate(deps, callbackUpdate('season:30', { from: { id: 42, username: 'paid_user' } }));
+      }
+
+      callbackAnswers.length = 0;
+      sentMessages.length = 0;
+      await handleTelegramUpdate(deps, callbackUpdate('season:30', { from: { id: 42, username: 'paid_user' } }));
+
+      expect(callbackAnswers).toEqual([
+        {
+          callbackQueryId: 'callback-1',
+          text: 'Please wait 60 seconds before trying again.'
+        }
+      ]);
+      expect(sentMessages).toEqual([]);
     } finally {
       db.close();
     }

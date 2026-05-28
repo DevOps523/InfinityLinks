@@ -7,7 +7,12 @@ import {
   searchPublicCatalog,
   type PublicSearchResult
 } from '../search.repository.js';
-import { consumeSuccessfulSearchAccess, evaluateSearchAccess } from '../subscriptions/access.service.js';
+import {
+  classifyPublicSearchAccess,
+  consumeSuccessfulSearchAccess,
+  evaluateSearchAccess,
+  type PublicSearchAccessClass
+} from '../subscriptions/access.service.js';
 import type { TelegramUserIdentity } from '../subscriptions/repository.js';
 import { decodeSeasonCallback } from './callback-data.js';
 import {
@@ -22,8 +27,7 @@ import {
   formatUnavailableMessage,
   type PublicBotMessage
 } from './formatter.js';
-
-type RateLimitResult = { allowed: true } | { allowed: false; retryAfterMs: number };
+import type { PublicSearchInteractionRateLimiter, PublicSearchRateLimitAction } from './rate-policy.js';
 
 type ReplyQueue = Pick<
   ReturnType<typeof createTelegramReplyQueue>,
@@ -48,9 +52,7 @@ export type HandlerDeps = {
     scheduleSheetRefresh?: ((now: Date) => void) | undefined;
   };
   replies: ReplyQueue;
-  rateLimiter: {
-    check(key: string): RateLimitResult;
-  };
+  rateLimiter: PublicSearchInteractionRateLimiter;
   groupHandle: string;
   replyThrottleState?: ReplyThrottleState;
 };
@@ -147,7 +149,17 @@ async function handleMessage(deps: HandlerDeps, message: NonNullable<TelegramUpd
     }
 
     const user = getTelegramUser(message.from);
-    if (!(await replyIfAllowed(deps, message.chat.id, user?.id))) {
+    const accessClass = classifyPublicSearchAccess(deps.db, {
+      user,
+      trialSearchLimit: deps.subscription.trialSearchLimit
+    });
+
+    if (accessClass === 'blocked') {
+      await sendSubscriptionRequiredIfAllowed(deps, message.chat.id, user?.id);
+      return;
+    }
+
+    if (!(await replyIfAllowed(deps, message.chat.id, user?.id, 'search', accessClass))) {
       return;
     }
 
@@ -191,7 +203,7 @@ async function handleSearch(deps: HandlerDeps, chat: MessageChat, user: Telegram
   });
 
   if (!access.allowed) {
-    await sendBotMessage(deps, chatId, formatSubscriptionRequiredMessage(deps.subscription.adminContact));
+    await sendSubscriptionRequiredIfAllowed(deps, chatId, user?.id);
     return;
   }
 
@@ -206,7 +218,31 @@ async function handleSearch(deps: HandlerDeps, chat: MessageChat, user: Telegram
 
 async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable<TelegramUpdate['callback_query']>) {
   const callbackQueryId = callbackQuery.id;
-  const rateLimit = checkReplyRateLimit(deps, callbackQuery.from.id, 'callback');
+  const callbackUser = getTelegramUser(callbackQuery.from);
+  const accessClass = classifyPublicSearchAccess(deps.db, {
+    user: callbackUser,
+    trialSearchLimit: deps.subscription.trialSearchLimit
+  });
+
+  if (accessClass === 'blocked') {
+    const chat = callbackQuery.message?.chat;
+    if (!chat || !isPrivateChat(chat)) {
+      await deps.replies.enqueueAnswerCallbackQuery({
+        callbackQueryId,
+        text: 'Open a private chat with this bot to view download links.'
+      });
+      return;
+    }
+
+    await answerSubscriptionRequiredIfAllowed(deps, callbackQueryId, chat.id, callbackUser?.id);
+    return;
+  }
+
+  const rateLimit = checkReplyRateLimit(deps, {
+    userId: callbackUser?.id,
+    action: 'season',
+    accessClass
+  });
   if (!rateLimit.allowed) {
     await deps.replies.enqueueAnswerCallbackQuery({
       callbackQueryId,
@@ -237,19 +273,13 @@ async function handleCallbackQuery(deps: HandlerDeps, callbackQuery: NonNullable
   const chatId = chat.id;
   const now = deps.subscription.now();
   const access = evaluateSearchAccess(deps.db, {
-    user: getTelegramUser(callbackQuery.from),
+    user: callbackUser,
     now,
     trialSearchLimit: deps.subscription.trialSearchLimit
   });
 
   if (!access.allowed) {
-    await deps.replies.enqueueAnswerCallbackQuery({
-      callbackQueryId,
-      text: 'Subscription required.'
-    });
-    if (chatId !== undefined) {
-      await sendBotMessage(deps, chatId, formatSubscriptionRequiredMessage(deps.subscription.adminContact));
-    }
+    await answerSubscriptionRequiredIfAllowed(deps, callbackQueryId, chatId, callbackUser?.id);
     return;
   }
 
@@ -295,8 +325,15 @@ function getUserKey(userId: number | undefined) {
   return userId ?? 'unknown';
 }
 
-function checkReplyRateLimit(deps: HandlerDeps, userId: number | undefined, interactionType: 'message' | 'callback') {
-  return deps.rateLimiter.check(`${interactionType}:${getUserKey(userId)}`);
+function checkReplyRateLimit(
+  deps: HandlerDeps,
+  input: {
+    userId: number | undefined;
+    action: PublicSearchRateLimitAction;
+    accessClass?: PublicSearchAccessClass | undefined;
+  }
+) {
+  return deps.rateLimiter.check(input);
 }
 
 async function sendRateLimitMessage(deps: HandlerDeps, chatId: number, userId: number | undefined, retryAfterMs: number) {
@@ -310,8 +347,14 @@ async function sendRateLimitMessage(deps: HandlerDeps, chatId: number, userId: n
   });
 }
 
-async function replyIfAllowed(deps: HandlerDeps, chatId: number, userId: number | undefined) {
-  const rateLimit = checkReplyRateLimit(deps, userId, 'message');
+async function replyIfAllowed(
+  deps: HandlerDeps,
+  chatId: number,
+  userId: number | undefined,
+  action: PublicSearchRateLimitAction = 'message',
+  accessClass?: PublicSearchAccessClass | undefined
+) {
+  const rateLimit = checkReplyRateLimit(deps, { userId, action, accessClass });
   if (rateLimit.allowed) {
     getReplyThrottleState(deps).clearWaitMessage(userId);
     return true;
@@ -319,6 +362,48 @@ async function replyIfAllowed(deps: HandlerDeps, chatId: number, userId: number 
 
   await sendRateLimitMessage(deps, chatId, userId, rateLimit.retryAfterMs);
   return false;
+}
+
+async function sendSubscriptionRequiredIfAllowed(
+  deps: HandlerDeps,
+  chatId: number,
+  userId: number | undefined
+) {
+  if (!(await replyIfAllowed(deps, chatId, userId, 'blocked-message', 'blocked'))) {
+    return;
+  }
+
+  await sendBotMessage(deps, chatId, formatSubscriptionRequiredMessage(deps.subscription.adminContact));
+}
+
+async function answerSubscriptionRequiredIfAllowed(
+  deps: HandlerDeps,
+  callbackQueryId: string,
+  chatId: number | undefined,
+  userId: number | undefined
+) {
+  const rateLimit = checkReplyRateLimit(deps, {
+    userId,
+    action: 'blocked-message',
+    accessClass: 'blocked'
+  });
+
+  if (!rateLimit.allowed) {
+    await deps.replies.enqueueAnswerCallbackQuery({
+      callbackQueryId,
+      text: formatWaitMessage(rateLimit.retryAfterMs)
+    });
+    return;
+  }
+
+  await deps.replies.enqueueAnswerCallbackQuery({
+    callbackQueryId,
+    text: 'Subscription required.'
+  });
+
+  if (chatId !== undefined) {
+    await sendBotMessage(deps, chatId, formatSubscriptionRequiredMessage(deps.subscription.adminContact));
+  }
 }
 
 function getReplyThrottleState(deps: HandlerDeps) {

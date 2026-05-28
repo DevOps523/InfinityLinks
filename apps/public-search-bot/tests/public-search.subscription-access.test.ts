@@ -170,4 +170,18 @@ describe('subscription access service', () => {
       db.close();
     }
   });
+
+  it('validates trial search limits before classifying missing users', () => {
+    const db = createDb();
+    try {
+      expect(() =>
+        classifyPublicSearchAccess(db, {
+          user: undefined,
+          trialSearchLimit: 0
+        })
+      ).toThrow();
+    } finally {
+      db.close();
+    }
+  });
 });

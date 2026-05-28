@@ -50,11 +50,11 @@ export function classifyPublicSearchAccess(
     trialSearchLimit: number;
   }
 ): PublicSearchAccessClass {
+  validateTrialSearchLimit(input.trialSearchLimit);
+
   if (!input.user) {
     return 'blocked';
   }
-
-  validateTrialSearchLimit(input.trialSearchLimit);
 
   const user = getSubscriptionUser(db, input.user.id);
   if (!user) {

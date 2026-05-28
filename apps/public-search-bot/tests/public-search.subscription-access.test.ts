@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { createPublicSearchDatabase } from '../src/db/database.js';
 import { migratePublicSearchDatabase } from '../src/db/migrate.js';
 import { applySubscriptionStartDate } from '../src/subscriptions/repository.js';
-import { consumeSuccessfulSearchAccess, evaluateSearchAccess } from '../src/subscriptions/access.service.js';
+import {
+  classifyPublicSearchAccess,
+  consumeSuccessfulSearchAccess,
+  evaluateSearchAccess
+} from '../src/subscriptions/access.service.js';
 
 function createDb() {
   const db = createPublicSearchDatabase(':memory:');
@@ -88,7 +92,7 @@ describe('subscription access service', () => {
     }
   });
 
-  it('allows non-consuming callback access for a trial user at the search limit', () => {
+  it('blocks non-consuming access after the trial search quota is exhausted', () => {
     const db = createDb();
     try {
       for (let index = 0; index < 5; index += 1) {
@@ -105,7 +109,63 @@ describe('subscription access service', () => {
           now: new Date('2026-05-26T00:10:00.000Z'),
           trialSearchLimit: 5
         })
-      ).toMatchObject({ allowed: true, status: 'Trial' });
+      ).toMatchObject({ allowed: false, reason: 'subscription-required', status: 'Trial' });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('classifies new, paid, exhausted trial, and removed users for rate limits without consuming quota', () => {
+    const db = createDb();
+    try {
+      const now = new Date('2026-05-26T00:00:00.000Z');
+
+      expect(
+        classifyPublicSearchAccess(db, {
+          user: { id: 42, username: 'new_user' },
+          trialSearchLimit: 5
+        })
+      ).toBe('trial-active');
+
+      expect(db.prepare('SELECT COUNT(*) AS count FROM subscription_users').get()).toEqual({ count: 0 });
+
+      consumeSuccessfulSearchAccess(db, {
+        user: { id: 43, username: 'paid_user' },
+        now,
+        trialSearchLimit: 5
+      });
+      applySubscriptionStartDate(db, 43, '2026-05-26', 1, now);
+
+      expect(
+        classifyPublicSearchAccess(db, {
+          user: { id: 43, username: 'paid_user' },
+          trialSearchLimit: 5
+        })
+      ).toBe('paid');
+
+      for (let index = 0; index < 5; index += 1) {
+        consumeSuccessfulSearchAccess(db, {
+          user: { id: 44, username: 'trial_user' },
+          now: new Date(`2026-05-26T00:1${index}:00.000Z`),
+          trialSearchLimit: 5
+        });
+      }
+
+      expect(
+        classifyPublicSearchAccess(db, {
+          user: { id: 44, username: 'trial_user' },
+          trialSearchLimit: 5
+        })
+      ).toBe('blocked');
+
+      db.prepare('UPDATE subscription_users SET removed_from_group = 1 WHERE telegram_user_id = 43').run();
+
+      expect(
+        classifyPublicSearchAccess(db, {
+          user: { id: 43, username: 'paid_user' },
+          trialSearchLimit: 5
+        })
+      ).toBe('blocked');
     } finally {
       db.close();
     }

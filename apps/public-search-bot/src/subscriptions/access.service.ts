@@ -22,6 +22,8 @@ export type SearchAccessResult =
       trialStarted: false;
     };
 
+export type PublicSearchAccessClass = 'paid' | 'trial-active' | 'blocked';
+
 export function evaluateSearchAccess(
   db: PublicSearchDatabase,
   input: {
@@ -38,7 +40,28 @@ export function evaluateSearchAccess(
   upsertSeenTelegramUser(db, input.user, input.now);
   const user = getSubscriptionUser(db, input.user.id);
 
-  return evaluateExistingUser(user);
+  return evaluateExistingUser(user, input.trialSearchLimit);
+}
+
+export function classifyPublicSearchAccess(
+  db: PublicSearchDatabase,
+  input: {
+    user: TelegramUserIdentity | undefined;
+    trialSearchLimit: number;
+  }
+): PublicSearchAccessClass {
+  if (!input.user) {
+    return 'blocked';
+  }
+
+  validateTrialSearchLimit(input.trialSearchLimit);
+
+  const user = getSubscriptionUser(db, input.user.id);
+  if (!user) {
+    return 'trial-active';
+  }
+
+  return classifyExistingUser(user, input.trialSearchLimit);
 }
 
 export function consumeSuccessfulSearchAccess(
@@ -87,7 +110,10 @@ export function consumeSuccessfulSearchAccess(
   return { allowed: false, reason: 'subscription-required', status: user.status, trialStarted: false };
 }
 
-function evaluateExistingUser(user: ReturnType<typeof getSubscriptionUser>): SearchAccessResult {
+function evaluateExistingUser(
+  user: ReturnType<typeof getSubscriptionUser>,
+  trialSearchLimit: number
+): SearchAccessResult {
   if (!user) {
     return { allowed: false, reason: 'subscription-required', trialStarted: false };
   }
@@ -100,7 +126,7 @@ function evaluateExistingUser(user: ReturnType<typeof getSubscriptionUser>): Sea
     return { allowed: true, status: user.status, trialStarted: false };
   }
 
-  if (user.status === 'Trial') {
+  if (user.status === 'Trial' && user.trialSearchesUsed < trialSearchLimit) {
     return {
       allowed: true,
       status: 'Trial',
@@ -110,4 +136,23 @@ function evaluateExistingUser(user: ReturnType<typeof getSubscriptionUser>): Sea
   }
 
   return { allowed: false, reason: 'subscription-required', status: user.status, trialStarted: false };
+}
+
+function classifyExistingUser(
+  user: ReturnType<typeof getSubscriptionUser>,
+  trialSearchLimit: number
+): PublicSearchAccessClass {
+  if (!user || user.status === 'Kicked' || user.removedFromGroup || user.status === 'Unpaid') {
+    return 'blocked';
+  }
+
+  if (user.status === 'Subscribe' || user.status === 'Needs Attention') {
+    return 'paid';
+  }
+
+  if (user.status === 'Trial' && user.trialSearchesUsed < trialSearchLimit) {
+    return 'trial-active';
+  }
+
+  return 'blocked';
 }

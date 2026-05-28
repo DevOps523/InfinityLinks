@@ -22,13 +22,15 @@ const WINDOW_MS = 60_000;
 export function createPublicSearchInteractionRateLimiter(
   options: RatePolicyOptions = {}
 ): PublicSearchInteractionRateLimiter {
-  const now = options.now;
-  const messageLimiter = createFixedWindowRateLimiter({ limit: 5, windowMs: WINDOW_MS, now });
-  const paidSearchLimiter = createFixedWindowRateLimiter({ limit: 10, windowMs: WINDOW_MS, now });
-  const paidSeasonLimiter = createFixedWindowRateLimiter({ limit: 20, windowMs: WINDOW_MS, now });
-  const trialSearchLimiter = createFixedWindowRateLimiter({ limit: 5, windowMs: WINDOW_MS, now });
-  const trialSeasonLimiter = createFixedWindowRateLimiter({ limit: 10, windowMs: WINDOW_MS, now });
-  const blockedMessageLimiter = createFixedWindowRateLimiter({ limit: 3, windowMs: WINDOW_MS, now });
+  const fixedWindowOptions = (limit: number) =>
+    options.now === undefined ? { limit, windowMs: WINDOW_MS } : { limit, windowMs: WINDOW_MS, now: options.now };
+
+  const messageLimiter = createFixedWindowRateLimiter(fixedWindowOptions(5));
+  const paidSearchLimiter = createFixedWindowRateLimiter(fixedWindowOptions(10));
+  const paidSeasonLimiter = createFixedWindowRateLimiter(fixedWindowOptions(20));
+  const trialSearchLimiter = createFixedWindowRateLimiter(fixedWindowOptions(5));
+  const trialSeasonLimiter = createFixedWindowRateLimiter(fixedWindowOptions(10));
+  const blockedMessageLimiter = createFixedWindowRateLimiter(fixedWindowOptions(3));
 
   return {
     check(input) {

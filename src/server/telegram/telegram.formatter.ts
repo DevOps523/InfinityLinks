@@ -16,7 +16,6 @@ export type TelegramMovieCaptionInput = {
   year?: NullableValue;
   rating?: NullableValue;
   quality?: string;
-  description?: string;
   links?: TelegramLinkInput[];
 };
 
@@ -32,7 +31,6 @@ export type TelegramSeasonCaptionInput = {
   year?: NullableValue;
   rating?: NullableValue;
   quality?: string;
-  description?: string;
   episodes?: TelegramSeasonEpisodeInput[];
 };
 
@@ -40,7 +38,6 @@ export function formatMovieCaption(input: TelegramMovieCaptionInput): string {
   return fitCaption({
     heading: `🎬 ${formatTitle(input.title, input.year)}`,
     meta: formatMeta(input.rating, input.quality),
-    description: input.description,
     trailing: formatMovieLinks(input.links ?? [])
   });
 }
@@ -49,7 +46,6 @@ export function formatSeasonCaption(input: TelegramSeasonCaptionInput): string {
   return fitCaption({
     heading: `📺 ${formatTitle(input.title, input.year)} - Season ${input.seasonNumber}`,
     meta: formatMeta(input.rating, input.quality),
-    description: input.description,
     trailing: formatEpisodes(input.episodes ?? [])
   });
 }
@@ -126,54 +122,24 @@ function formatFooter(): CaptionBlock {
 function fitCaption(input: {
   heading: string;
   meta: string[];
-  description?: string;
   trailing: CaptionBlock[];
 }): string {
-  const description = normalizeValue(input.description);
-  const fullCaption = composeCaption(input.heading, input.meta, description, input.trailing);
+  const fullCaption = composeCaption(input.heading, input.meta, input.trailing);
 
   if (fullCaption.length <= TELEGRAM_PHOTO_CAPTION_LIMIT) {
     return fullCaption;
   }
 
-  const requiredCaption = composeCaption(input.heading, input.meta, undefined, input.trailing);
-
-  if (requiredCaption.length > TELEGRAM_PHOTO_CAPTION_LIMIT) {
-    return composeRequiredWithinLimit(input.heading, input.meta, input.trailing);
-  }
-
-  if (!description) {
-    return requiredCaption;
-  }
-
-  let low = 0;
-  let high = description.length;
-  let best = '';
-
-  while (low <= high) {
-    const middle = Math.floor((low + high) / 2);
-    const trimmedDescription = trimDescription(description, middle);
-    const candidate = composeCaption(input.heading, input.meta, trimmedDescription, input.trailing);
-
-    if (candidate.length <= TELEGRAM_PHOTO_CAPTION_LIMIT) {
-      best = trimmedDescription;
-      low = middle + 1;
-    } else {
-      high = middle - 1;
-    }
-  }
-
-  return best ? composeCaption(input.heading, input.meta, best, input.trailing) : requiredCaption;
+  return composeRequiredWithinLimit(input.heading, input.meta, input.trailing);
 }
 
 function composeCaption(
   heading: string,
   meta: string[],
-  description: string | undefined,
   trailing: CaptionBlock[]
 ): string {
   const trailingLines = trailing.flat();
-  const sections = [[heading, ...meta], description ? [description] : [], trailingLines]
+  const sections = [[heading, ...meta], trailingLines]
     .filter((section) => section.length > 0)
     .map((section) => section.join('\n'));
 
@@ -223,22 +189,6 @@ function fitCompleteLines(lines: string[], maxLength: number): string[] {
   }
 
   return lines.length > 0 ? [lines[0].slice(0, maxLength)] : [];
-}
-
-function trimDescription(description: string, maxLength: number): string {
-  if (maxLength <= 0) {
-    return '';
-  }
-
-  if (description.length <= maxLength) {
-    return description;
-  }
-
-  if (maxLength <= 3) {
-    return '.'.repeat(maxLength);
-  }
-
-  return `${description.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
 function normalizeValue(value: NullableValue): string {

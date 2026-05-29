@@ -50,12 +50,11 @@ function getSeasonPostState(db: AppDatabase, id: number) {
 }
 
 function createMovieRow(db: AppDatabase, id: number, title = `Movie ${id}`) {
-  db.prepare('INSERT OR IGNORE INTO movies (id, title, poster_url, quality, description) VALUES (?, ?, ?, ?, ?)').run(
+  db.prepare('INSERT OR IGNORE INTO movies (id, title, poster_url, quality) VALUES (?, ?, ?, ?)').run(
     id,
     title,
     `https://example.com/${id}.jpg`,
-    'HD',
-    'Queued movie'
+    'HD'
   );
   db.prepare(
     'INSERT OR IGNORE INTO movie_links (movie_id, provider_name, quality, status, url) VALUES (?, ?, ?, ?, ?)'
@@ -63,12 +62,11 @@ function createMovieRow(db: AppDatabase, id: number, title = `Movie ${id}`) {
 }
 
 function createSeasonRow(db: AppDatabase, id: number) {
-  db.prepare('INSERT OR IGNORE INTO tv_shows (id, title, poster_url, quality, description) VALUES (?, ?, ?, ?, ?)').run(
+  db.prepare('INSERT OR IGNORE INTO tv_shows (id, title, poster_url, quality) VALUES (?, ?, ?, ?)').run(
     id,
     `Show ${id}`,
     `https://example.com/show-${id}.jpg`,
-    'HD',
-    'Queued show'
+    'HD'
   );
   db.prepare('INSERT OR IGNORE INTO seasons (id, tv_show_id, season_number) VALUES (?, ?, ?)').run(id, id, 1);
   db.prepare('INSERT OR IGNORE INTO episodes (id, season_id, episode_number) VALUES (?, ?, ?)').run(id, id, 1);
@@ -769,7 +767,7 @@ describe('telegram queue', () => {
     };
 
     const movie = db
-      .prepare("INSERT INTO movies (title, year, poster_url, quality, description) VALUES ('Deleted Movie', 2026, 'https://example.com/deleted.jpg', 'HD', 'Deleted')")
+      .prepare("INSERT INTO movies (title, year, poster_url, quality) VALUES ('Deleted Movie', 2026, 'https://example.com/deleted.jpg', 'HD')")
       .run();
     const job = enqueueTelegramJob(db, 'send', 'movie', Number(movie.lastInsertRowid), {
       posterUrl: 'https://example.com/deleted.jpg',

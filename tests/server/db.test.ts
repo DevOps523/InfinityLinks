@@ -115,16 +115,16 @@ describe('database migration', () => {
       );
     `);
     db.prepare(
-      `INSERT INTO movies (id, tmdb_id, title, year, poster_url, description, rating, quality, topic_key, telegram_message_id, post_status)
-       VALUES (1, 27205, 'Inception', 2010, 'https://example.com/inception.jpg', 'Discard me', 8.8, 'Full HD', 'FOREIGN_MOVIES', 456, 'posted')`
+      `INSERT INTO movies (id, tmdb_id, title, year, poster_url, rating, quality, topic_key, telegram_message_id, post_status)
+       VALUES (1, 27205, 'Inception', 2010, 'https://example.com/inception.jpg', 8.8, 'Full HD', 'FOREIGN_MOVIES', 456, 'posted')`
     ).run();
     db.prepare(
       `INSERT INTO movie_links (movie_id, provider_name, quality, status, url)
        VALUES (1, 'Provider', 'Full HD', 'active', 'https://example.com/watch')`
     ).run();
     db.prepare(
-      `INSERT INTO tv_shows (id, tmdb_id, title, year, poster_url, description, rating, quality, topic_key)
-       VALUES (2, 1399, 'Game of Thrones', 2011, 'https://example.com/got.jpg', 'Discard me too', 9.2, 'HD', 'FOREIGN_TV_SERIES')`
+      `INSERT INTO tv_shows (id, tmdb_id, title, year, poster_url, rating, quality, topic_key)
+       VALUES (2, 1399, 'Game of Thrones', 2011, 'https://example.com/got.jpg', 9.2, 'HD', 'FOREIGN_TV_SERIES')`
     ).run();
     db.prepare("INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (2, 1, 789, 'posted')").run();
 

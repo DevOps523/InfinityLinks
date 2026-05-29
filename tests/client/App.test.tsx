@@ -163,6 +163,7 @@ describe('App', () => {
     fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
 
     expect(screen.getByRole('heading', { name: /^add movie$/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^description$/i)).not.toBeInTheDocument();
   });
 
   it('saves an Add Movie form with the selected topic and trimmed poster URL', async () => {
@@ -387,8 +388,7 @@ describe('App', () => {
           {
             id: 1,
             title: 'Tom Clancy Jack Ryan',
-            year: 2026,
-            description: 'A covert mission unravels a conspiracy.'
+            year: 2026
           }
         ]
       })
@@ -400,6 +400,8 @@ describe('App', () => {
     fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
 
     expect(await screen.findByText(/tom clancy jack ryan/i)).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /^description$/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('No description')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^open action menu$/i }));
 
     const menu = await screen.findByRole('menu');
@@ -451,6 +453,7 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: /^add tv show$/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/tmdb search/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^quality$/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^description$/i)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^save tv show$/i })).toBeInTheDocument();
   });
 
@@ -1283,8 +1286,7 @@ describe('App', () => {
               {
                 id: 3,
                 title: 'Dark',
-                year: 2017,
-                description: 'Missing children and time loops'
+                year: 2017
               }
             ]
           })
@@ -1310,6 +1312,8 @@ describe('App', () => {
     fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
 
     expect(await screen.findByText('Dark')).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /^description$/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('No description')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /open action menu/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /^manage seasons$/i }));
 
@@ -1335,8 +1339,7 @@ describe('App', () => {
               {
                 id: 3,
                 title: 'Dark',
-                year: 2017,
-                description: 'Missing children and time loops'
+                year: 2017
               }
             ]
           })
@@ -1405,8 +1408,7 @@ describe('App', () => {
               {
                 id: 7,
                 title: 'Arrival',
-                year: 2016,
-                description: 'First contact'
+                year: 2016
               }
             ]
           })
@@ -1450,8 +1452,7 @@ describe('App', () => {
               {
                 id: 7,
                 title: 'Arrival',
-                year: 2016,
-                description: 'First contact'
+                year: 2016
               }
             ]
           })
@@ -1468,7 +1469,6 @@ describe('App', () => {
               title: 'Arrival',
               year: 2016,
               posterUrl: 'https://example.com/arrival.jpg',
-              description: 'First contact',
               rating: 7.6,
               quality: 'Full HD',
               links: [
@@ -1501,6 +1501,7 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: /^edit movie$/i })).toBeInTheDocument();
     expect(screen.getByDisplayValue('Arrival')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^description$/i)).not.toBeInTheDocument();
     expect(screen.getByText('1 link added')).toBeInTheDocument();
   });
 
@@ -1514,8 +1515,7 @@ describe('App', () => {
           {
             tmdbId: 27205,
             title: 'Inception',
-            year: 2010,
-            description: 'Dream layers'
+            year: 2010
           }
         ]
       })
@@ -1556,8 +1556,7 @@ describe('App', () => {
           {
             tmdbId: 27205,
             title: 'Inception',
-            year: 2010,
-            description: 'Dream layers'
+            year: 2010
           }
         ]
       })

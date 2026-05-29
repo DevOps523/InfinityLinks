@@ -9,7 +9,6 @@ type Movie = {
   id: number;
   title: string;
   year?: number;
-  description: string;
 };
 
 type MediaSort = 'newest' | 'oldest' | 'updated' | 'title_asc';
@@ -181,7 +180,6 @@ export function MoviesPage({ onAddMovie, onEditMovie }: MoviesPageProps) {
                 <tr>
                   <th>ID</th>
                   <th>Movie title</th>
-                  <th>Description</th>
                   <th>Year</th>
                   <th>Action</th>
                 </tr>
@@ -191,7 +189,6 @@ export function MoviesPage({ onAddMovie, onEditMovie }: MoviesPageProps) {
                   <tr key={movie.id}>
                     <td>{movie.id}</td>
                     <td>{movie.title}</td>
-                    <td>{movie.description || 'No description'}</td>
                     <td>{movie.year ?? '-'}</td>
                     <td>
                       <ActionMenu onEdit={() => onEditMovie(movie.id)} onDelete={() => setMovieToDelete(movie)} />

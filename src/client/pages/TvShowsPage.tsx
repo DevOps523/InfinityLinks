@@ -9,7 +9,6 @@ type TvShow = {
   id: number;
   title: string;
   year?: number;
-  description: string;
 };
 
 type MediaSort = 'newest' | 'oldest' | 'updated' | 'title_asc';
@@ -182,7 +181,6 @@ export function TvShowsPage({ onAddTvShow, onEditTvShow, onManageSeasons }: TvSh
                 <tr>
                   <th>ID</th>
                   <th>TV show title</th>
-                  <th>Description</th>
                   <th>Year</th>
                   <th>Action</th>
                 </tr>
@@ -192,7 +190,6 @@ export function TvShowsPage({ onAddTvShow, onEditTvShow, onManageSeasons }: TvSh
                   <tr key={tvShow.id}>
                     <td>{tvShow.id}</td>
                     <td>{tvShow.title}</td>
-                    <td>{tvShow.description || 'No description'}</td>
                     <td>{tvShow.year ?? '-'}</td>
                     <td>
                       <ActionMenu

@@ -24,7 +24,6 @@ type TvShowPayload = {
   title: string;
   year?: number;
   posterUrl?: string;
-  description: string;
   rating?: number;
   quality: string;
   topicKey?: string;
@@ -43,7 +42,6 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
   const [title, setTitle] = useState('');
   const [year, setYear] = useState('');
   const [posterUrl, setPosterUrl] = useState('');
-  const [description, setDescription] = useState('');
   const [rating, setRating] = useState('');
   const [quality, setQuality] = useState('HD');
   const [topicKey, setTopicKey] = useState('FOREIGN_TV_SERIES');
@@ -61,7 +59,6 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
     setTitle('');
     setYear('');
     setPosterUrl('');
-    setDescription('');
     setRating('');
     setQuality('HD');
     setTopicKey('FOREIGN_TV_SERIES');
@@ -90,7 +87,6 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
         setTitle(tvShow.title);
         setYear(tvShow.year ? String(tvShow.year) : '');
         setPosterUrl(tvShow.posterUrl ?? '');
-        setDescription(tvShow.description);
         setRating(tvShow.rating !== undefined ? String(tvShow.rating) : '');
         setQuality(tvShow.quality);
         setTopicKey(tvShow.topicKey ?? 'FOREIGN_TV_SERIES');
@@ -171,7 +167,6 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
       title,
       year: year.trim() ? Number(year) : undefined,
       posterUrl: trimmedPosterUrl,
-      description,
       rating: rating.trim() ? Number(rating) : undefined,
       quality,
       topicKey
@@ -247,10 +242,6 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
               <label className="field-grid__wide">
                 Poster URL
                 <input type="url" value={posterUrl} onChange={(event) => setPosterUrl(event.target.value)} />
-              </label>
-              <label className="field-grid__wide">
-                Description
-                <textarea rows={5} value={description} onChange={(event) => setDescription(event.target.value)} />
               </label>
             </div>
 

@@ -7,7 +7,6 @@ export type TmdbResult = {
   title: string;
   year?: number;
   posterUrl?: string;
-  description: string;
   rating?: number;
 };
 

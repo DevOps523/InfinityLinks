@@ -38,10 +38,10 @@ describe('searchTmdb', () => {
         title: 'Inception',
         year: 2010,
         posterUrl: 'https://image.tmdb.org/t/p/w500/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg',
-        description: 'Cobb steals information by infiltrating the subconscious.',
         rating: 8.4
       }
     ]);
+    expect(firstResults[0]).not.toHaveProperty('description');
     expect(secondResults).toEqual(firstResults);
     expect(fetcher).toHaveBeenCalledTimes(1);
 
@@ -77,16 +77,18 @@ describe('searchTmdb', () => {
       })
     }));
 
-    await expect(searchTmdb(db, fetcher, 'test-api-key', 'tv', 'severance')).resolves.toEqual([
+    const results = await searchTmdb(db, fetcher, 'test-api-key', 'tv', 'severance');
+
+    expect(results).toEqual([
       {
         tmdbId: 95396,
         title: 'Severance',
         year: 2022,
         posterUrl: 'https://image.tmdb.org/t/p/w500/lFf6LLrQjYldcZItzOkGmMMigP7.jpg',
-        description: 'Employees split their work and personal memories.',
         rating: 8.3
       }
     ]);
+    expect(results[0]).not.toHaveProperty('description');
 
     db.close();
   });

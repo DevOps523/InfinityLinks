@@ -7,7 +7,6 @@ export type TmdbResult = {
   title: string;
   year?: number;
   posterUrl?: string;
-  description: string;
   rating?: number;
 };
 
@@ -52,8 +51,7 @@ function normalizeResult(mediaType: TmdbMediaType, result: TmdbApiResult): TmdbR
   const rawDate = mediaType === 'movie' ? result.release_date : result.first_air_date;
   const normalized: TmdbResult = {
     tmdbId: result.id,
-    title,
-    description: typeof result.overview === 'string' ? result.overview : ''
+    title
   };
 
   const year = parseYear(rawDate);

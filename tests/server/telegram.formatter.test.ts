@@ -104,4 +104,25 @@ describe('telegram caption formatter', () => {
       }
     }
   });
+
+  it('reserves footer space when fitting an oversized movie heading', () => {
+    const caption = formatMovieCaption({
+      title: `Oversized ${'Title '.repeat(220)}`,
+      year: 2026,
+      rating: 9.9,
+      quality: '4K',
+      links: [
+        {
+          providerName: 'Provider A',
+          quality: '4K',
+          url: 'https://example.com/oversized-title'
+        }
+      ]
+    });
+
+    expect(caption.length).toBeLessThanOrEqual(1024);
+    expect(caption).toContain('@dlhubcatalog_bot');
+    expect(caption.split('\n')[0]).toContain('Oversized Title');
+    expect(caption).not.toContain('https://example.com/oversized-title');
+  });
 });

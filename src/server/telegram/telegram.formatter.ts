@@ -147,8 +147,9 @@ function composeCaption(
 }
 
 function composeRequiredWithinLimit(heading: string, meta: string[], trailing: CaptionBlock[]): string {
-  const headingLines = fitCompleteLines([heading, ...meta], TELEGRAM_PHOTO_CAPTION_LIMIT);
   const requiredTrailing = splitRequiredTrailing(trailing);
+  const headingLimit = getHeadingLimitForRequiredTrailing(requiredTrailing.required);
+  const headingLines = fitCompleteLines([heading, ...meta], headingLimit);
   let includedOptional: CaptionBlock[] = [];
   let includedTrailing: CaptionBlock[] = [...includedOptional, ...requiredTrailing.required];
   let caption = composeCaptionFromSections(headingLines, includedTrailing);
@@ -166,6 +167,18 @@ function composeRequiredWithinLimit(heading: string, meta: string[], trailing: C
   }
 
   return caption;
+}
+
+function getHeadingLimitForRequiredTrailing(requiredTrailing: CaptionBlock[]): number {
+  const requiredLines = requiredTrailing.flat();
+
+  if (requiredLines.length === 0) {
+    return TELEGRAM_PHOTO_CAPTION_LIMIT;
+  }
+
+  const requiredSectionLength = requiredLines.join('\n').length;
+
+  return Math.max(0, TELEGRAM_PHOTO_CAPTION_LIMIT - requiredSectionLength - '\n\n'.length);
 }
 
 function splitRequiredTrailing(trailing: CaptionBlock[]): {
@@ -201,6 +214,10 @@ function composeCaptionFromSections(headingLines: string[], trailing: CaptionBlo
 }
 
 function fitCompleteLines(lines: string[], maxLength: number): string[] {
+  if (maxLength <= 0) {
+    return [];
+  }
+
   const included: string[] = [];
 
   for (const line of lines) {
@@ -208,6 +225,8 @@ function fitCompleteLines(lines: string[], maxLength: number): string[] {
 
     if (candidate.length <= maxLength) {
       included.push(line);
+    } else if (included.length === 0) {
+      return [line.slice(0, maxLength)];
     }
   }
 

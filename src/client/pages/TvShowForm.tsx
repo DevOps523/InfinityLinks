@@ -151,7 +151,6 @@ export function TvShowForm({ tvShowId, onSaved }: TvShowFormProps) {
     setTitle(result.title);
     setYear(result.year ? String(result.year) : '');
     setPosterUrl(result.posterUrl ?? '');
-    setDescription(result.description);
     setRating(result.rating !== undefined ? String(result.rating) : '');
   }
 

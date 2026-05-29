@@ -38,6 +38,7 @@ describe('telegram caption formatter', () => {
     expect(caption).toContain('Quality: HD');
     expect(caption).toContain('Episode 1');
     expect(caption).toContain('Provider A - https://example.com/e1');
+    expect(caption).toContain('@dlhubcatalog_bot');
   });
 
   it('normalizes null year and rating like missing values', () => {

@@ -11,11 +11,18 @@ describe('telegram caption formatter', () => {
       links: [{ providerName: 'Provider A', quality: 'Full HD', url: 'https://example.com/a' }]
     });
 
-    expect(caption).toContain('Inception (2010)');
-    expect(caption).toContain('Rating: 8.8');
-    expect(caption).toContain('Quality: Full HD');
-    expect(caption).toContain('Provider A - https://example.com/a');
-    expect(caption).toContain('@dlhubcatalog_bot');
+    expect(caption).toBe(
+      [
+        '🎬 Inception (2010)',
+        '⭐ Rating: 8.8',
+        '🎥 Quality: Full HD',
+        '',
+        '📥 Download Links:',
+        '🔗 Provider A - https://example.com/a',
+        '',
+        '🔎 Search Movies and Series: @dlhubcatalog_bot'
+      ].join('\n')
+    );
   });
 
   it('formats season title/year, rating, quality, linked episodes, and footer directly in the caption', () => {
@@ -33,12 +40,19 @@ describe('telegram caption formatter', () => {
       ]
     });
 
-    expect(caption).toContain('Chronos (2025) - Season 1');
-    expect(caption).toContain('Rating: 7.5');
-    expect(caption).toContain('Quality: HD');
-    expect(caption).toContain('Episode 1');
-    expect(caption).toContain('Provider A - https://example.com/e1');
-    expect(caption).toContain('@dlhubcatalog_bot');
+    expect(caption).toBe(
+      [
+        '📺 Chronos (2025) - Season 1',
+        '⭐ Rating: 7.5',
+        '🎥 Quality: HD',
+        '',
+        '🎞️ Episode 1',
+        '📥 Download Links:',
+        '🔗 Provider A - https://example.com/e1',
+        '',
+        '🔎 Search Movies and Series: @dlhubcatalog_bot'
+      ].join('\n')
+    );
   });
 
   it('normalizes null year and rating like missing values', () => {
@@ -81,6 +95,7 @@ describe('telegram caption formatter', () => {
     expect(caption.length).toBeLessThanOrEqual(1024);
     expect(caption).toContain('Required Overflow (2026)');
     expect(caption).toContain('🔗 Provider 1 - https://example.com/media/01/abcdefghijklmnopqrstuvwxyz');
+    expect(caption).toContain('@dlhubcatalog_bot');
     expect(caption).not.toContain('...');
 
     for (const line of caption.split('\n')) {

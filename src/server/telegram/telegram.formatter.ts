@@ -148,20 +148,47 @@ function composeCaption(
 
 function composeRequiredWithinLimit(heading: string, meta: string[], trailing: CaptionBlock[]): string {
   const headingLines = fitCompleteLines([heading, ...meta], TELEGRAM_PHOTO_CAPTION_LIMIT);
-  let includedTrailing: CaptionBlock[] = [];
+  const requiredTrailing = splitRequiredTrailing(trailing);
+  let includedOptional: CaptionBlock[] = [];
+  let includedTrailing: CaptionBlock[] = [...includedOptional, ...requiredTrailing.required];
   let caption = composeCaptionFromSections(headingLines, includedTrailing);
 
-  for (const block of trailing) {
-    const candidateBlocks = [...includedTrailing, block];
+  for (const block of requiredTrailing.optional) {
+    const candidateOptional = [...includedOptional, block];
+    const candidateBlocks = [...candidateOptional, ...requiredTrailing.required];
     const candidate = composeCaptionFromSections(headingLines, candidateBlocks);
 
     if (candidate.length <= TELEGRAM_PHOTO_CAPTION_LIMIT) {
+      includedOptional = candidateOptional;
       includedTrailing = candidateBlocks;
       caption = candidate;
     }
   }
 
   return caption;
+}
+
+function splitRequiredTrailing(trailing: CaptionBlock[]): {
+  optional: CaptionBlock[];
+  required: CaptionBlock[];
+} {
+  let footerIndex = -1;
+
+  for (let index = trailing.length - 1; index >= 0; index -= 1) {
+    if (trailing[index].some((line) => line.includes(SEARCH_BOT_HANDLE))) {
+      footerIndex = index;
+      break;
+    }
+  }
+
+  if (footerIndex === -1) {
+    return { optional: trailing, required: [] };
+  }
+
+  return {
+    optional: trailing.slice(0, footerIndex),
+    required: trailing.slice(footerIndex)
+  };
 }
 
 function composeCaptionFromSections(headingLines: string[], trailing: CaptionBlock[]): string {

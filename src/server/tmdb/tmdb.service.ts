@@ -70,6 +70,50 @@ function normalizeResult(mediaType: TmdbMediaType, result: TmdbApiResult): TmdbR
   return normalized;
 }
 
+function normalizeCachedResult(result: unknown): TmdbResult | null {
+  if (!result || typeof result !== 'object') {
+    return null;
+  }
+
+  const rawResult = result as Record<string, unknown>;
+  if (typeof rawResult.tmdbId !== 'number' || typeof rawResult.title !== 'string') {
+    return null;
+  }
+
+  const title = rawResult.title.trim();
+  if (title.length === 0) {
+    return null;
+  }
+
+  const normalized: TmdbResult = {
+    tmdbId: rawResult.tmdbId,
+    title
+  };
+
+  if (typeof rawResult.year === 'number') {
+    normalized.year = rawResult.year;
+  }
+
+  if (typeof rawResult.posterUrl === 'string' && rawResult.posterUrl.length > 0) {
+    normalized.posterUrl = rawResult.posterUrl;
+  }
+
+  if (typeof rawResult.rating === 'number') {
+    normalized.rating = rawResult.rating;
+  }
+
+  return normalized;
+}
+
+function normalizeCachedResults(payload: string): TmdbResult[] {
+  const parsed = JSON.parse(payload) as unknown;
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+
+  return parsed.map((result) => normalizeCachedResult(result)).filter(Boolean) as TmdbResult[];
+}
+
 function logApiCall(
   db: AppDatabase,
   status: 'succeeded' | 'failed',
@@ -103,7 +147,7 @@ export async function searchTmdb(
     .get(mediaType, query) as { result_payload: string } | undefined;
 
   if (cached) {
-    return JSON.parse(cached.result_payload) as TmdbResult[];
+    return normalizeCachedResults(cached.result_payload);
   }
 
   const params = new URLSearchParams({ api_key: apiKey, query });

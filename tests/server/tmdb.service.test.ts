@@ -93,6 +93,45 @@ describe('searchTmdb', () => {
     db.close();
   });
 
+  it('sanitizes cached results that contain removed description fields', async () => {
+    const db = setupDb();
+    const fetcher = vi.fn();
+
+    db.prepare(
+      `INSERT INTO tmdb_cache (media_type, query, result_payload, expires_at, updated_at)
+       VALUES (?, ?, ?, datetime('now', '+60 minutes'), CURRENT_TIMESTAMP)`
+    ).run(
+      'movie',
+      'ince',
+      JSON.stringify([
+        {
+          tmdbId: 27205,
+          title: 'Inception',
+          year: 2010,
+          posterUrl: 'https://image.tmdb.org/t/p/w500/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg',
+          rating: 8.4,
+          description: 'Cobb steals information by infiltrating the subconscious.'
+        }
+      ])
+    );
+
+    const results = await searchTmdb(db, fetcher, 'test-api-key', 'movie', 'ince');
+
+    expect(results).toEqual([
+      {
+        tmdbId: 27205,
+        title: 'Inception',
+        year: 2010,
+        posterUrl: 'https://image.tmdb.org/t/p/w500/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg',
+        rating: 8.4
+      }
+    ]);
+    expect(results[0]).not.toHaveProperty('description');
+    expect(fetcher).not.toHaveBeenCalled();
+
+    db.close();
+  });
+
   it('logs failed TMDB responses and throws a meaningful error', async () => {
     const db = setupDb();
     const fetcher = vi.fn(async () => ({

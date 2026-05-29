@@ -3,6 +3,10 @@ import { createDatabase } from '../../src/server/db/database.js';
 import { migrate, resolveSchemaPath } from '../../src/server/db/migrate.js';
 
 describe('database migration', () => {
+  function columnNames(db: ReturnType<typeof createDatabase>, tableName: string) {
+    return (db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>).map((column) => column.name);
+  }
+
   it('creates every MVP table', () => {
     const db = createDatabase(':memory:');
     migrate(db);
@@ -42,6 +46,125 @@ describe('database migration', () => {
       'last_tv_show_count',
       'updated_at'
     ]);
+
+    db.close();
+  });
+
+  it('creates media tables without description columns', () => {
+    const db = createDatabase(':memory:');
+    migrate(db);
+
+    expect(columnNames(db, 'movies')).not.toContain('description');
+    expect(columnNames(db, 'tv_shows')).not.toContain('description');
+
+    db.close();
+  });
+
+  it('drops legacy description columns while preserving related media rows', () => {
+    const db = createDatabase(':memory:');
+    db.exec(`
+      CREATE TABLE movies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tmdb_id INTEGER,
+        title TEXT NOT NULL,
+        year INTEGER,
+        poster_url TEXT,
+        description TEXT NOT NULL DEFAULT '',
+        rating REAL,
+        quality TEXT NOT NULL CHECK (quality IN ('SD', 'HD', 'Full HD', '2K', '4K')),
+        topic_key TEXT NOT NULL DEFAULT 'FOREIGN_MOVIES' CHECK (topic_key IN ('FOREIGN_MOVIES', 'PINOY_MOVIES', 'ANIME', 'VIVAMAX')),
+        telegram_message_id INTEGER,
+        post_status TEXT NOT NULL DEFAULT 'pending' CHECK (post_status IN ('pending', 'posted', 'failed', 'deleted')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE movie_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        movie_id INTEGER NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
+        provider_name TEXT NOT NULL,
+        quality TEXT NOT NULL CHECK (quality IN ('SD', 'HD', 'Full HD', '2K', '4K')),
+        status TEXT NOT NULL CHECK (status IN ('active', 'inactive')),
+        url TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE tv_shows (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tmdb_id INTEGER,
+        title TEXT NOT NULL,
+        year INTEGER,
+        poster_url TEXT,
+        description TEXT NOT NULL DEFAULT '',
+        rating REAL,
+        quality TEXT NOT NULL CHECK (quality IN ('SD', 'HD', 'Full HD', '2K', '4K')),
+        topic_key TEXT NOT NULL DEFAULT 'FOREIGN_TV_SERIES' CHECK (topic_key IN ('FOREIGN_TV_SERIES', 'PINOY_TV_SERIES', 'ANIME', 'VIVAMAX')),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE seasons (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tv_show_id INTEGER NOT NULL REFERENCES tv_shows(id) ON DELETE CASCADE,
+        season_number INTEGER NOT NULL,
+        telegram_message_id INTEGER,
+        post_status TEXT NOT NULL DEFAULT 'pending' CHECK (post_status IN ('pending', 'posted', 'failed', 'deleted')),
+        needs_repost INTEGER NOT NULL DEFAULT 0 CHECK (needs_repost IN (0, 1)),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (tv_show_id, season_number)
+      );
+    `);
+    db.prepare(
+      `INSERT INTO movies (id, tmdb_id, title, year, poster_url, description, rating, quality, topic_key, telegram_message_id, post_status)
+       VALUES (1, 27205, 'Inception', 2010, 'https://example.com/inception.jpg', 'Discard me', 8.8, 'Full HD', 'FOREIGN_MOVIES', 456, 'posted')`
+    ).run();
+    db.prepare(
+      `INSERT INTO movie_links (movie_id, provider_name, quality, status, url)
+       VALUES (1, 'Provider', 'Full HD', 'active', 'https://example.com/watch')`
+    ).run();
+    db.prepare(
+      `INSERT INTO tv_shows (id, tmdb_id, title, year, poster_url, description, rating, quality, topic_key)
+       VALUES (2, 1399, 'Game of Thrones', 2011, 'https://example.com/got.jpg', 'Discard me too', 9.2, 'HD', 'FOREIGN_TV_SERIES')`
+    ).run();
+    db.prepare("INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status) VALUES (2, 1, 789, 'posted')").run();
+
+    migrate(db);
+
+    expect(columnNames(db, 'movies')).not.toContain('description');
+    expect(columnNames(db, 'tv_shows')).not.toContain('description');
+    expect(db.prepare('SELECT id, tmdb_id, title, year, poster_url, rating, quality, topic_key, telegram_message_id, post_status FROM movies').get()).toEqual({
+      id: 1,
+      tmdb_id: 27205,
+      title: 'Inception',
+      year: 2010,
+      poster_url: 'https://example.com/inception.jpg',
+      rating: 8.8,
+      quality: 'Full HD',
+      topic_key: 'FOREIGN_MOVIES',
+      telegram_message_id: 456,
+      post_status: 'posted'
+    });
+    expect(db.prepare('SELECT movie_id, provider_name, url FROM movie_links').get()).toEqual({
+      movie_id: 1,
+      provider_name: 'Provider',
+      url: 'https://example.com/watch'
+    });
+    expect(db.prepare('SELECT id, tmdb_id, title, year, poster_url, rating, quality, topic_key FROM tv_shows').get()).toEqual({
+      id: 2,
+      tmdb_id: 1399,
+      title: 'Game of Thrones',
+      year: 2011,
+      poster_url: 'https://example.com/got.jpg',
+      rating: 9.2,
+      quality: 'HD',
+      topic_key: 'FOREIGN_TV_SERIES'
+    });
+    expect(db.prepare('SELECT tv_show_id, season_number, telegram_message_id, post_status FROM seasons').get()).toEqual({
+      tv_show_id: 2,
+      season_number: 1,
+      telegram_message_id: 789,
+      post_status: 'posted'
+    });
 
     db.close();
   });

@@ -32,7 +32,6 @@ export type Movie = {
   title: string;
   year?: number;
   posterUrl?: string;
-  description: string;
   rating?: number;
   quality: string;
   topicKey: string;
@@ -64,7 +63,6 @@ export type TvShow = {
   title: string;
   year?: number;
   posterUrl?: string;
-  description: string;
   rating?: number;
   quality: string;
   topicKey: string;
@@ -141,7 +139,6 @@ export type SeasonPostData = {
   title: string;
   year?: number;
   posterUrl?: string;
-  description: string;
   rating?: number;
   quality: string;
   topicKey: string;
@@ -154,7 +151,6 @@ type MovieRow = {
   title: string;
   year: number | null;
   poster_url: string | null;
-  description: string;
   rating: number | null;
   quality: string;
   topic_key: string;
@@ -182,7 +178,6 @@ type TvShowRow = {
   title: string;
   year: number | null;
   poster_url: string | null;
-  description: string;
   rating: number | null;
   quality: string;
   topic_key: string;
@@ -226,7 +221,6 @@ type SeasonPostRow = SeasonRow & {
   title: string;
   year: number | null;
   poster_url: string | null;
-  description: string;
   rating: number | null;
   quality: string;
   topic_key: string;
@@ -239,7 +233,6 @@ function mapMovie(row: MovieRow): Movie {
     title: row.title,
     year: row.year ?? undefined,
     posterUrl: row.poster_url ?? undefined,
-    description: row.description,
     rating: row.rating ?? undefined,
     quality: row.quality,
     topicKey: row.topic_key,
@@ -271,7 +264,6 @@ function mapTvShow(row: TvShowRow): TvShow {
     title: row.title,
     year: row.year ?? undefined,
     posterUrl: row.poster_url ?? undefined,
-    description: row.description,
     rating: row.rating ?? undefined,
     quality: row.quality,
     topicKey: row.topic_key,
@@ -365,7 +357,7 @@ export function listMovies(db: AppDatabase, filters: MovieFilters = {}) {
   return (
     db
       .prepare(
-        `SELECT id, tmdb_id, title, year, poster_url, description, rating, quality, topic_key,
+        `SELECT id, tmdb_id, title, year, poster_url, rating, quality, topic_key,
                 telegram_message_id, post_status, created_at, updated_at
          FROM movies
          ${whereSql}
@@ -404,7 +396,7 @@ export function findDuplicateMovies(db: AppDatabase, filters: { title: string; y
 export function getMovieWithLinks(db: AppDatabase, id: number): MovieWithLinks | undefined {
   const movie = db
     .prepare(
-      `SELECT id, tmdb_id, title, year, poster_url, description, rating, quality, topic_key,
+      `SELECT id, tmdb_id, title, year, poster_url, rating, quality, topic_key,
               telegram_message_id, post_status, created_at, updated_at
        FROM movies
        WHERE id = ?`
@@ -432,15 +424,14 @@ export function createMovieWithLinks(db: AppDatabase, input: MovieInput): MovieW
   return db.transaction(() => {
     const result = db
       .prepare(
-        `INSERT INTO movies (tmdb_id, title, year, poster_url, description, rating, quality, topic_key)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO movies (tmdb_id, title, year, poster_url, rating, quality, topic_key)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.tmdbId ?? null,
         input.title,
         input.year ?? null,
         input.posterUrl ? input.posterUrl : null,
-        input.description,
         input.rating ?? null,
         input.quality,
         input.topicKey
@@ -475,7 +466,6 @@ export function updateMovieWithLinks(db: AppDatabase, id: number, input: MovieIn
            title = ?,
            year = ?,
            poster_url = ?,
-           description = ?,
            rating = ?,
            quality = ?,
            topic_key = ?,
@@ -486,7 +476,6 @@ export function updateMovieWithLinks(db: AppDatabase, id: number, input: MovieIn
       input.title,
       input.year ?? null,
       input.posterUrl ? input.posterUrl : null,
-      input.description,
       input.rating ?? null,
       input.quality,
       input.topicKey,
@@ -534,7 +523,7 @@ export function listTvShows(db: AppDatabase, filters: TvShowFilters = {}) {
   return (
     db
       .prepare(
-        `SELECT id, tmdb_id, title, year, poster_url, description, rating, quality, topic_key, created_at, updated_at
+        `SELECT id, tmdb_id, title, year, poster_url, rating, quality, topic_key, created_at, updated_at
          FROM tv_shows
          ${whereSql}
          ORDER BY ${getMediaOrderBy(filters.sort)}`
@@ -572,15 +561,14 @@ export function findDuplicateTvShows(db: AppDatabase, filters: { title: string; 
 export function createTvShow(db: AppDatabase, input: TvShowInput): TvShow {
   const result = db
     .prepare(
-      `INSERT INTO tv_shows (tmdb_id, title, year, poster_url, description, rating, quality, topic_key)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO tv_shows (tmdb_id, title, year, poster_url, rating, quality, topic_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       input.tmdbId ?? null,
       input.title,
       input.year ?? null,
       input.posterUrl ? input.posterUrl : null,
-      input.description,
       input.rating ?? null,
       input.quality,
       input.topicKey
@@ -597,7 +585,7 @@ export function createTvShow(db: AppDatabase, input: TvShowInput): TvShow {
 export function getTvShow(db: AppDatabase, id: number): TvShow | undefined {
   const row = db
     .prepare(
-      `SELECT id, tmdb_id, title, year, poster_url, description, rating, quality, topic_key, created_at, updated_at
+      `SELECT id, tmdb_id, title, year, poster_url, rating, quality, topic_key, created_at, updated_at
        FROM tv_shows
        WHERE id = ?`
     )
@@ -618,7 +606,6 @@ export function updateTvShow(db: AppDatabase, id: number, input: TvShowInput): T
            title = ?,
            year = ?,
            poster_url = ?,
-           description = ?,
            rating = ?,
            quality = ?,
            topic_key = ?,
@@ -629,7 +616,6 @@ export function updateTvShow(db: AppDatabase, id: number, input: TvShowInput): T
       input.title,
       input.year ?? null,
       input.posterUrl ? input.posterUrl : null,
-      input.description,
       input.rating ?? null,
       input.quality,
       input.topicKey,
@@ -1092,7 +1078,6 @@ export function getSeasonPostData(db: AppDatabase, seasonId: number): SeasonPost
               tv_shows.title,
               tv_shows.year,
               tv_shows.poster_url,
-              tv_shows.description,
               tv_shows.rating,
               tv_shows.quality,
               tv_shows.topic_key
@@ -1115,7 +1100,6 @@ export function getSeasonPostData(db: AppDatabase, seasonId: number): SeasonPost
     title: row.title,
     year: row.year ?? undefined,
     posterUrl: row.poster_url ?? undefined,
-    description: row.description,
     rating: row.rating ?? undefined,
     quality: row.quality,
     topicKey: row.topic_key,

@@ -18,16 +18,16 @@ describe('admin dashboard', () => {
 
   it('returns dashboard counts for local admin health', async () => {
     db.prepare(
-      `INSERT INTO movies (title, description, quality, post_status, telegram_message_id)
-       VALUES ('Movie One', '', 'HD', 'posted', 100)`
+      `INSERT INTO movies (title, quality, post_status, telegram_message_id)
+       VALUES ('Posted Movie', 'HD', 'posted', 123)`
     ).run();
     db.prepare(
       `INSERT INTO movie_links (movie_id, provider_name, quality, status, url)
        VALUES (1, 'Provider', 'HD', 'active', 'https://example.com/movie')`
     ).run();
     db.prepare(
-      `INSERT INTO tv_shows (title, description, quality)
-       VALUES ('Show One', '', 'HD')`
+      `INSERT INTO tv_shows (title, quality)
+       VALUES ('Series', 'HD')`
     ).run();
     db.prepare(
       `INSERT INTO seasons (tv_show_id, season_number, telegram_message_id, post_status)

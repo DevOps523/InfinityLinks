@@ -43,8 +43,8 @@ function createLinkedSeason(options: { posterUrl?: string | null; telegramMessag
   const posterUrl = Object.hasOwn(options, 'posterUrl') ? options.posterUrl : 'https://example.com/chronos.jpg';
   const show = db
     .prepare(
-      `INSERT INTO tv_shows (title, year, poster_url, rating, quality, description)
-       VALUES ('Chronos', 2025, ?, 7.5, 'HD', 'Time loops')`
+      `INSERT INTO tv_shows (title, year, poster_url, rating, quality)
+       VALUES ('Chronos', 2025, ?, 7.5, 'HD')`
     )
     .run(posterUrl);
   const season = db
@@ -95,8 +95,7 @@ describe('tv media API', () => {
         posterUrl: 'https://example.com/got.jpg',
         rating: 8.4,
         quality: 'Full HD',
-        topicKey: 'PINOY_TV_SERIES',
-        description: 'Noble families fight for control.'
+        topicKey: 'PINOY_TV_SERIES'
       })
       .expect(201);
 
@@ -108,9 +107,9 @@ describe('tv media API', () => {
       posterUrl: 'https://example.com/got.jpg',
       rating: 8.4,
       quality: 'Full HD',
-      topicKey: 'PINOY_TV_SERIES',
-      description: 'Noble families fight for control.'
+      topicKey: 'PINOY_TV_SERIES'
     });
+    expect(response.body.tvShow).not.toHaveProperty('description');
     expect(db.prepare('SELECT COUNT(*) AS count FROM tv_shows WHERE id = ?').get(response.body.tvShow.id)).toEqual({
       count: 1
     });
@@ -121,8 +120,7 @@ describe('tv media API', () => {
       .post('/api/tv-shows')
       .send({
         title: 'Default Topic Show',
-        quality: 'HD',
-        description: ''
+        quality: 'HD'
       })
       .expect(201);
 
@@ -133,8 +131,7 @@ describe('tv media API', () => {
       .send({
         title: 'Invalid Topic Show',
         quality: 'HD',
-        topicKey: 'PINOY_MOVIES',
-        description: ''
+        topicKey: 'PINOY_MOVIES'
       })
       .expect(400);
 
@@ -150,16 +147,16 @@ describe('tv media API', () => {
 
   it('sorts TV shows by created date, updated date, and title', async () => {
     db.prepare(
-      `INSERT INTO tv_shows (title, year, quality, description, created_at, updated_at)
-       VALUES ('Dark', 2017, 'HD', 'Time loops', '2026-01-01 00:00:00', '2026-01-02 00:00:00')`
+      `INSERT INTO tv_shows (title, year, quality, created_at, updated_at)
+       VALUES ('Dark', 2017, 'HD', '2026-01-01 00:00:00', '2026-01-02 00:00:00')`
     ).run();
     db.prepare(
-      `INSERT INTO tv_shows (title, year, quality, description, created_at, updated_at)
-       VALUES ('Severance', 2022, 'HD', 'Workplace mystery', '2026-01-03 00:00:00', '2026-01-04 00:00:00')`
+      `INSERT INTO tv_shows (title, year, quality, created_at, updated_at)
+       VALUES ('Severance', 2022, 'HD', '2026-01-03 00:00:00', '2026-01-04 00:00:00')`
     ).run();
     db.prepare(
-      `INSERT INTO tv_shows (title, year, quality, description, created_at, updated_at)
-       VALUES ('Andor', 2022, 'HD', 'Rebellion', '2026-01-02 00:00:00', '2026-01-05 00:00:00')`
+      `INSERT INTO tv_shows (title, year, quality, created_at, updated_at)
+       VALUES ('Andor', 2022, 'HD', '2026-01-02 00:00:00', '2026-01-05 00:00:00')`
     ).run();
 
     const newest = await request(app()).get('/api/tv-shows').expect(200);
@@ -195,7 +192,6 @@ describe('tv media API', () => {
       .send({
         title: 'Dark',
         year: 2017,
-        description: '',
         quality: 'HD'
       })
       .expect(201);
@@ -205,7 +201,6 @@ describe('tv media API', () => {
       .send({
         title: 'Dark',
         year: 2026,
-        description: '',
         quality: 'HD'
       })
       .expect(201);
@@ -229,7 +224,7 @@ describe('tv media API', () => {
   it('creates a season for a TV show', async () => {
     const show = db
       .prepare(
-        "INSERT INTO tv_shows (title, year, poster_url, quality, description) VALUES ('Chronos', 2025, 'https://example.com/chronos.jpg', 'HD', 'Time loops')"
+        "INSERT INTO tv_shows (title, year, poster_url, quality) VALUES ('Chronos', 2025, 'https://example.com/chronos.jpg', 'HD')"
       )
       .run();
 
@@ -249,7 +244,7 @@ describe('tv media API', () => {
   it('queues anime season sends to the anime topic', async () => {
     const show = db
       .prepare(
-        "INSERT INTO tv_shows (title, year, poster_url, quality, topic_key, description) VALUES ('Anime Show', 2026, 'https://example.com/anime.jpg', 'HD', 'ANIME', 'Animated adventure')"
+        "INSERT INTO tv_shows (title, year, poster_url, quality, topic_key) VALUES ('Anime Show', 2026, 'https://example.com/anime.jpg', 'HD', 'ANIME')"
       )
       .run();
     const season = db
@@ -300,8 +295,7 @@ describe('tv media API', () => {
         year: 2026,
         posterUrl: 'https://example.com/chronos-updated.jpg',
         rating: 8.2,
-        quality: 'Full HD',
-        description: 'New season metadata.'
+        quality: 'Full HD'
       })
       .expect(200);
 
@@ -474,7 +468,7 @@ describe('tv media API', () => {
   it('queues one Telegram season send job when the first linked episode is added', async () => {
     const show = db
       .prepare(
-        "INSERT INTO tv_shows (title, year, poster_url, rating, quality, description) VALUES ('Chronos', 2025, 'https://example.com/chronos.jpg', 7.5, 'HD', 'Time loops')"
+        "INSERT INTO tv_shows (title, year, poster_url, rating, quality) VALUES ('Chronos', 2025, 'https://example.com/chronos.jpg', 7.5, 'HD')"
       )
       .run();
     const season = db
@@ -770,8 +764,7 @@ describe('tv media API', () => {
         year: 2025,
         posterUrl: '',
         rating: 7.5,
-        quality: 'HD',
-        description: 'Time loops'
+        quality: 'HD'
       })
       .expect(200);
 

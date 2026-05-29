@@ -34,8 +34,7 @@ const MediaInputBaseSchema = z.object({
   year: z.number().int().positive().optional(),
   posterUrl: z.union([HttpUrlSchema, z.literal('')]).optional(),
   rating: z.number().optional(),
-  quality: QualitySchema,
-  description: z.string().default('')
+  quality: QualitySchema
 });
 
 export const MovieInputSchema = MediaInputBaseSchema.extend({

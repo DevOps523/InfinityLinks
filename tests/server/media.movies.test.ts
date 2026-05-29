@@ -63,7 +63,6 @@ describe('movie media API', () => {
         rating: 8.8,
         quality: 'Full HD',
         topicKey: 'PINOY_MOVIES',
-        description: 'A thief steals corporate secrets through dream-sharing technology.',
         links: [
           {
             providerName: 'Infinity Stream',
@@ -90,7 +89,6 @@ describe('movie media API', () => {
       rating: 8.8,
       quality: 'Full HD',
       topicKey: 'PINOY_MOVIES',
-      description: 'A thief steals corporate secrets through dream-sharing technology.',
       links: [
         {
           id: expect.any(Number),
@@ -112,6 +110,7 @@ describe('movie media API', () => {
         }
       ]
     });
+    expect(response.body.movie).not.toHaveProperty('description');
     expect(db.prepare('SELECT COUNT(*) AS count FROM movies WHERE id = ?').get(response.body.movie.id)).toEqual({
       count: 1
     });
@@ -162,7 +161,6 @@ describe('movie media API', () => {
       .send({
         title: 'Default Topic Movie',
         quality: 'HD',
-        description: '',
         links: []
       })
       .expect(201);
@@ -175,7 +173,6 @@ describe('movie media API', () => {
         title: 'Invalid Topic Movie',
         quality: 'HD',
         topicKey: 'FOREIGN_TV_SERIES',
-        description: '',
         links: []
       })
       .expect(400);
@@ -197,7 +194,6 @@ describe('movie media API', () => {
         title: 'Posterless',
         year: 2026,
         quality: 'HD',
-        description: 'A movie without poster art.',
         links: [
           {
             providerName: 'Infinity Stream',
@@ -213,10 +209,9 @@ describe('movie media API', () => {
   });
 
   it('lists movies filtered by title', async () => {
-    db.prepare("INSERT INTO movies (title, year, quality, description) VALUES ('Arrival', 2016, 'HD', 'First contact')")
-      .run();
-    db.prepare("INSERT INTO movies (title, year, quality, description) VALUES ('Moon', 2009, 'HD', 'Lunar mystery')").run();
-    db.prepare("INSERT INTO movies (title, year, quality, description) VALUES ('Alien', 1979, 'HD', 'Space horror')").run();
+    db.prepare("INSERT INTO movies (title, year, quality) VALUES ('Arrival', 2016, 'HD')").run();
+    db.prepare("INSERT INTO movies (title, year, quality) VALUES ('Moon', 2009, 'HD')").run();
+    db.prepare("INSERT INTO movies (title, year, quality) VALUES ('Alien', 1979, 'HD')").run();
 
     const response = await request(app()).get('/api/movies?title=A').expect(200);
 
@@ -225,16 +220,16 @@ describe('movie media API', () => {
 
   it('sorts movies by created date, updated date, and title', async () => {
     db.prepare(
-      `INSERT INTO movies (title, year, quality, description, created_at, updated_at)
-       VALUES ('Arrival', 2016, 'HD', 'First contact', '2026-01-01 00:00:00', '2026-01-02 00:00:00')`
+      `INSERT INTO movies (title, year, quality, created_at, updated_at)
+       VALUES ('Arrival', 2016, 'HD', '2026-01-01 00:00:00', '2026-01-02 00:00:00')`
     ).run();
     db.prepare(
-      `INSERT INTO movies (title, year, quality, description, created_at, updated_at)
-       VALUES ('Moon', 2009, 'HD', 'Lunar mystery', '2026-01-03 00:00:00', '2026-01-04 00:00:00')`
+      `INSERT INTO movies (title, year, quality, created_at, updated_at)
+       VALUES ('Moon', 2009, 'HD', '2026-01-03 00:00:00', '2026-01-04 00:00:00')`
     ).run();
     db.prepare(
-      `INSERT INTO movies (title, year, quality, description, created_at, updated_at)
-       VALUES ('Alien', 1979, 'HD', 'Space horror', '2026-01-02 00:00:00', '2026-01-05 00:00:00')`
+      `INSERT INTO movies (title, year, quality, created_at, updated_at)
+       VALUES ('Alien', 1979, 'HD', '2026-01-02 00:00:00', '2026-01-05 00:00:00')`
     ).run();
 
     const newest = await request(app()).get('/api/movies').expect(200);
@@ -256,7 +251,6 @@ describe('movie media API', () => {
       .send({
         title: 'Arrival',
         year: 2016,
-        description: '',
         quality: 'HD',
         links: []
       })
@@ -267,7 +261,6 @@ describe('movie media API', () => {
       .send({
         title: 'Arrival',
         year: 2017,
-        description: '',
         quality: 'HD',
         links: []
       })
@@ -292,7 +285,7 @@ describe('movie media API', () => {
   it('returns a movie with links by id', async () => {
     const movie = db
       .prepare(
-        "INSERT INTO movies (tmdb_id, title, year, poster_url, rating, quality, description) VALUES (27205, 'Inception', 2010, 'https://example.com/inception.jpg', 8.8, 'Full HD', 'Dream heist')"
+        "INSERT INTO movies (tmdb_id, title, year, poster_url, rating, quality) VALUES (27205, 'Inception', 2010, 'https://example.com/inception.jpg', 8.8, 'Full HD')"
       )
       .run();
     db.prepare(
@@ -309,7 +302,6 @@ describe('movie media API', () => {
       posterUrl: 'https://example.com/inception.jpg',
       rating: 8.8,
       quality: 'Full HD',
-      description: 'Dream heist',
       links: [
         {
           providerName: 'Provider',
@@ -319,12 +311,13 @@ describe('movie media API', () => {
         }
       ]
     });
+    expect(response.body.movie).not.toHaveProperty('description');
   });
 
   it('updates a movie with replacement links and queues a Telegram edit job for posted movies', async () => {
     const movie = db
       .prepare(
-        "INSERT INTO movies (title, year, poster_url, quality, description, telegram_message_id, post_status) VALUES ('Old Title', 2020, 'https://example.com/old.jpg', 'HD', 'Old description', 456, 'posted')"
+        "INSERT INTO movies (title, year, poster_url, quality, telegram_message_id, post_status) VALUES ('Old Title', 2020, 'https://example.com/old.jpg', 'HD', 456, 'posted')"
       )
       .run();
     db.prepare(
@@ -340,7 +333,6 @@ describe('movie media API', () => {
         posterUrl: 'https://example.com/new.jpg',
         rating: 7.5,
         quality: '4K',
-        description: 'Updated description',
         links: [
           {
             providerName: 'New Provider',
@@ -366,7 +358,6 @@ describe('movie media API', () => {
       posterUrl: 'https://example.com/new.jpg',
       rating: 7.5,
       quality: '4K',
-      description: 'Updated description',
       telegramMessageId: 456,
       links: [
         {
@@ -385,6 +376,7 @@ describe('movie media API', () => {
         }
       ]
     });
+    expect(response.body.movie).not.toHaveProperty('description');
     expect(db.prepare('SELECT COUNT(*) AS count FROM movie_links WHERE provider_name = ?').get('Old Provider')).toEqual({
       count: 0
     });
@@ -406,7 +398,7 @@ describe('movie media API', () => {
   it('queues a Telegram delete job when a posted movie update removes all links', async () => {
     const movie = db
       .prepare(
-        "INSERT INTO movies (title, year, poster_url, quality, description, telegram_message_id, post_status) VALUES ('Posted Movie', 2020, 'https://example.com/old.jpg', 'HD', 'Old description', 456, 'posted')"
+        "INSERT INTO movies (title, year, poster_url, quality, telegram_message_id, post_status) VALUES ('Posted Movie', 2020, 'https://example.com/old.jpg', 'HD', 456, 'posted')"
       )
       .run();
     db.prepare(
@@ -420,7 +412,6 @@ describe('movie media API', () => {
         year: 2020,
         posterUrl: 'https://example.com/old.jpg',
         quality: 'HD',
-        description: 'No links remain',
         links: []
       })
       .expect(200);
@@ -446,7 +437,6 @@ describe('movie media API', () => {
         year: 2024,
         posterUrl: 'https://example.com/old.jpg',
         quality: 'HD',
-        description: 'Queued description',
         links: [
           {
             providerName: 'Provider',
@@ -467,7 +457,6 @@ describe('movie media API', () => {
         year: 2025,
         posterUrl: 'https://example.com/new.jpg',
         quality: '4K',
-        description: 'Updated queued description',
         links: [
           {
             providerName: 'Provider',
@@ -502,7 +491,6 @@ describe('movie media API', () => {
         year: 2024,
         posterUrl: 'https://example.com/poster.jpg',
         quality: 'HD',
-        description: 'Initially publishable',
         links: [
           {
             providerName: 'Provider',
@@ -523,7 +511,6 @@ describe('movie media API', () => {
         year: 2024,
         posterUrl: 'https://example.com/poster.jpg',
         quality: 'HD',
-        description: 'No longer publishable',
         links: []
       })
       .expect(200);
@@ -539,7 +526,6 @@ describe('movie media API', () => {
         year: 2024,
         posterUrl: 'https://example.com/poster.jpg',
         quality: 'HD',
-        description: 'Initially publishable',
         links: [
           {
             providerName: 'Provider',
@@ -566,7 +552,6 @@ describe('movie media API', () => {
         year: 2024,
         posterUrl: '',
         quality: 'HD',
-        description: 'No longer publishable',
         links: [
           {
             providerName: 'Provider',
@@ -639,7 +624,6 @@ describe('movie media API', () => {
         year: 2026,
         posterUrl: 'https://example.com/deleted.jpg',
         quality: 'HD',
-        description: 'Queued but deleted',
         links: [
           {
             providerName: 'Provider',

@@ -9,6 +9,30 @@ type TemporaryPasswordResponse = {
   temporaryPassword: string;
 };
 
+function getContentType(response: Response) {
+  return response.headers?.get?.('content-type')?.toLowerCase() ?? '';
+}
+
+async function readJsonObject(response: Response, message: string) {
+  const contentType = getContentType(response);
+
+  if (contentType && !contentType.includes('application/json')) {
+    throw new Error(message);
+  }
+
+  try {
+    const payload = (await response.json()) as unknown;
+
+    if (payload && typeof payload === 'object') {
+      return payload as Record<string, unknown>;
+    }
+  } catch {
+    throw new Error(message);
+  }
+
+  throw new Error(message);
+}
+
 export async function fetchCurrentUser() {
   const payload = await apiJson<CurrentUserResponse>('/api/auth/me');
   return payload?.user ?? null;
@@ -23,7 +47,7 @@ export async function loginWithCredentials(email: string, password: string) {
     throw new Error('Login failed. Please try again.');
   }
 
-  const csrf = (await csrfResponse.json()) as { csrfToken?: unknown };
+  const csrf = await readJsonObject(csrfResponse, 'Login failed. Please try again.');
   if (typeof csrf.csrfToken !== 'string') {
     throw new Error('Login failed. Please try again.');
   }
@@ -45,7 +69,16 @@ export async function loginWithCredentials(email: string, password: string) {
     }
   });
 
-  if (!response.ok) {
+  if (!response.ok || response.redirected) {
+    throw new Error('Invalid email or password.');
+  }
+
+  const payload = await readJsonObject(response, 'Invalid email or password.');
+  if (typeof payload.error === 'string' && payload.error.trim()) {
+    throw new Error('Invalid email or password.');
+  }
+
+  if (payload.ok !== true) {
     throw new Error('Invalid email or password.');
   }
 }
@@ -61,14 +94,23 @@ export async function signOut() {
   const csrfResponse = await fetch('/auth/csrf', {
     credentials: 'same-origin'
   });
-  const csrf = (await csrfResponse.json()) as { csrfToken?: unknown };
+
+  if (!csrfResponse.ok) {
+    throw new Error('Sign out failed. Please try again.');
+  }
+
+  const csrf = await readJsonObject(csrfResponse, 'Sign out failed. Please try again.');
+  if (typeof csrf.csrfToken !== 'string') {
+    throw new Error('Sign out failed. Please try again.');
+  }
+
   const body = new URLSearchParams({
-    csrfToken: typeof csrf.csrfToken === 'string' ? csrf.csrfToken : '',
+    csrfToken: csrf.csrfToken,
     redirect: 'false',
     json: 'true'
   });
 
-  await fetch('/auth/signout', {
+  const response = await fetch('/auth/signout', {
     method: 'POST',
     body,
     credentials: 'same-origin',
@@ -76,6 +118,19 @@ export async function signOut() {
       'Content-Type': 'application/x-www-form-urlencoded'
     }
   });
+
+  if (!response.ok || response.redirected) {
+    throw new Error('Sign out failed. Please try again.');
+  }
+
+  const payload = await readJsonObject(response, 'Sign out failed. Please try again.');
+  if (typeof payload.error === 'string' && payload.error.trim()) {
+    throw new Error('Sign out failed. Please try again.');
+  }
+
+  if (payload.ok === false) {
+    throw new Error('Sign out failed. Please try again.');
+  }
 }
 
 export type { TemporaryPasswordResponse };

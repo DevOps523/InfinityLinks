@@ -13,6 +13,7 @@ export function ChangePasswordPage({ user, onChangePassword, onSignOut }: Change
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   async function submitPasswordChange(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,6 +29,19 @@ export function ChangePasswordPage({ user, onChangePassword, onSignOut }: Change
     }
   }
 
+  async function submitSignOut() {
+    setError(null);
+    setIsSigningOut(true);
+
+    try {
+      await onSignOut();
+    } catch (signOutError) {
+      setError(signOutError instanceof Error ? signOutError.message : 'Sign out failed. Please try again.');
+    } finally {
+      setIsSigningOut(false);
+    }
+  }
+
   return (
     <main className="content-shell">
       <section className="page-section">
@@ -36,9 +50,9 @@ export function ChangePasswordPage({ user, onChangePassword, onSignOut }: Change
             <h1>Change password</h1>
             <p>Create a permanent password before continuing.</p>
           </div>
-          <button className="button button--secondary" onClick={() => void onSignOut()} type="button">
+          <button className="button button--secondary" disabled={isSigningOut} onClick={() => void submitSignOut()} type="button">
             <LogOut aria-hidden="true" size={18} />
-            Sign Out
+            {isSigningOut ? 'Signing out...' : 'Sign Out'}
           </button>
         </header>
 

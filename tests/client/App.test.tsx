@@ -196,7 +196,7 @@ describe('App', () => {
         expect(init?.method).toBe('POST');
         expect(init?.body?.toString()).toContain('csrfToken=csrf-token');
         expect(init?.body?.toString()).toContain('email=admin%40example.com');
-        return { ok: true, json: async () => ({ ok: true }) };
+        return { ok: true, json: async () => ({ error: null, ok: true, status: 200, url: null }) };
       }
 
       if (url === '/api/admin/dashboard') {
@@ -226,6 +226,38 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: /^dashboard$/i })).toBeInTheDocument();
   });
 
+  it('shows a login error when Auth.js rejects credentials', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return { ok: true, json: async () => ({ user: null }) };
+      }
+
+      if (url === '/auth/csrf') {
+        return { ok: true, json: async () => ({ csrfToken: 'csrf-token' }) };
+      }
+
+      if (url === '/auth/callback/credentials') {
+        expect(init?.method).toBe('POST');
+        return {
+          ok: true,
+          json: async () => ({ error: 'CredentialsSignin', ok: false, status: 401, url: null })
+        };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    render(<App />);
+
+    fireEvent.change(await screen.findByLabelText(/^email$/i), { target: { value: 'admin@example.com' } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'wrong-password' } });
+    fireEvent.click(screen.getByRole('button', { name: /^login$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid email or password.');
+    expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /^dashboard$/i })).not.toBeInTheDocument();
+  });
+
   it('forces password change when the session requires it', async () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (url === '/api/auth/me') {
@@ -251,6 +283,47 @@ describe('App', () => {
     expect(screen.getByText('super@example.com')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^sign out$/i })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: /media navigation/i })).not.toBeInTheDocument();
+  });
+
+  it('shows an error when forced password-change sign out fails', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/auth/me') {
+        return {
+          ok: true,
+          json: async () => ({
+            user: {
+              id: '2',
+              email: 'super@example.com',
+              role: 'superadmin',
+              mustChangePassword: true
+            }
+          })
+        };
+      }
+
+      if (url === '/auth/csrf') {
+        return { ok: true, json: async () => ({ csrfToken: 'csrf-token' }) };
+      }
+
+      if (url === '/auth/signout') {
+        return {
+          ok: false,
+          statusText: 'Internal Server Error',
+          json: async () => ({})
+        };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: /^change password$/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^sign out$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign out failed. Please try again.');
+    expect(screen.getByText('super@example.com')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /welcome back/i })).not.toBeInTheDocument();
   });
 
   it('shows media navigation and the Add Movie link', async () => {

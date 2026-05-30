@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AuthGate } from './auth/AuthGate';
-import type { SessionUser } from './auth/types';
 import { Sidebar, type PageKey } from './components/Sidebar';
 import { ToastProvider } from './components/ToastProvider';
 import { DashboardPage } from './pages/DashboardPage';
@@ -144,13 +143,7 @@ function renderPage(page: PageKey, state: AppState, actions: AppActions) {
   );
 }
 
-type AuthenticatedAppProps = {
-  user: SessionUser;
-  onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
-  onSignOut: () => Promise<void>;
-};
-
-function AuthenticatedApp({ onChangePassword: _onChangePassword, onSignOut: _onSignOut, user: _user }: AuthenticatedAppProps) {
+function AuthenticatedApp() {
   const [page, setPageState] = useState<PageKey>(() => pageFromHash(window.location.hash));
   const [editingMovieId, setEditingMovieId] = useState<number | null>(null);
   const [editingTvShowId, setEditingTvShowId] = useState<number | null>(null);
@@ -243,11 +236,7 @@ function AuthenticatedApp({ onChangePassword: _onChangePassword, onSignOut: _onS
 export function App() {
   return (
     <ToastProvider>
-      <AuthGate>
-        {({ user, onChangePassword, onSignOut }) => (
-          <AuthenticatedApp user={user} onChangePassword={onChangePassword} onSignOut={onSignOut} />
-        )}
-      </AuthGate>
+      <AuthGate>{() => <AuthenticatedApp />}</AuthGate>
     </ToastProvider>
   );
 }

@@ -54,6 +54,7 @@ Out of scope:
 - Account deletion.
 - Fine-grained permissions for Movies, TV Shows, Public Search, or Telegram Jobs.
 - Remote multi-tenant deployment.
+- Adding Auth.js or login requirements to `apps/public-search-bot`.
 
 ## Environment Configuration
 
@@ -236,6 +237,8 @@ Never log generated passwords after the one-time bootstrap print. Never log pass
 ## Security Notes
 
 The current local request guard should stay in place. Auth adds identity and role enforcement on top of the existing same-origin/loopback guard.
+
+The standalone public search bot in `apps/public-search-bot` should remain unaffected. Its sync, status, subscription, and admin-token behavior should not change. The local admin app's Public Search page will require login before triggering sync, but the sync payload and VPS bot API contract should stay the same.
 
 Session cookies should use Auth.js defaults appropriate for the local HTTP app. The implementation should avoid weakening cookie settings beyond what local development requires.
 

@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { createApp } from './app.js';
+import { bootstrapAdminUser } from './auth/bootstrap.js';
 import { loadConfig } from './config.js';
 import { createDatabase } from './db/database.js';
 import { migrate } from './db/migrate.js';
@@ -14,6 +15,10 @@ resolveClientDistPath();
 
 const db = createDatabase(config.databasePath);
 migrate(db);
+bootstrapAdminUser(db, {
+  adminEmail: config.adminEmail,
+  logger: (message) => console.log(message)
+});
 
 const app = createApp({ db, config });
 const telegramClient = createTelegramClient({

@@ -69,11 +69,38 @@ function ToastHarness() {
   );
 }
 
+function createAdminSessionResponse() {
+  return {
+    ok: true,
+    json: async () => ({
+      user: {
+        id: '1',
+        email: 'admin@example.com',
+        role: 'admin',
+        mustChangePassword: false
+      }
+    })
+  };
+}
+
+async function renderAuthenticatedApp() {
+  render(<App />);
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(screen.getByRole('navigation', { name: /media navigation/i })).toBeInTheDocument();
+}
+
 beforeEach(() => {
   vi.useRealTimers();
   window.history.replaceState(null, '', '/');
   fetchMock.mockReset();
   fetchMock.mockImplementation(async (url: string) => {
+    if (url === '/api/auth/me') {
+      return createAdminSessionResponse();
+    }
+
     if (url === '/api/admin/dashboard') {
       return {
         ok: true,
@@ -101,7 +128,24 @@ beforeEach(() => {
       json: async () => ({ movies: [] })
     };
   });
-  vi.stubGlobal('fetch', fetchMock);
+  vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+    const response = await (init === undefined ? fetchMock(url) : fetchMock(url, init));
+
+    if (url !== '/api/auth/me') {
+      return response;
+    }
+
+    const payload = await response.json();
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'user')) {
+      return {
+        ...response,
+        json: async () => payload
+      };
+    }
+
+    return createAdminSessionResponse();
+  });
 });
 
 afterEach(() => {
@@ -109,8 +153,106 @@ afterEach(() => {
 });
 
 describe('App', () => {
-  it('shows media navigation and the Add Movie link', async () => {
+  it('shows login when no session exists', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/auth/me') {
+        return { ok: true, json: async () => ({ user: null }) };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
     render(<App />);
+
+    expect(await screen.findByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/sign up/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /google/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /apple/i })).not.toBeInTheDocument();
+  });
+
+  it('submits login through Auth.js credentials flow', async () => {
+    let authenticated = false;
+
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return {
+          ok: true,
+          json: async () => ({
+            user: authenticated
+              ? { id: '1', email: 'admin@example.com', role: 'admin', mustChangePassword: false }
+              : null
+          })
+        };
+      }
+
+      if (url === '/auth/csrf') {
+        return { ok: true, json: async () => ({ csrfToken: 'csrf-token' }) };
+      }
+
+      if (url === '/auth/callback/credentials') {
+        authenticated = true;
+        expect(init?.method).toBe('POST');
+        expect(init?.body?.toString()).toContain('csrfToken=csrf-token');
+        expect(init?.body?.toString()).toContain('email=admin%40example.com');
+        return { ok: true, json: async () => ({ ok: true }) };
+      }
+
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    render(<App />);
+
+    fireEvent.change(await screen.findByLabelText(/^email$/i), { target: { value: 'admin@example.com' } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'Password123456' } });
+    fireEvent.click(screen.getByRole('button', { name: /^login$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^dashboard$/i })).toBeInTheDocument();
+  });
+
+  it('forces password change when the session requires it', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/auth/me') {
+        return {
+          ok: true,
+          json: async () => ({
+            user: {
+              id: '2',
+              email: 'super@example.com',
+              role: 'superadmin',
+              mustChangePassword: true
+            }
+          })
+        };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: /^change password$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: /media navigation/i })).not.toBeInTheDocument();
+  });
+
+  it('shows media navigation and the Add Movie link', async () => {
+    await renderAuthenticatedApp();
 
     expect(await screen.findByRole('heading', { name: /dashboard/i })).toBeInTheDocument();
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
@@ -146,7 +288,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^dashboard$/i }));
@@ -157,7 +299,7 @@ describe('App', () => {
   });
 
   it('renders the Add Movie form after clicking Add Movie', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
@@ -167,7 +309,7 @@ describe('App', () => {
   });
 
   it('saves an Add Movie form with the selected topic and trimmed poster URL', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
@@ -198,7 +340,7 @@ describe('App', () => {
   });
 
   it('rejects an unsafe movie poster URL before saving', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
@@ -244,7 +386,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
@@ -275,7 +417,7 @@ describe('App', () => {
     });
     window.history.replaceState(null, '', '/#/public-search');
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     expect(screen.getByRole('heading', { name: /^public search$/i })).toBeInTheDocument();
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
@@ -323,7 +465,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     const telegramJobsButton = within(navigation).getByRole('button', { name: /^telegram jobs$/i });
@@ -362,7 +504,7 @@ describe('App', () => {
     });
     window.history.replaceState(null, '', '/#/telegram-jobs');
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     expect(screen.getByRole('heading', { name: /^telegram jobs$/i })).toBeInTheDocument();
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
@@ -371,7 +513,7 @@ describe('App', () => {
   });
 
   it('updates the URL hash when navigating between top-level pages', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
@@ -394,7 +536,7 @@ describe('App', () => {
       })
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
@@ -412,7 +554,7 @@ describe('App', () => {
   });
 
   it('filters movies by title automatically while typing', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
@@ -427,7 +569,7 @@ describe('App', () => {
   });
 
   it('requests movies with a non-default sort query', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
@@ -445,7 +587,7 @@ describe('App', () => {
   });
 
   it('renders the Add TV Show form after clicking Add TV Show', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
@@ -458,7 +600,7 @@ describe('App', () => {
   });
 
   it('saves an Add TV Show form with the selected topic and trimmed poster URL', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
@@ -489,7 +631,7 @@ describe('App', () => {
   });
 
   it('rejects an unsafe TV show poster URL before saving', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
@@ -503,7 +645,7 @@ describe('App', () => {
   });
 
   it('suppresses an unsafe TV show poster preview', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
@@ -546,7 +688,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
@@ -562,7 +704,7 @@ describe('App', () => {
   });
 
   it('filters TV shows by title automatically while typing', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
@@ -576,7 +718,7 @@ describe('App', () => {
   });
 
   it('requests TV shows with a non-default sort query', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
@@ -608,7 +750,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -652,7 +794,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -688,7 +830,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -713,7 +855,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -759,7 +901,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -791,7 +933,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -829,7 +971,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -895,7 +1037,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -943,7 +1085,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -981,7 +1123,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -1042,7 +1184,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -1077,7 +1219,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -1111,7 +1253,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -1151,7 +1293,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -1186,7 +1328,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -1250,7 +1392,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -1306,7 +1448,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
@@ -1382,7 +1524,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
@@ -1422,7 +1564,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
@@ -1490,7 +1632,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
@@ -1730,7 +1872,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));

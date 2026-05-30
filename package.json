@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "tsx src/server/db/migrate.ts",
+    "auth:reset-admin": "tsx src/server/auth/reset-admin-password.ts",
     "verify:release:win": "powershell -ExecutionPolicy Bypass -File scripts/verify-windows-release.ps1"
   },
   "dependencies": {

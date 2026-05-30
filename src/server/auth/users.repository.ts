@@ -61,6 +61,11 @@ export function findAuthUserById(db: AppDatabase, id: number): AuthUser | undefi
   return row ? mapAuthUser(row) : undefined;
 }
 
+export function findFirstAdminUser(db: AppDatabase): AuthUser | undefined {
+  const row = db.prepare("SELECT * FROM auth_users WHERE role = 'admin' ORDER BY id ASC LIMIT 1").get() as AuthUserRow | undefined;
+  return row ? mapAuthUser(row) : undefined;
+}
+
 export function hasAdminUser(db: AppDatabase) {
   const row = db.prepare("SELECT COUNT(*) AS count FROM auth_users WHERE role = 'admin'").get() as {
     count: number;

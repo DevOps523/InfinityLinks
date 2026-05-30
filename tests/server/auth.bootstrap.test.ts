@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bootstrapAdminUser } from '../../src/server/auth/bootstrap.js';
+import { verifyPassword } from '../../src/server/auth/passwords.js';
 import {
   createAuthUser,
   findAuthUserByEmail,
@@ -87,15 +88,26 @@ describe('auth users repository and bootstrap', () => {
       logger
     });
 
-    expect(result.created).toBe(true);
+    if (!result.created) {
+      throw new Error('Expected bootstrap to create an admin user.');
+    }
+
     expect(result.email).toBe('owner@example.com');
     expect(result.temporaryPassword).toHaveLength(24);
-    expect(findAuthUserByEmail(db, 'owner@example.com')).toMatchObject({
+    const storedUser = findAuthUserByEmail(db, 'owner@example.com');
+    expect(storedUser).toMatchObject({
       role: 'admin',
       mustChangePassword: true
     });
+    expect(storedUser?.passwordHash).not.toBe(result.temporaryPassword);
+    expect(storedUser?.passwordHash).not.toContain(result.temporaryPassword);
+    expect(verifyPassword(result.temporaryPassword, storedUser?.passwordHash ?? '')).toBe(true);
+
+    const messages = logger.mock.calls.map(([message]) => message);
+    expect(logger).toHaveBeenCalledTimes(3);
     expect(logger).toHaveBeenCalledWith(expect.stringContaining('owner@example.com'));
     expect(logger).toHaveBeenCalledWith(expect.stringContaining(result.temporaryPassword));
+    expect(messages.filter((message) => message.includes(result.temporaryPassword))).toHaveLength(1);
   });
 
   it('does not bootstrap when an admin already exists', () => {

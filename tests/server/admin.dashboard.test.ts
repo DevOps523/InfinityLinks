@@ -6,6 +6,12 @@ import { migrate } from '../../src/server/db/migrate.js';
 
 describe('admin dashboard', () => {
   let db: AppDatabase;
+  const testAuthUser = {
+    id: '1',
+    email: 'admin@example.com',
+    role: 'admin' as const,
+    mustChangePassword: false
+  };
 
   beforeEach(() => {
     db = createDatabase(':memory:');
@@ -56,6 +62,7 @@ describe('admin dashboard', () => {
         host: '127.0.0.1',
         port: 0,
         databasePath: ':memory:',
+        authSecret: 'test-auth-secret-test-auth-secret-123',
         tmdbApiKey: 'tmdb-token',
         telegramBotToken: 'telegram-token',
         telegramChannelId: '-1001',
@@ -64,7 +71,8 @@ describe('admin dashboard', () => {
         publicSearchStatusUrl: undefined,
         publicSearchStatusToken: undefined,
         publicSearchGroupHandle: '@infinitylinks69'
-      }
+      },
+      testAuthUser
     });
 
     const response = await request(app).get('/api/admin/dashboard').expect(200);

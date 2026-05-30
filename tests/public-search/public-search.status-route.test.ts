@@ -13,7 +13,15 @@ const baseConfig: AppConfig = {
   host: '127.0.0.1',
   port: 0,
   databasePath: ':memory:',
+  authSecret: 'test-auth-secret-test-auth-secret-123',
   publicSearchGroupHandle: '@infinitylinks69'
+};
+
+const testAuthUser = {
+  id: '1',
+  email: 'admin@example.com',
+  role: 'admin' as const,
+  mustChangePassword: false
 };
 
 let db: AppDatabase;
@@ -33,7 +41,7 @@ function app(
   fetcher: typeof fetch = vi.fn<typeof fetch>(),
   publicSearchStatusOptions?: PublicSearchStatusServiceOptions
 ) {
-  return createApp({ db, config, fetcher, publicSearchStatusOptions });
+  return createApp({ db, config, fetcher, publicSearchStatusOptions, testAuthUser });
 }
 
 function createMigratedDatabase() {

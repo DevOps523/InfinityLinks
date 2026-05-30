@@ -10,6 +10,7 @@ const config: AppConfig = {
   host: '127.0.0.1',
   port: 0,
   databasePath: ':memory:',
+  authSecret: 'test-auth-secret-test-auth-secret-123',
   tmdbApiKey: 'tmdb-token',
   telegramBotToken: 'telegram-token',
   telegramChannelId: '-1001',
@@ -20,13 +21,20 @@ const config: AppConfig = {
   publicSearchGroupHandle: '@infinitylinks69'
 };
 
+const testAuthUser = {
+  id: '1',
+  email: 'admin@example.com',
+  role: 'admin' as const,
+  mustChangePassword: false
+};
+
 function app(db: AppDatabase) {
   const testApp = express();
   testApp.use((req, _res, next) => {
     req.headers['x-infinitylinks-request'] = 'fetch';
     next();
   });
-  testApp.use(createApp({ db, config }));
+  testApp.use(createApp({ db, config, testAuthUser }));
   return testApp;
 }
 

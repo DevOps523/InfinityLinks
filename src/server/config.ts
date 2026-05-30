@@ -15,6 +15,16 @@ const OptionalTrimmedString = z.preprocess(
   z.string().trim().min(1).optional()
 );
 
+const OptionalEmail = z.preprocess(
+  emptyStringToUndefined,
+  z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email()
+    .optional()
+);
+
 function trimmedStringWithDefault(defaultValue: string) {
   return z.preprocess(emptyStringToUndefined, z.string().trim().min(1).default(defaultValue));
 }
@@ -43,6 +53,8 @@ const EnvSchema = z.object({
   TMDB_API_KEY: requiredSecret('TMDB_API_KEY'),
   TELEGRAM_BOT_TOKEN: requiredSecret('TELEGRAM_BOT_TOKEN'),
   TELEGRAM_CHANNEL_ID: requiredSecret('TELEGRAM_CHANNEL_ID'),
+  AUTH_SECRET: requiredSecret('AUTH_SECRET').min(32, 'AUTH_SECRET must be at least 32 characters'),
+  ADMIN_EMAIL: OptionalEmail,
   HOST: z
     .string()
     .trim()
@@ -75,6 +87,8 @@ export type AppConfig = {
   host: string;
   port: number;
   databasePath: string;
+  authSecret: string;
+  adminEmail?: string;
   publicSearchSyncUrl?: string;
   publicSearchSyncToken?: string;
   publicSearchStatusUrl?: string;
@@ -97,6 +111,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     host: parsed.HOST,
     port: parsed.PORT,
     databasePath,
+    authSecret: parsed.AUTH_SECRET,
+    adminEmail: parsed.ADMIN_EMAIL,
     publicSearchSyncUrl: parsed.PUBLIC_SEARCH_SYNC_URL,
     publicSearchSyncToken: parsed.PUBLIC_SEARCH_SYNC_TOKEN,
     publicSearchStatusUrl: parsed.PUBLIC_SEARCH_STATUS_URL,

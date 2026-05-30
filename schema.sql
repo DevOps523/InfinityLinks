@@ -1,12 +1,22 @@
 PRAGMA foreign_keys = ON;
 
+CREATE TABLE IF NOT EXISTS auth_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL UNIQUE,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'superadmin')),
+  password_hash TEXT NOT NULL,
+  must_change_password INTEGER NOT NULL DEFAULT 1 CHECK (must_change_password IN (0, 1)),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_login_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS movies (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tmdb_id INTEGER,
   title TEXT NOT NULL,
   year INTEGER,
   poster_url TEXT,
-  description TEXT NOT NULL DEFAULT '',
   rating REAL,
   quality TEXT NOT NULL CHECK (quality IN ('SD', 'HD', 'Full HD', '2K', '4K')),
   topic_key TEXT NOT NULL DEFAULT 'FOREIGN_MOVIES' CHECK (topic_key IN ('FOREIGN_MOVIES', 'PINOY_MOVIES', 'ANIME', 'VIVAMAX')),
@@ -34,7 +44,6 @@ CREATE TABLE IF NOT EXISTS tv_shows (
   title TEXT NOT NULL,
   year INTEGER,
   poster_url TEXT,
-  description TEXT NOT NULL DEFAULT '',
   rating REAL,
   quality TEXT NOT NULL CHECK (quality IN ('SD', 'HD', 'Full HD', '2K', '4K')),
   topic_key TEXT NOT NULL DEFAULT 'FOREIGN_TV_SERIES' CHECK (topic_key IN ('FOREIGN_TV_SERIES', 'PINOY_TV_SERIES', 'ANIME', 'VIVAMAX')),

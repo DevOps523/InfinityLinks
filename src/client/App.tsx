@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AuthGate } from './auth/AuthGate';
+import type { SessionUser } from './auth/types';
+import { AccountMenu } from './components/AccountMenu';
 import { Sidebar, type PageKey } from './components/Sidebar';
 import { ToastProvider } from './components/ToastProvider';
+import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { EpisodePage } from './pages/EpisodePage';
 import { MovieForm } from './pages/MovieForm';
@@ -10,6 +14,7 @@ import { SeasonPage } from './pages/SeasonPage';
 import { TelegramJobsPage } from './pages/TelegramJobsPage';
 import { TvShowForm } from './pages/TvShowForm';
 import { TvShowsPage } from './pages/TvShowsPage';
+import { UsersPage } from './pages/UsersPage';
 
 type AppState = {
   editingMovieId: number | null;
@@ -29,6 +34,12 @@ type AppActions = {
   setFailedTelegramJobCount: (count: number) => void;
 };
 
+type AuthenticatedAppProps = {
+  user: SessionUser;
+  onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  onSignOut: () => Promise<void>;
+};
+
 const refreshSafePages = new Set<PageKey>([
   'dashboard',
   'movies',
@@ -36,7 +47,8 @@ const refreshSafePages = new Set<PageKey>([
   'tv-shows',
   'add-tv-show',
   'public-search',
-  'telegram-jobs'
+  'telegram-jobs',
+  'users'
 ]);
 
 function pageFromHash(hash: string): PageKey {
@@ -48,7 +60,12 @@ function pageToHash(page: PageKey) {
   return `#/${page}`;
 }
 
-function renderPage(page: PageKey, state: AppState, actions: AppActions) {
+function renderPage(
+  page: PageKey,
+  state: AppState,
+  actions: AppActions,
+  { user, onChangePassword, onSignOut }: AuthenticatedAppProps
+) {
   const { editingMovieId, editingTvShowId, selectedTvShowId, selectedSeasonId, openSeasonDialogOnEntry } = state;
   const {
     setPage,
@@ -128,6 +145,29 @@ function renderPage(page: PageKey, state: AppState, actions: AppActions) {
     return <TelegramJobsPage onFailedJobCountChange={setFailedTelegramJobCount} />;
   }
 
+  if (page === 'users') {
+    if (user.role !== 'admin') {
+      return (
+        <div className="state-panel state-panel--error" role="alert">
+          You do not have permission to manage users.
+        </div>
+      );
+    }
+
+    return <UsersPage />;
+  }
+
+  if (page === 'change-password') {
+    return (
+      <ChangePasswordPage
+        user={user}
+        onChangePassword={onChangePassword}
+        onSignOut={onSignOut}
+        variant="account"
+      />
+    );
+  }
+
   return (
     <MoviesPage
       onAddMovie={() => {
@@ -142,7 +182,7 @@ function renderPage(page: PageKey, state: AppState, actions: AppActions) {
   );
 }
 
-export function App() {
+function AuthenticatedApp({ user, onChangePassword, onSignOut }: AuthenticatedAppProps) {
   const [page, setPageState] = useState<PageKey>(() => pageFromHash(window.location.hash));
   const [editingMovieId, setEditingMovieId] = useState<number | null>(null);
   const [editingTvShowId, setEditingTvShowId] = useState<number | null>(null);
@@ -176,60 +216,79 @@ export function App() {
   }, []);
 
   return (
+    <div className="app-shell">
+      <Sidebar
+        currentPage={page}
+        failedTelegramJobCount={failedTelegramJobCount}
+        userRole={user.role}
+        onNavigate={(nextPage) => {
+          setEditingMovieId(null);
+          setEditingTvShowId(null);
+          if (
+            nextPage === 'dashboard' ||
+            nextPage === 'movies' ||
+            nextPage === 'tv-shows' ||
+            nextPage === 'add-tv-show' ||
+            nextPage === 'public-search' ||
+            nextPage === 'telegram-jobs' ||
+            nextPage === 'users' ||
+            nextPage === 'change-password'
+          ) {
+            setSelectedSeasonId(null);
+          }
+          if (
+            nextPage === 'dashboard' ||
+            nextPage === 'movies' ||
+            nextPage === 'add-movie' ||
+            nextPage === 'tv-shows' ||
+            nextPage === 'add-tv-show' ||
+            nextPage === 'public-search' ||
+            nextPage === 'telegram-jobs' ||
+            nextPage === 'users' ||
+            nextPage === 'change-password'
+          ) {
+            setSelectedTvShowId(null);
+          }
+          setPage(nextPage);
+        }}
+      />
+      <main className="content-shell">
+        <div className="content-shell__topbar">
+          <AccountMenu user={user} onChangePassword={() => setPage('change-password')} onSignOut={onSignOut} />
+        </div>
+        {renderPage(
+          page,
+          {
+            editingMovieId,
+            editingTvShowId,
+            selectedTvShowId,
+            selectedSeasonId,
+            openSeasonDialogOnEntry
+          },
+          {
+            setPage,
+            setEditingMovieId,
+            setEditingTvShowId,
+            setSelectedTvShowId,
+            setSelectedSeasonId,
+            setOpenSeasonDialogOnEntry,
+            setFailedTelegramJobCount
+          },
+          { user, onChangePassword, onSignOut }
+        )}
+      </main>
+    </div>
+  );
+}
+
+export function App() {
+  return (
     <ToastProvider>
-      <div className="app-shell">
-        <Sidebar
-          currentPage={page}
-          failedTelegramJobCount={failedTelegramJobCount}
-          onNavigate={(nextPage) => {
-            setEditingMovieId(null);
-            setEditingTvShowId(null);
-            if (
-              nextPage === 'dashboard' ||
-              nextPage === 'movies' ||
-              nextPage === 'tv-shows' ||
-              nextPage === 'add-tv-show' ||
-              nextPage === 'public-search' ||
-              nextPage === 'telegram-jobs'
-            ) {
-              setSelectedSeasonId(null);
-            }
-            if (
-              nextPage === 'dashboard' ||
-              nextPage === 'movies' ||
-              nextPage === 'add-movie' ||
-              nextPage === 'tv-shows' ||
-              nextPage === 'add-tv-show' ||
-              nextPage === 'public-search' ||
-              nextPage === 'telegram-jobs'
-            ) {
-              setSelectedTvShowId(null);
-            }
-            setPage(nextPage);
-          }}
-        />
-        <main className="content-shell">
-          {renderPage(
-            page,
-            {
-              editingMovieId,
-              editingTvShowId,
-              selectedTvShowId,
-              selectedSeasonId,
-              openSeasonDialogOnEntry
-            },
-            {
-              setPage,
-              setEditingMovieId,
-              setEditingTvShowId,
-              setSelectedTvShowId,
-              setSelectedSeasonId,
-              setOpenSeasonDialogOnEntry,
-              setFailedTelegramJobCount
-            }
-          )}
-        </main>
-      </div>
+      <AuthGate>
+        {({ user, onChangePassword, onSignOut }) => (
+          <AuthenticatedApp user={user} onChangePassword={onChangePassword} onSignOut={onSignOut} />
+        )}
+      </AuthGate>
     </ToastProvider>
   );
 }

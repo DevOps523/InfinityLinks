@@ -9,6 +9,7 @@ export async function apiJson<T>(url: string, init: RequestInit = {}): Promise<T
 
   const response = await fetch(url, {
     ...init,
+    credentials: init.credentials ?? 'same-origin',
     headers
   });
 

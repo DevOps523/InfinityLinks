@@ -1,8 +1,11 @@
+// @vitest-environment node
+
 import { createServer, type Server } from 'node:http';
 import { AddressInfo } from 'node:net';
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/server/app.js';
+import { hashPassword } from '../../src/server/auth/passwords.js';
 import type { AppConfig } from '../../src/server/config.js';
 import { createDatabase, type AppDatabase } from '../../src/server/db/database.js';
 import { migrate } from '../../src/server/db/migrate.js';
@@ -55,6 +58,8 @@ const guardConfig: AppConfig = {
   host: '127.0.0.1',
   port: 3000,
   databasePath: ':memory:',
+  authSecret: 'test-auth-secret-test-auth-secret-123',
+  adminEmail: 'admin@example.com',
   publicSearchSyncUrl: 'https://search.example.com/api/sync',
   publicSearchSyncToken: 'secret-token',
   publicSearchGroupHandle: '@infinitylinks69'
@@ -66,7 +71,76 @@ function createGuardDb(): AppDatabase {
   return db;
 }
 
+function seedAuthUser(db: AppDatabase, email: string, role: 'admin' | 'superadmin' = 'admin') {
+  db.prepare(
+    `INSERT INTO auth_users (email, role, password_hash, must_change_password)
+     VALUES (?, ?, ?, 0)`
+  ).run(email, role, hashPassword('Password123456'));
+}
+
+async function signIn(agent: request.Agent, email = 'admin@example.com') {
+  const csrf = await agent.get('/auth/csrf').expect(200);
+  const csrfToken = csrf.body.csrfToken;
+
+  await agent
+    .post('/auth/callback/credentials')
+    .type('form')
+    .send({
+      csrfToken,
+      email,
+      password: 'Password123456',
+      redirect: 'false',
+      json: 'true'
+    })
+    .expect((response) => {
+      expect([200, 302]).toContain(response.status);
+    });
+}
+
 describe('admin API request guard', () => {
+  it('keeps health public while protecting admin API data', async () => {
+    const db = createGuardDb();
+
+    try {
+      const guardedApp = createApp({ db, config: guardConfig, fetcher: vi.fn<typeof fetch>() });
+
+      await request(guardedApp).get('/api/health').expect(200);
+
+      const response = await request(guardedApp)
+        .get('/api/admin/dashboard')
+        .set('Host', '127.0.0.1:3000')
+        .expect(401);
+
+      expect(response.body).toEqual({ error: 'Authentication required.' });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('allows authenticated users to reach existing admin APIs', async () => {
+    const db = createGuardDb();
+    seedAuthUser(db, 'admin@example.com');
+
+    try {
+      const guardedApp = createApp({ db, config: guardConfig, fetcher: vi.fn<typeof fetch>() });
+      const agent = request.agent(guardedApp);
+
+      await signIn(agent);
+
+      const response = await agent
+        .get('/api/admin/dashboard')
+        .set('Host', '127.0.0.1:3000')
+        .expect(200);
+
+      expect(response.body.dashboard).toMatchObject({
+        movies: 0,
+        tvShows: 0
+      });
+    } finally {
+      db.close();
+    }
+  });
+
   it('rejects cross-site browser POSTs before bodyless sync work runs', async () => {
     const db = createGuardDb();
     const fetchMock = vi.fn<typeof fetch>();
@@ -150,11 +224,15 @@ describe('admin API request guard', () => {
 
   it('allows same-origin API-style mutating requests with the admin request header', async () => {
     const db = createGuardDb();
+    seedAuthUser(db, 'admin@example.com');
 
     try {
       const guardedApp = createApp({ db, config: guardConfig, fetcher: vi.fn<typeof fetch>() });
+      const agent = request.agent(guardedApp);
 
-      const response = await request(guardedApp)
+      await signIn(agent);
+
+      const response = await agent
         .post('/api/seasons/1/repost')
         .set('Host', '127.0.0.1:3000')
         .set('Origin', 'http://127.0.0.1:3000')

@@ -69,11 +69,66 @@ function ToastHarness() {
   );
 }
 
+function createAdminSessionResponse() {
+  return {
+    ok: true,
+    json: async () => ({
+      user: {
+        id: '1',
+        email: 'admin@example.com',
+        role: 'admin',
+        mustChangePassword: false
+      }
+    })
+  };
+}
+
+function createSessionResponse(role: 'admin' | 'superadmin' = 'admin') {
+  return {
+    ok: true,
+    json: async () => ({
+      user: {
+        id: role === 'admin' ? '1' : '2',
+        email: `${role}@example.com`,
+        role,
+        mustChangePassword: false
+      }
+    })
+  };
+}
+
+function getRequestHeader(init: RequestInit | undefined, name: string) {
+  const headers = init?.headers;
+
+  if (headers instanceof Headers) {
+    return headers.get(name);
+  }
+
+  if (Array.isArray(headers)) {
+    return headers.find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1] ?? null;
+  }
+
+  return headers?.[name as keyof typeof headers] ?? headers?.[name.toLowerCase() as keyof typeof headers] ?? null;
+}
+
+async function renderAuthenticatedApp() {
+  render(<App />);
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(screen.getByRole('navigation', { name: /media navigation/i })).toBeInTheDocument();
+}
+
 beforeEach(() => {
   vi.useRealTimers();
   window.history.replaceState(null, '', '/');
   fetchMock.mockReset();
   fetchMock.mockImplementation(async (url: string) => {
+    if (url === '/api/auth/me') {
+      return createAdminSessionResponse();
+    }
+
     if (url === '/api/admin/dashboard') {
       return {
         ok: true,
@@ -101,7 +156,24 @@ beforeEach(() => {
       json: async () => ({ movies: [] })
     };
   });
-  vi.stubGlobal('fetch', fetchMock);
+  vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+    const response = await (init === undefined ? fetchMock(url) : fetchMock(url, init));
+
+    if (url !== '/api/auth/me') {
+      return response;
+    }
+
+    const payload = await response.json();
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'user')) {
+      return {
+        ...response,
+        json: async () => payload
+      };
+    }
+
+    return createAdminSessionResponse();
+  });
 });
 
 afterEach(() => {
@@ -109,8 +181,185 @@ afterEach(() => {
 });
 
 describe('App', () => {
-  it('shows media navigation and the Add Movie link', async () => {
+  it('shows login when no session exists', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return { ok: true, json: async () => ({ user: null }) };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
     render(<App />);
+
+    expect(await screen.findByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    expect(screen.getByRole('main')).toHaveClass('auth-page');
+    expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^login$/i })).toHaveClass('auth-card__submit');
+    expect(screen.queryByText(/sign up/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /google/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /apple/i })).not.toBeInTheDocument();
+  });
+
+  it('submits login through Auth.js credentials flow', async () => {
+    let authenticated = false;
+
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return {
+          ok: true,
+          json: async () => ({
+            user: authenticated
+              ? { id: '1', email: 'admin@example.com', role: 'admin', mustChangePassword: false }
+              : null
+          })
+        };
+      }
+
+      if (url === '/auth/csrf') {
+        return { ok: true, json: async () => ({ csrfToken: 'csrf-token' }) };
+      }
+
+      if (url === '/auth/callback/credentials') {
+        authenticated = true;
+        expect(init?.method).toBe('POST');
+        expect(getRequestHeader(init, 'X-Auth-Return-Redirect')).toBe('1');
+        expect(init?.body?.toString()).toContain('csrfToken=csrf-token');
+        expect(init?.body?.toString()).toContain('email=admin%40example.com');
+        return { ok: true, json: async () => ({ url: 'http://localhost/' }) };
+      }
+
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    render(<App />);
+
+    fireEvent.change(await screen.findByLabelText(/^email$/i), { target: { value: 'admin@example.com' } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'Password123456' } });
+    fireEvent.click(screen.getByRole('button', { name: /^login$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^dashboard$/i })).toBeInTheDocument();
+  });
+
+  it('shows a login error when Auth.js rejects credentials', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return { ok: true, json: async () => ({ user: null }) };
+      }
+
+      if (url === '/auth/csrf') {
+        return { ok: true, json: async () => ({ csrfToken: 'csrf-token' }) };
+      }
+
+      if (url === '/auth/callback/credentials') {
+        expect(init?.method).toBe('POST');
+        expect(getRequestHeader(init, 'X-Auth-Return-Redirect')).toBe('1');
+        return {
+          ok: true,
+          json: async () => ({ url: 'http://localhost/auth/signin?error=CredentialsSignin&code=credentials' })
+        };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    render(<App />);
+
+    fireEvent.change(await screen.findByLabelText(/^email$/i), { target: { value: 'admin@example.com' } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'wrong-password' } });
+    fireEvent.click(screen.getByRole('button', { name: /^login$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid email or password.');
+    expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /^dashboard$/i })).not.toBeInTheDocument();
+  });
+
+  it('forces password change when the session requires it', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return {
+          ok: true,
+          json: async () => ({
+            user: {
+              id: '2',
+              email: 'super@example.com',
+              role: 'superadmin',
+              mustChangePassword: true
+            }
+          })
+        };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: /^change password$/i })).toBeInTheDocument();
+    expect(screen.getByText('super@example.com')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^sign out$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: /media navigation/i })).not.toBeInTheDocument();
+  });
+
+  it('shows an error when forced password-change sign out fails', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return {
+          ok: true,
+          json: async () => ({
+            user: {
+              id: '2',
+              email: 'super@example.com',
+              role: 'superadmin',
+              mustChangePassword: true
+            }
+          })
+        };
+      }
+
+      if (url === '/auth/csrf') {
+        return { ok: true, json: async () => ({ csrfToken: 'csrf-token' }) };
+      }
+
+      if (url === '/auth/signout') {
+        expect(getRequestHeader(init as RequestInit | undefined, 'X-Auth-Return-Redirect')).toBe('1');
+        return {
+          ok: true,
+          json: async () => ({ url: 'http://localhost/auth/error?error=Configuration' })
+        };
+      }
+
+      return { ok: true, json: async () => ({}) };
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: /^change password$/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^sign out$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign out failed. Please try again.');
+    expect(screen.getByText('super@example.com')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /welcome back/i })).not.toBeInTheDocument();
+  });
+
+  it('shows media navigation and the Add Movie link', async () => {
+    await renderAuthenticatedApp();
 
     expect(await screen.findByRole('heading', { name: /dashboard/i })).toBeInTheDocument();
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
@@ -121,6 +370,182 @@ describe('App', () => {
     expect(within(navigation).getByRole('button', { name: /^add tv show$/i })).toBeInTheDocument();
     expect(within(navigation).getByRole('button', { name: /^public search$/i })).toBeInTheDocument();
     expect(within(navigation).getByRole('button', { name: /^telegram jobs$/i })).toBeInTheDocument();
+  });
+
+  it('shows Users navigation to admin users', async () => {
+    await renderAuthenticatedApp();
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    expect(within(navigation).getByRole('button', { name: /^users$/i })).toBeInTheDocument();
+  });
+
+  it('does not show Users navigation to superadmin users', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/auth/me') {
+        return createSessionResponse('superadmin');
+      }
+
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      return { ok: true, json: async () => ({ movies: [] }) };
+    });
+
+    await renderAuthenticatedApp();
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    expect(within(navigation).queryByRole('button', { name: /^users$/i })).not.toBeInTheDocument();
+  });
+
+  it('lets an admin create a user and shows the generated password once', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return createAdminSessionResponse();
+      }
+
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      if (url === '/api/admin/users' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => ({
+            users: [
+              {
+                id: 1,
+                email: 'admin@example.com',
+                role: 'admin',
+                mustChangePassword: false,
+                createdAt: '2026-05-01T00:00:00.000Z',
+                updatedAt: '2026-05-01T00:00:00.000Z',
+                lastLoginAt: '2026-05-29T00:00:00.000Z'
+              }
+            ]
+          })
+        };
+      }
+
+      if (url === '/api/admin/users' && init?.method === 'POST') {
+        expect(JSON.parse(init.body as string)).toEqual({
+          email: 'new@example.com',
+          role: 'superadmin'
+        });
+
+        return {
+          ok: true,
+          json: async () => ({
+            user: {
+              id: 3,
+              email: 'new@example.com',
+              role: 'superadmin',
+              mustChangePassword: true,
+              createdAt: '2026-05-30T00:00:00.000Z',
+              updatedAt: '2026-05-30T00:00:00.000Z',
+              lastLoginAt: null
+            },
+            temporaryPassword: 'Temp-Pass-123'
+          })
+        };
+      }
+
+      return { ok: true, json: async () => ({ movies: [] }) };
+    });
+
+    await renderAuthenticatedApp();
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^users$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^users$/i })).toBeInTheDocument();
+    expect(await screen.findByRole('cell', { name: 'admin@example.com' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^add user$/i }));
+    const dialog = screen.getByRole('dialog', { name: /^add user$/i });
+    expect(within(dialog).getByLabelText(/^role$/i)).toHaveDisplayValue('Superadmin');
+    fireEvent.change(within(dialog).getByLabelText(/^email$/i), { target: { value: 'new@example.com' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^create user$/i }));
+
+    expect(await screen.findByText('Temp-Pass-123')).toBeInTheDocument();
+    expect(screen.getByText('new@example.com')).toBeInTheDocument();
+    expect(screen.getByText('Must change password')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /^add user$/i })).not.toBeInTheDocument();
+  });
+
+  it('routes account menu password changes through the app shell', async () => {
+    await renderAuthenticatedApp();
+
+    fireEvent.click(screen.getByRole('button', { name: /^change password$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^change password$/i })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: /media navigation/i })).toBeInTheDocument();
+    expect(screen.getAllByText('admin@example.com')).toHaveLength(2);
+  });
+
+  it('signs out from the account menu', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return createAdminSessionResponse();
+      }
+
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      if (url === '/auth/csrf') {
+        return { ok: true, json: async () => ({ csrfToken: 'csrf-token' }) };
+      }
+
+      if (url === '/auth/signout') {
+        expect(init?.method).toBe('POST');
+        expect(getRequestHeader(init, 'X-Auth-Return-Redirect')).toBe('1');
+        expect(init?.body?.toString()).toContain('csrfToken=csrf-token');
+        return { ok: true, json: async () => ({ url: 'http://localhost/' }) };
+      }
+
+      return { ok: true, json: async () => ({ movies: [] }) };
+    });
+
+    await renderAuthenticatedApp();
+
+    fireEvent.click(screen.getByRole('button', { name: /^sign out$/i }));
+
+    expect(await screen.findByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: /media navigation/i })).not.toBeInTheDocument();
   });
 
   it('renders the dashboard with local admin counts', async () => {
@@ -146,7 +571,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^dashboard$/i }));
@@ -157,7 +582,7 @@ describe('App', () => {
   });
 
   it('renders the Add Movie form after clicking Add Movie', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
@@ -167,7 +592,7 @@ describe('App', () => {
   });
 
   it('saves an Add Movie form with the selected topic and trimmed poster URL', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
@@ -198,7 +623,7 @@ describe('App', () => {
   });
 
   it('rejects an unsafe movie poster URL before saving', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
@@ -244,7 +669,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add movie$/i }));
@@ -275,7 +700,7 @@ describe('App', () => {
     });
     window.history.replaceState(null, '', '/#/public-search');
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     expect(screen.getByRole('heading', { name: /^public search$/i })).toBeInTheDocument();
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
@@ -323,7 +748,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     const telegramJobsButton = within(navigation).getByRole('button', { name: /^telegram jobs$/i });
@@ -362,7 +787,7 @@ describe('App', () => {
     });
     window.history.replaceState(null, '', '/#/telegram-jobs');
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     expect(screen.getByRole('heading', { name: /^telegram jobs$/i })).toBeInTheDocument();
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
@@ -371,7 +796,7 @@ describe('App', () => {
   });
 
   it('updates the URL hash when navigating between top-level pages', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
@@ -394,7 +819,7 @@ describe('App', () => {
       })
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
@@ -412,7 +837,7 @@ describe('App', () => {
   });
 
   it('filters movies by title automatically while typing', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
@@ -427,7 +852,7 @@ describe('App', () => {
   });
 
   it('requests movies with a non-default sort query', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
@@ -445,7 +870,7 @@ describe('App', () => {
   });
 
   it('renders the Add TV Show form after clicking Add TV Show', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
@@ -458,7 +883,7 @@ describe('App', () => {
   });
 
   it('saves an Add TV Show form with the selected topic and trimmed poster URL', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
@@ -489,7 +914,7 @@ describe('App', () => {
   });
 
   it('rejects an unsafe TV show poster URL before saving', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
@@ -503,7 +928,7 @@ describe('App', () => {
   });
 
   it('suppresses an unsafe TV show poster preview', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
@@ -546,7 +971,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^add tv show$/i }));
@@ -562,7 +987,7 @@ describe('App', () => {
   });
 
   it('filters TV shows by title automatically while typing', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
@@ -576,7 +1001,7 @@ describe('App', () => {
   });
 
   it('requests TV shows with a non-default sort query', async () => {
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
@@ -608,7 +1033,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -652,13 +1077,13 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
 
     const previewSection = (await screen.findByText('Catalog preview')).closest('.public-search-preview') as HTMLElement;
-    expect(within(previewSection).getByText('3')).toBeInTheDocument();
+    await waitFor(() => expect(within(previewSection).getByText('3')).toBeInTheDocument());
     expect(within(previewSection).getByText('2')).toBeInTheDocument();
     expect(within(previewSection).queryByText('Sample movies')).not.toBeInTheDocument();
     expect(within(previewSection).queryByText('Sample TV shows')).not.toBeInTheDocument();
@@ -688,7 +1113,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -713,7 +1138,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -759,7 +1184,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -791,7 +1216,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -829,7 +1254,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -895,7 +1320,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -943,7 +1368,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -981,7 +1406,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -1042,7 +1467,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -1077,7 +1502,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -1111,7 +1536,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -1151,7 +1576,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -1186,7 +1611,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -1250,7 +1675,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
@@ -1306,7 +1731,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
@@ -1382,7 +1807,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^tv shows$/i }));
@@ -1422,7 +1847,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
@@ -1490,7 +1915,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
@@ -1730,7 +2155,7 @@ describe('App', () => {
       };
     });
 
-    render(<App />);
+    await renderAuthenticatedApp();
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));

@@ -1,5 +1,16 @@
 PRAGMA foreign_keys = ON;
 
+CREATE TABLE IF NOT EXISTS auth_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL UNIQUE,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'superadmin')),
+  password_hash TEXT NOT NULL,
+  must_change_password INTEGER NOT NULL DEFAULT 1 CHECK (must_change_password IN (0, 1)),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_login_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS movies (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tmdb_id INTEGER,

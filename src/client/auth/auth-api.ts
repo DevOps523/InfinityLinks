@@ -9,6 +9,8 @@ type TemporaryPasswordResponse = {
   temporaryPassword: string;
 };
 
+const AUTH_RETURN_REDIRECT_HEADER = 'X-Auth-Return-Redirect';
+
 function getContentType(response: Response) {
   return response.headers?.get?.('content-type')?.toLowerCase() ?? '';
 }
@@ -31,6 +33,18 @@ async function readJsonObject(response: Response, message: string) {
   }
 
   throw new Error(message);
+}
+
+function getAuthRedirectUrl(payload: Record<string, unknown>, message: string) {
+  if (typeof payload.url !== 'string') {
+    throw new Error(message);
+  }
+
+  return new URL(payload.url, window.location.origin);
+}
+
+function hasAuthError(url: URL) {
+  return url.searchParams.has('error');
 }
 
 export async function fetchCurrentUser() {
@@ -65,7 +79,8 @@ export async function loginWithCredentials(email: string, password: string) {
     body,
     credentials: 'same-origin',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
+      'Content-Type': 'application/x-www-form-urlencoded',
+      [AUTH_RETURN_REDIRECT_HEADER]: '1'
     }
   });
 
@@ -74,11 +89,9 @@ export async function loginWithCredentials(email: string, password: string) {
   }
 
   const payload = await readJsonObject(response, 'Invalid email or password.');
-  if (typeof payload.error === 'string' && payload.error.trim()) {
-    throw new Error('Invalid email or password.');
-  }
+  const redirectUrl = getAuthRedirectUrl(payload, 'Invalid email or password.');
 
-  if (payload.ok !== true) {
+  if (hasAuthError(redirectUrl)) {
     throw new Error('Invalid email or password.');
   }
 }
@@ -115,7 +128,8 @@ export async function signOut() {
     body,
     credentials: 'same-origin',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
+      'Content-Type': 'application/x-www-form-urlencoded',
+      [AUTH_RETURN_REDIRECT_HEADER]: '1'
     }
   });
 
@@ -124,11 +138,9 @@ export async function signOut() {
   }
 
   const payload = await readJsonObject(response, 'Sign out failed. Please try again.');
-  if (typeof payload.error === 'string' && payload.error.trim()) {
-    throw new Error('Sign out failed. Please try again.');
-  }
+  const redirectUrl = getAuthRedirectUrl(payload, 'Sign out failed. Please try again.');
 
-  if (payload.ok === false) {
+  if (hasAuthError(redirectUrl)) {
     throw new Error('Sign out failed. Please try again.');
   }
 }

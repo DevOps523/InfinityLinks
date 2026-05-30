@@ -83,6 +83,20 @@ function createAdminSessionResponse() {
   };
 }
 
+function getRequestHeader(init: RequestInit | undefined, name: string) {
+  const headers = init?.headers;
+
+  if (headers instanceof Headers) {
+    return headers.get(name);
+  }
+
+  if (Array.isArray(headers)) {
+    return headers.find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1] ?? null;
+  }
+
+  return headers?.[name as keyof typeof headers] ?? headers?.[name.toLowerCase() as keyof typeof headers] ?? null;
+}
+
 async function renderAuthenticatedApp() {
   render(<App />);
   await act(async () => {
@@ -154,7 +168,7 @@ afterEach(() => {
 
 describe('App', () => {
   it('shows login when no session exists', async () => {
-    fetchMock.mockImplementation(async (url: string) => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/api/auth/me') {
         return { ok: true, json: async () => ({ user: null }) };
       }
@@ -194,9 +208,10 @@ describe('App', () => {
       if (url === '/auth/callback/credentials') {
         authenticated = true;
         expect(init?.method).toBe('POST');
+        expect(getRequestHeader(init, 'X-Auth-Return-Redirect')).toBe('1');
         expect(init?.body?.toString()).toContain('csrfToken=csrf-token');
         expect(init?.body?.toString()).toContain('email=admin%40example.com');
-        return { ok: true, json: async () => ({ error: null, ok: true, status: 200, url: null }) };
+        return { ok: true, json: async () => ({ url: 'http://localhost/' }) };
       }
 
       if (url === '/api/admin/dashboard') {
@@ -238,9 +253,10 @@ describe('App', () => {
 
       if (url === '/auth/callback/credentials') {
         expect(init?.method).toBe('POST');
+        expect(getRequestHeader(init, 'X-Auth-Return-Redirect')).toBe('1');
         return {
           ok: true,
-          json: async () => ({ error: 'CredentialsSignin', ok: false, status: 401, url: null })
+          json: async () => ({ url: 'http://localhost/auth/signin?error=CredentialsSignin&code=credentials' })
         };
       }
 
@@ -259,7 +275,7 @@ describe('App', () => {
   });
 
   it('forces password change when the session requires it', async () => {
-    fetchMock.mockImplementation(async (url: string) => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/api/auth/me') {
         return {
           ok: true,
@@ -286,7 +302,7 @@ describe('App', () => {
   });
 
   it('shows an error when forced password-change sign out fails', async () => {
-    fetchMock.mockImplementation(async (url: string) => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/api/auth/me') {
         return {
           ok: true,
@@ -306,10 +322,10 @@ describe('App', () => {
       }
 
       if (url === '/auth/signout') {
+        expect(getRequestHeader(init as RequestInit | undefined, 'X-Auth-Return-Redirect')).toBe('1');
         return {
-          ok: false,
-          statusText: 'Internal Server Error',
-          json: async () => ({})
+          ok: true,
+          json: async () => ({ url: 'http://localhost/auth/error?error=Configuration' })
         };
       }
 

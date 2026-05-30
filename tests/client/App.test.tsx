@@ -83,6 +83,20 @@ function createAdminSessionResponse() {
   };
 }
 
+function createSessionResponse(role: 'admin' | 'superadmin' = 'admin') {
+  return {
+    ok: true,
+    json: async () => ({
+      user: {
+        id: role === 'admin' ? '1' : '2',
+        email: `${role}@example.com`,
+        role,
+        mustChangePassword: false
+      }
+    })
+  };
+}
+
 function getRequestHeader(init: RequestInit | undefined, name: string) {
   const headers = init?.headers;
 
@@ -354,6 +368,182 @@ describe('App', () => {
     expect(within(navigation).getByRole('button', { name: /^add tv show$/i })).toBeInTheDocument();
     expect(within(navigation).getByRole('button', { name: /^public search$/i })).toBeInTheDocument();
     expect(within(navigation).getByRole('button', { name: /^telegram jobs$/i })).toBeInTheDocument();
+  });
+
+  it('shows Users navigation to admin users', async () => {
+    await renderAuthenticatedApp();
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    expect(within(navigation).getByRole('button', { name: /^users$/i })).toBeInTheDocument();
+  });
+
+  it('does not show Users navigation to superadmin users', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/auth/me') {
+        return createSessionResponse('superadmin');
+      }
+
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      return { ok: true, json: async () => ({ movies: [] }) };
+    });
+
+    await renderAuthenticatedApp();
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    expect(within(navigation).queryByRole('button', { name: /^users$/i })).not.toBeInTheDocument();
+  });
+
+  it('lets an admin create a user and shows the generated password once', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return createAdminSessionResponse();
+      }
+
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      if (url === '/api/admin/users' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => ({
+            users: [
+              {
+                id: 1,
+                email: 'admin@example.com',
+                role: 'admin',
+                mustChangePassword: false,
+                createdAt: '2026-05-01T00:00:00.000Z',
+                updatedAt: '2026-05-01T00:00:00.000Z',
+                lastLoginAt: '2026-05-29T00:00:00.000Z'
+              }
+            ]
+          })
+        };
+      }
+
+      if (url === '/api/admin/users' && init?.method === 'POST') {
+        expect(JSON.parse(init.body as string)).toEqual({
+          email: 'new@example.com',
+          role: 'superadmin'
+        });
+
+        return {
+          ok: true,
+          json: async () => ({
+            user: {
+              id: 3,
+              email: 'new@example.com',
+              role: 'superadmin',
+              mustChangePassword: true,
+              createdAt: '2026-05-30T00:00:00.000Z',
+              updatedAt: '2026-05-30T00:00:00.000Z',
+              lastLoginAt: null
+            },
+            temporaryPassword: 'Temp-Pass-123'
+          })
+        };
+      }
+
+      return { ok: true, json: async () => ({ movies: [] }) };
+    });
+
+    await renderAuthenticatedApp();
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^users$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^users$/i })).toBeInTheDocument();
+    expect(await screen.findByRole('cell', { name: 'admin@example.com' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^add user$/i }));
+    const dialog = screen.getByRole('dialog', { name: /^add user$/i });
+    expect(within(dialog).getByLabelText(/^role$/i)).toHaveDisplayValue('Superadmin');
+    fireEvent.change(within(dialog).getByLabelText(/^email$/i), { target: { value: 'new@example.com' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^create user$/i }));
+
+    expect(await screen.findByText('Temp-Pass-123')).toBeInTheDocument();
+    expect(screen.getByText('new@example.com')).toBeInTheDocument();
+    expect(screen.getByText('Must change password')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /^add user$/i })).not.toBeInTheDocument();
+  });
+
+  it('routes account menu password changes through the app shell', async () => {
+    await renderAuthenticatedApp();
+
+    fireEvent.click(screen.getByRole('button', { name: /^change password$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^change password$/i })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: /media navigation/i })).toBeInTheDocument();
+    expect(screen.getAllByText('admin@example.com')).toHaveLength(2);
+  });
+
+  it('signs out from the account menu', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return createAdminSessionResponse();
+      }
+
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      if (url === '/auth/csrf') {
+        return { ok: true, json: async () => ({ csrfToken: 'csrf-token' }) };
+      }
+
+      if (url === '/auth/signout') {
+        expect(init?.method).toBe('POST');
+        expect(getRequestHeader(init, 'X-Auth-Return-Redirect')).toBe('1');
+        expect(init?.body?.toString()).toContain('csrfToken=csrf-token');
+        return { ok: true, json: async () => ({ url: 'http://localhost/' }) };
+      }
+
+      return { ok: true, json: async () => ({ movies: [] }) };
+    });
+
+    await renderAuthenticatedApp();
+
+    fireEvent.click(screen.getByRole('button', { name: /^sign out$/i }));
+
+    expect(await screen.findByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: /media navigation/i })).not.toBeInTheDocument();
   });
 
   it('renders the dashboard with local admin counts', async () => {

@@ -1,11 +1,30 @@
 import { apiJson } from '../api/http';
-import type { SessionUser } from './types';
+import type { SessionUser, UserRole } from './types';
 
 type CurrentUserResponse = {
   user: SessionUser | null;
 };
 
 type TemporaryPasswordResponse = {
+  temporaryPassword: string;
+};
+
+export type ManagedUser = {
+  id: number;
+  email: string;
+  role: UserRole;
+  mustChangePassword: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt: string | null;
+};
+
+type UsersResponse = {
+  users?: ManagedUser[];
+};
+
+type UserWithTemporaryPasswordResponse = {
+  user: ManagedUser;
   temporaryPassword: string;
 };
 
@@ -101,6 +120,24 @@ export async function changePassword(currentPassword: string, newPassword: strin
     method: 'POST',
     body: JSON.stringify({ currentPassword, newPassword })
   });
+}
+
+export async function fetchUsers() {
+  const payload = await apiJson<UsersResponse>('/api/admin/users');
+  return payload?.users ?? [];
+}
+
+export async function createUser(input: { email: string; role: UserRole }) {
+  return apiJson<UserWithTemporaryPasswordResponse>('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(input)
+  }) as Promise<UserWithTemporaryPasswordResponse>;
+}
+
+export async function resetUserPassword(id: number) {
+  return apiJson<UserWithTemporaryPasswordResponse>(`/api/admin/users/${id}/reset-password`, {
+    method: 'POST'
+  }) as Promise<UserWithTemporaryPasswordResponse>;
 }
 
 export async function signOut() {

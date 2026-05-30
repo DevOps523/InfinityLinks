@@ -1,4 +1,5 @@
-import { Clapperboard, Film, LayoutDashboard, Plus, Search, Send, Tv } from 'lucide-react';
+import { Clapperboard, Film, LayoutDashboard, Plus, Search, Send, Tv, Users } from 'lucide-react';
+import type { UserRole } from '../auth/types';
 
 export type PageKey =
   | 'dashboard'
@@ -9,11 +10,14 @@ export type PageKey =
   | 'seasons'
   | 'episodes'
   | 'public-search'
-  | 'telegram-jobs';
+  | 'telegram-jobs'
+  | 'users'
+  | 'change-password';
 
 type SidebarProps = {
   currentPage: PageKey;
   failedTelegramJobCount?: number;
+  userRole: UserRole;
   onNavigate: (page: PageKey) => void;
 };
 
@@ -27,7 +31,10 @@ const items: Array<{ key: PageKey; label: string; icon: typeof Film }> = [
   { key: 'telegram-jobs', label: 'Telegram Jobs', icon: Send }
 ];
 
-export function Sidebar({ currentPage, failedTelegramJobCount = 0, onNavigate }: SidebarProps) {
+export function Sidebar({ currentPage, failedTelegramJobCount = 0, userRole, onNavigate }: SidebarProps) {
+  const visibleItems =
+    userRole === 'admin' ? [...items, { key: 'users' as PageKey, label: 'Users', icon: Users }] : items;
+
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
@@ -38,7 +45,7 @@ export function Sidebar({ currentPage, failedTelegramJobCount = 0, onNavigate }:
         </div>
       </div>
       <nav className="sidebar__nav" aria-label="Media navigation">
-        {items.map((item) => {
+        {visibleItems.map((item) => {
           const Icon = item.icon;
           const badgeCount = item.key === 'telegram-jobs' ? failedTelegramJobCount : 0;
           return (

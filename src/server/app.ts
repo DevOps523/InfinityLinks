@@ -2,6 +2,9 @@ import express from 'express';
 import path from 'node:path';
 import { ZodError } from 'zod';
 import { createAdminRouter } from './admin/admin.routes.js';
+import { createAdminUsersRouter } from './admin/users.routes.js';
+import { createAuthRouter } from './auth/auth.routes.js';
+import { createAuthConfig, createAuthHandler, requireApiAuth } from './auth/session.js';
 import type { AppConfig } from './config.js';
 import type { AppDatabase } from './db/database.js';
 import { createMediaRouter } from './media/media.routes.js';
@@ -44,9 +47,14 @@ export function createApp(options: CreateAppOptions = {}) {
     res.json({ ok: true });
   });
 
-  app.use('/api', createAdminApiRequestGuard(getAdminApiRequestGuardOptions(options.config)));
-
   if (options.db && options.config) {
+    const authConfig = createAuthConfig(options.db, options.config);
+
+    app.use('/auth/*', createAuthHandler(options.db, options.config));
+    app.use('/api', createAdminApiRequestGuard(getAdminApiRequestGuardOptions(options.config)));
+    app.use('/api/auth', createAuthRouter(options.db, authConfig));
+    app.use('/api', requireApiAuth(authConfig));
+    app.use('/api/admin/users', createAdminUsersRouter(options.db));
     app.use('/api', createAdminRouter(options.db, options.config));
     app.use('/api', createMediaRouter(options.db));
     app.use('/api', createTelegramAdminRouter(options.db));

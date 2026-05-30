@@ -13,6 +13,7 @@ const baseConfig: AppConfig = {
   host: '127.0.0.1',
   port: 0,
   databasePath: ':memory:',
+  authSecret: 'test-auth-secret-test-auth-secret-123',
   publicSearchGroupHandle: '@infinitylinks69'
 };
 

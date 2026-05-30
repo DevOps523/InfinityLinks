@@ -56,6 +56,7 @@ describe('admin dashboard', () => {
         host: '127.0.0.1',
         port: 0,
         databasePath: ':memory:',
+        authSecret: 'test-auth-secret-test-auth-secret-123',
         tmdbApiKey: 'tmdb-token',
         telegramBotToken: 'telegram-token',
         telegramChannelId: '-1001',

@@ -55,6 +55,7 @@ const guardConfig: AppConfig = {
   host: '127.0.0.1',
   port: 3000,
   databasePath: ':memory:',
+  authSecret: 'test-auth-secret-test-auth-secret-123',
   publicSearchSyncUrl: 'https://search.example.com/api/sync',
   publicSearchSyncToken: 'secret-token',
   publicSearchGroupHandle: '@infinitylinks69'

@@ -18,6 +18,7 @@ describe('database migration', () => {
 
     expect(tables).toEqual([
       'api_logs',
+      'auth_users',
       'episode_links',
       'episodes',
       'movie_links',
@@ -236,7 +237,7 @@ describe('database migration', () => {
       .prepare("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
       .all() as Array<{ name: string; sql: string }>;
 
-    expect(tableSql).toHaveLength(10);
+    expect(tableSql).toHaveLength(11);
     for (const table of tableSql.filter((table) => table.name !== 'public_search_sync_state')) {
       expect(table.sql).toContain('id INTEGER PRIMARY KEY AUTOINCREMENT');
     }
@@ -268,6 +269,46 @@ describe('database migration', () => {
     db.prepare('DELETE FROM movies WHERE id = ?').run(movie.lastInsertRowid);
 
     expect(db.prepare('SELECT COUNT(*) AS count FROM movie_links').get()).toEqual({ count: 0 });
+    db.close();
+  });
+
+  it('creates auth users with role and password-change constraints', () => {
+    const db = createDatabase(':memory:');
+    migrate(db);
+
+    const columns = columnNames(db, 'auth_users');
+    expect(columns).toEqual([
+      'id',
+      'email',
+      'role',
+      'password_hash',
+      'must_change_password',
+      'created_at',
+      'updated_at',
+      'last_login_at'
+    ]);
+
+    db.prepare(
+      "INSERT INTO auth_users (email, role, password_hash) VALUES ('admin@example.com', 'admin', 'hash')"
+    ).run();
+
+    expect(db.prepare('SELECT role, must_change_password FROM auth_users WHERE email = ?').get('admin@example.com')).toEqual({
+      role: 'admin',
+      must_change_password: 1
+    });
+
+    expect(() => {
+      db.prepare(
+        "INSERT INTO auth_users (email, role, password_hash) VALUES ('bad@example.com', 'owner', 'hash')"
+      ).run();
+    }).toThrow();
+
+    expect(() => {
+      db.prepare(
+        "INSERT INTO auth_users (email, role, password_hash, must_change_password) VALUES ('bad2@example.com', 'admin', 'hash', 2)"
+      ).run();
+    }).toThrow();
+
     db.close();
   });
 

@@ -21,7 +21,9 @@ describe('loadConfig', () => {
         TELEGRAM_CHANNEL_ID: '@channel',
         HOST: 'localhost',
         PORT: '4321',
-        DATABASE_PATH: './data/test.sqlite'
+        DATABASE_PATH: './data/test.sqlite',
+        AUTH_SECRET: 'a'.repeat(32),
+        ADMIN_EMAIL: 'Admin@Example.COM'
       })
     ).toEqual({
       tmdbApiKey: 'tmdb-key',
@@ -30,6 +32,8 @@ describe('loadConfig', () => {
       host: 'localhost',
       port: 4321,
       databasePath: path.resolve(process.cwd(), './data/test.sqlite'),
+      authSecret: 'a'.repeat(32),
+      adminEmail: 'admin@example.com',
       publicSearchSyncUrl: undefined,
       publicSearchSyncToken: undefined,
       publicSearchStatusUrl: undefined,
@@ -44,6 +48,7 @@ describe('loadConfig', () => {
         TMDB_API_KEY: 'tmdb-key',
         TELEGRAM_BOT_TOKEN: 'telegram-token',
         TELEGRAM_CHANNEL_ID: '@channel',
+        AUTH_SECRET: 'a'.repeat(32),
         PUBLIC_SEARCH_SYNC_URL: 'https://search.example.com/api/sync',
         PUBLIC_SEARCH_SYNC_TOKEN: 'sync-token',
         PUBLIC_SEARCH_GROUP_HANDLE: '@infinitylinks69'
@@ -61,6 +66,7 @@ describe('loadConfig', () => {
         TMDB_API_KEY: 'tmdb-key',
         TELEGRAM_BOT_TOKEN: 'telegram-token',
         TELEGRAM_CHANNEL_ID: '@channel',
+        AUTH_SECRET: 'a'.repeat(32),
         PUBLIC_SEARCH_SYNC_URL: '   ',
         PUBLIC_SEARCH_SYNC_TOKEN: '',
         PUBLIC_SEARCH_GROUP_HANDLE: ''
@@ -78,6 +84,7 @@ describe('loadConfig', () => {
         TMDB_API_KEY: 'tmdb-key',
         TELEGRAM_BOT_TOKEN: 'telegram-token',
         TELEGRAM_CHANNEL_ID: '@channel',
+        AUTH_SECRET: 'a'.repeat(32),
         PUBLIC_SEARCH_SYNC_URL: 'http://public.example/api/sync'
       })
     ).toThrow(/PUBLIC_SEARCH_SYNC_URL must use https/);
@@ -89,6 +96,7 @@ describe('loadConfig', () => {
         TMDB_API_KEY: 'tmdb-key',
         TELEGRAM_BOT_TOKEN: 'telegram-token',
         TELEGRAM_CHANNEL_ID: '@channel',
+        AUTH_SECRET: 'a'.repeat(32),
         PUBLIC_SEARCH_SYNC_URL: 'not a url'
       })
     );
@@ -103,6 +111,7 @@ describe('loadConfig', () => {
         TMDB_API_KEY: 'tmdb-key',
         TELEGRAM_BOT_TOKEN: 'telegram-token',
         TELEGRAM_CHANNEL_ID: '@channel',
+        AUTH_SECRET: 'a'.repeat(32),
         PUBLIC_SEARCH_STATUS_URL: 'https://search.example.com/api/status',
         PUBLIC_SEARCH_STATUS_TOKEN: 'status-token'
       })
@@ -118,6 +127,7 @@ describe('loadConfig', () => {
         TMDB_API_KEY: 'tmdb-key',
         TELEGRAM_BOT_TOKEN: 'telegram-token',
         TELEGRAM_CHANNEL_ID: '@channel',
+        AUTH_SECRET: 'a'.repeat(32),
         PUBLIC_SEARCH_SYNC_TOKEN: ' shared-token ',
         PUBLIC_SEARCH_STATUS_TOKEN: 'shared-token'
       })
@@ -130,6 +140,7 @@ describe('loadConfig', () => {
         TMDB_API_KEY: 'tmdb-key',
         TELEGRAM_BOT_TOKEN: 'telegram-token',
         TELEGRAM_CHANNEL_ID: '@channel',
+        AUTH_SECRET: 'a'.repeat(32),
         PUBLIC_SEARCH_STATUS_URL: '   ',
         PUBLIC_SEARCH_STATUS_TOKEN: ''
       })
@@ -145,6 +156,7 @@ describe('loadConfig', () => {
         TMDB_API_KEY: 'tmdb-key',
         TELEGRAM_BOT_TOKEN: 'telegram-token',
         TELEGRAM_CHANNEL_ID: '@channel',
+        AUTH_SECRET: 'a'.repeat(32),
         PUBLIC_SEARCH_STATUS_URL: 'http://public.example/api/status'
       })
     ).toThrow(/PUBLIC_SEARCH_STATUS_URL must use https/);
@@ -156,6 +168,7 @@ describe('loadConfig', () => {
         TMDB_API_KEY: 'tmdb-key',
         TELEGRAM_BOT_TOKEN: 'telegram-token',
         TELEGRAM_CHANNEL_ID: '@channel',
+        AUTH_SECRET: 'a'.repeat(32),
         PUBLIC_SEARCH_STATUS_URL: 'not a url'
       })
     );
@@ -171,6 +184,7 @@ describe('loadConfig', () => {
           TMDB_API_KEY: 'tmdb-key',
           TELEGRAM_BOT_TOKEN: 'telegram-token',
           TELEGRAM_CHANNEL_ID: '@channel',
+          AUTH_SECRET: 'a'.repeat(32),
           HOST: host
         }).host
       ).toBe(host);
@@ -184,10 +198,50 @@ describe('loadConfig', () => {
           TMDB_API_KEY: 'tmdb-key',
           TELEGRAM_BOT_TOKEN: 'telegram-token',
           TELEGRAM_CHANNEL_ID: '@channel',
+          AUTH_SECRET: 'a'.repeat(32),
           HOST: host
         })
       ).toThrow(/HOST must be a localhost address/);
     }
+  });
+
+  it('requires an Auth.js secret of at least 32 characters', () => {
+    expect(() =>
+      loadConfig({
+        TMDB_API_KEY: 'tmdb-key',
+        TELEGRAM_BOT_TOKEN: 'telegram-token',
+        TELEGRAM_CHANNEL_ID: '@channel',
+        AUTH_SECRET: 'short'
+      })
+    ).toThrow(/AUTH_SECRET must be at least 32 characters/);
+  });
+
+  it('accepts missing ADMIN_EMAIL because bootstrap validates when needed', () => {
+    expect(
+      loadConfig({
+        TMDB_API_KEY: 'tmdb-key',
+        TELEGRAM_BOT_TOKEN: 'telegram-token',
+        TELEGRAM_CHANNEL_ID: '@channel',
+        AUTH_SECRET: 'b'.repeat(32)
+      })
+    ).toMatchObject({
+      authSecret: 'b'.repeat(32),
+      adminEmail: undefined
+    });
+  });
+
+  it('normalizes ADMIN_EMAIL when present', () => {
+    expect(
+      loadConfig({
+        TMDB_API_KEY: 'tmdb-key',
+        TELEGRAM_BOT_TOKEN: 'telegram-token',
+        TELEGRAM_CHANNEL_ID: '@channel',
+        AUTH_SECRET: 'c'.repeat(32),
+        ADMIN_EMAIL: '  Owner@Example.COM  '
+      })
+    ).toMatchObject({
+      adminEmail: 'owner@example.com'
+    });
   });
 
   it('rejects missing secrets with a clear message', () => {

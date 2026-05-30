@@ -5,6 +5,7 @@ import { createAdminRouter } from './admin/admin.routes.js';
 import { createAdminUsersRouter } from './admin/users.routes.js';
 import { createAuthRouter } from './auth/auth.routes.js';
 import { createAuthConfig, createAuthHandler, requireApiAuth } from './auth/session.js';
+import type { SessionUser } from './auth/session.js';
 import type { AppConfig } from './config.js';
 import type { AppDatabase } from './db/database.js';
 import { createMediaRouter } from './media/media.routes.js';
@@ -21,6 +22,7 @@ type CreateAppOptions = {
   fetcher?: typeof fetch;
   publicSearchStatusOptions?: PublicSearchStatusServiceOptions;
   tmdbOptions?: TmdbRouterOptions;
+  testAuthUser?: SessionUser;
 };
 
 function formatZodPath(path: Array<number | string>) {
@@ -53,7 +55,14 @@ export function createApp(options: CreateAppOptions = {}) {
     app.use('/auth/*', createAuthHandler(options.db, options.config));
     app.use('/api', createAdminApiRequestGuard(getAdminApiRequestGuardOptions(options.config)));
     app.use('/api/auth', createAuthRouter(options.db, authConfig));
-    app.use('/api', requireApiAuth(authConfig));
+    if (options.testAuthUser) {
+      app.use('/api', (_req, res, next) => {
+        res.locals.authUser = options.testAuthUser;
+        next();
+      });
+    } else {
+      app.use('/api', requireApiAuth(authConfig));
+    }
     app.use('/api/admin/users', createAdminUsersRouter(options.db));
     app.use('/api', createAdminRouter(options.db, options.config));
     app.use('/api', createMediaRouter(options.db));

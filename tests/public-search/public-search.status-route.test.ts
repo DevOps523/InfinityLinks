@@ -17,6 +17,13 @@ const baseConfig: AppConfig = {
   publicSearchGroupHandle: '@infinitylinks69'
 };
 
+const testAuthUser = {
+  id: '1',
+  email: 'admin@example.com',
+  role: 'admin' as const,
+  mustChangePassword: false
+};
+
 let db: AppDatabase;
 
 function validRemoteStatus() {
@@ -34,7 +41,7 @@ function app(
   fetcher: typeof fetch = vi.fn<typeof fetch>(),
   publicSearchStatusOptions?: PublicSearchStatusServiceOptions
 ) {
-  return createApp({ db, config, fetcher, publicSearchStatusOptions });
+  return createApp({ db, config, fetcher, publicSearchStatusOptions, testAuthUser });
 }
 
 function createMigratedDatabase() {

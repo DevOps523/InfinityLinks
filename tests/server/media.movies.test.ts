@@ -17,6 +17,13 @@ const config: AppConfig = {
   publicSearchGroupHandle: '@infinitylinks69'
 };
 
+const testAuthUser = {
+  id: '1',
+  email: 'admin@example.com',
+  role: 'admin' as const,
+  mustChangePassword: false
+};
+
 let db: AppDatabase;
 
 function app() {
@@ -25,7 +32,7 @@ function app() {
     req.headers['x-infinitylinks-request'] = 'fetch';
     next();
   });
-  testApp.use(createApp({ db, config }));
+  testApp.use(createApp({ db, config, testAuthUser }));
   return testApp;
 }
 

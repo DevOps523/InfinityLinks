@@ -6,6 +6,12 @@ import { migrate } from '../../src/server/db/migrate.js';
 
 describe('admin dashboard', () => {
   let db: AppDatabase;
+  const testAuthUser = {
+    id: '1',
+    email: 'admin@example.com',
+    role: 'admin' as const,
+    mustChangePassword: false
+  };
 
   beforeEach(() => {
     db = createDatabase(':memory:');
@@ -65,7 +71,8 @@ describe('admin dashboard', () => {
         publicSearchStatusUrl: undefined,
         publicSearchStatusToken: undefined,
         publicSearchGroupHandle: '@infinitylinks69'
-      }
+      },
+      testAuthUser
     });
 
     const response = await request(app).get('/api/admin/dashboard').expect(200);

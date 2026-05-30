@@ -17,6 +17,13 @@ const config: AppConfig = {
   publicSearchGroupHandle: '@infinitylinks69'
 };
 
+const testAuthUser = {
+  id: '1',
+  email: 'admin@example.com',
+  role: 'admin' as const,
+  mustChangePassword: false
+};
+
 function createDb() {
   const db = createDatabase(':memory:');
   migrate(db);
@@ -57,7 +64,8 @@ describe('TMDB search route protections', () => {
           fetcher,
           rateLimit: { limit: 2, windowMs: 60_000 },
           timeoutMs: 1000
-        }
+        },
+        testAuthUser
       });
 
       await request(app).get('/api/tmdb/search?query=one').set('X-InfinityLinks-Request', 'fetch').expect(200);
@@ -93,7 +101,8 @@ describe('TMDB search route protections', () => {
           fetcher,
           rateLimit: { limit: 10, windowMs: 60_000 },
           timeoutMs: 1
-        }
+        },
+        testAuthUser
       });
 
       const response = await request(app)
@@ -124,7 +133,8 @@ describe('TMDB search route protections', () => {
           fetcher,
           rateLimit: { limit: 10, windowMs: 60_000 },
           timeoutMs: 1
-        }
+        },
+        testAuthUser
       });
 
       const response = await request(app)

@@ -1,11 +1,14 @@
-import { Save } from 'lucide-react';
+import { LogOut, Save } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
+import type { SessionUser } from '../auth/types';
 
 type ChangePasswordPageProps = {
+  user: SessionUser;
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  onSignOut: () => Promise<void>;
 };
 
-export function ChangePasswordPage({ onChangePassword }: ChangePasswordPageProps) {
+export function ChangePasswordPage({ user, onChangePassword, onSignOut }: ChangePasswordPageProps) {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -33,9 +36,18 @@ export function ChangePasswordPage({ onChangePassword }: ChangePasswordPageProps
             <h1>Change password</h1>
             <p>Create a permanent password before continuing.</p>
           </div>
+          <button className="button button--secondary" onClick={() => void onSignOut()} type="button">
+            <LogOut aria-hidden="true" size={18} />
+            Sign Out
+          </button>
         </header>
 
         <form className="form-panel" onSubmit={submitPasswordChange}>
+          <div>
+            <strong>{user.email}</strong>
+            <p className="field-hint">This account requires a password change.</p>
+          </div>
+
           <label>
             Current password
             <input

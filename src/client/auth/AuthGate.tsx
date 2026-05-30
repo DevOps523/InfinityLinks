@@ -75,7 +75,13 @@ export function AuthGate({ children }: AuthGateProps) {
   }
 
   if (authState.user.mustChangePassword) {
-    return <ChangePasswordPage onChangePassword={handleChangePassword} />;
+    return (
+      <ChangePasswordPage
+        user={authState.user}
+        onChangePassword={handleChangePassword}
+        onSignOut={handleSignOut}
+      />
+    );
   }
 
   return (

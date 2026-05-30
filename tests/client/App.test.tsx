@@ -248,6 +248,8 @@ describe('App', () => {
     render(<App />);
 
     expect(await screen.findByRole('heading', { name: /^change password$/i })).toBeInTheDocument();
+    expect(screen.getByText('super@example.com')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^sign out$/i })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: /media navigation/i })).not.toBeInTheDocument();
   });
 

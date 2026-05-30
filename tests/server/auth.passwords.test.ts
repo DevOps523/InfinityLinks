@@ -27,8 +27,14 @@ describe('auth password helpers', () => {
     expect(verifyPassword('wrong password', hash)).toBe(false);
   });
 
-  it('rejects unsupported hash strings safely', () => {
+  it('rejects unsupported and malformed hash strings safely', () => {
+    const fullLengthKey = Buffer.alloc(64, 1).toString('base64url');
+
     expect(verifyPassword('password', 'not-a-valid-hash')).toBe(false);
+    expect(verifyPassword('anything', 'scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAA$')).toBe(false);
+    expect(verifyPassword('password', `scrypt$16384$8$1$$${fullLengthKey}`)).toBe(false);
+    expect(verifyPassword('password', 'scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAA$AA')).toBe(false);
+    expect(verifyPassword('password', 'scrypt$NaN$8$1$salt$key')).toBe(false);
   });
 
   it('validates replacement password strength', () => {

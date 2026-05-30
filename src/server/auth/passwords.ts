@@ -51,6 +51,10 @@ export function verifyPassword(password: string, storedHash: string) {
   try {
     const salt = Buffer.from(saltText, 'base64url');
     const expectedKey = Buffer.from(keyText, 'base64url');
+    if (salt.length === 0 || expectedKey.length !== SCRYPT_KEY_LENGTH) {
+      return false;
+    }
+
     const actualKey = scryptSync(password, salt, expectedKey.length, {
       N: cost,
       r: blockSize,

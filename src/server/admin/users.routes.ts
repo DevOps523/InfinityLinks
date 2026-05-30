@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { generateTemporaryPassword, hashPassword } from '../auth/passwords.js';
-import { requireAdmin } from '../auth/session.js';
 import {
   createAuthUser,
   findAuthUserByEmail,
@@ -10,7 +9,10 @@ import {
   normalizeAuthEmail,
   updateAuthUserPassword
 } from '../auth/users.repository.js';
+import type { AuthUser, PublicAuthUser } from '../auth/users.repository.js';
 import type { AppDatabase } from '../db/database.js';
+
+const MANAGE_USERS_FORBIDDEN_RESPONSE = { error: 'You do not have permission to manage users.' };
 
 const RoleSchema = z.enum(['admin', 'superadmin']);
 
@@ -28,10 +30,25 @@ const IdParamSchema = z.object({
   }, z.number().int().positive())
 });
 
+function toPublicAuthUser(user: AuthUser): PublicAuthUser {
+  const { passwordHash: _passwordHash, ...publicUser } = user;
+  return publicUser;
+}
+
 export function createAdminUsersRouter(db: AppDatabase) {
   const router = Router();
 
-  router.use(requireAdmin);
+  router.use((_req, res, next) => {
+    const sessionUserId = Number(res.locals.authUser?.id);
+    const user = Number.isInteger(sessionUserId) ? findAuthUserById(db, sessionUserId) : undefined;
+
+    if (user?.role !== 'admin') {
+      res.status(403).json(MANAGE_USERS_FORBIDDEN_RESPONSE);
+      return;
+    }
+
+    next();
+  });
 
   router.get('/', (_req, res, next) => {
     try {
@@ -76,8 +93,9 @@ export function createAdminUsersRouter(db: AppDatabase) {
 
       const temporaryPassword = generateTemporaryPassword();
       updateAuthUserPassword(db, id, hashPassword(temporaryPassword), true);
+      const updatedUser = findAuthUserById(db, id);
 
-      res.json({ user: { ...user, mustChangePassword: true }, temporaryPassword });
+      res.json({ user: updatedUser ? toPublicAuthUser(updatedUser) : toPublicAuthUser(user), temporaryPassword });
     } catch (error) {
       next(error);
     }

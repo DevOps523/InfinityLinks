@@ -146,6 +146,32 @@ describe('auth and admin user routes', () => {
     expect(response.body).toEqual({ error: 'You do not have permission to manage users.' });
   });
 
+  it('prevents stale admin sessions from managing users after role changes', async () => {
+    seedUser(db, 'admin@example.com', 'admin');
+    const app = createApp({ db, config });
+    const agent = request.agent(app);
+
+    await signIn(agent, 'admin@example.com');
+    db.prepare("UPDATE auth_users SET role = 'superadmin' WHERE email = ?").run('admin@example.com');
+
+    const response = await agent.get('/api/admin/users').expect(403);
+
+    expect(response.body).toEqual({ error: 'You do not have permission to manage users.' });
+  });
+
+  it('prevents deleted admin sessions from managing users', async () => {
+    seedUser(db, 'admin@example.com', 'admin');
+    const app = createApp({ db, config });
+    const agent = request.agent(app);
+
+    await signIn(agent, 'admin@example.com');
+    db.prepare('DELETE FROM auth_users WHERE email = ?').run('admin@example.com');
+
+    const response = await agent.get('/api/admin/users').expect(403);
+
+    expect(response.body).toEqual({ error: 'You do not have permission to manage users.' });
+  });
+
   it('lets admins reset a superadmin password', async () => {
     seedUser(db, 'admin@example.com', 'admin');
     seedUser(db, 'super@example.com', 'superadmin');
@@ -159,7 +185,20 @@ describe('auth and admin user routes', () => {
       .set('X-InfinityLinks-Request', 'fetch')
       .expect(200);
 
-    expect(response.body.temporaryPassword).toMatch(/^[A-Za-z0-9_-]{24}$/);
+    expect(response.body).toEqual({
+      user: {
+        id: 2,
+        email: 'super@example.com',
+        role: 'superadmin',
+        mustChangePassword: true,
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+        lastLoginAt: null
+      },
+      temporaryPassword: expect.stringMatching(/^[A-Za-z0-9_-]{24}$/)
+    });
+    expect(JSON.stringify(response.body)).not.toContain('passwordHash');
+
     const row = db.prepare('SELECT password_hash, must_change_password FROM auth_users WHERE id = 2').get() as {
       password_hash: string;
       must_change_password: 0 | 1;
@@ -190,5 +229,43 @@ describe('auth and admin user routes', () => {
     };
     expect(verifyPassword('NewPassword123456', row.password_hash)).toBe(true);
     expect(row.must_change_password).toBe(0);
+  });
+
+  it('rejects changing password with the wrong current password', async () => {
+    seedUser(db, 'super@example.com', 'superadmin');
+    const app = createApp({ db, config });
+    const agent = request.agent(app);
+
+    await signIn(agent, 'super@example.com');
+
+    const response = await agent
+      .post('/api/auth/change-password')
+      .set('X-InfinityLinks-Request', 'fetch')
+      .send({
+        currentPassword: 'WrongPassword123456',
+        newPassword: 'NewPassword123456'
+      })
+      .expect(400);
+
+    expect(response.body).toEqual({ error: 'Current password is incorrect.' });
+  });
+
+  it('rejects weak replacement passwords', async () => {
+    seedUser(db, 'super@example.com', 'superadmin');
+    const app = createApp({ db, config });
+    const agent = request.agent(app);
+
+    await signIn(agent, 'super@example.com');
+
+    const response = await agent
+      .post('/api/auth/change-password')
+      .set('X-InfinityLinks-Request', 'fetch')
+      .send({
+        currentPassword: 'Password123456',
+        newPassword: 'short1'
+      })
+      .expect(400);
+
+    expect(response.body).toEqual({ error: 'Password must be at least 12 characters.' });
   });
 });

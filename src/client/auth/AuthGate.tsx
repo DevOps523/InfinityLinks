@@ -64,7 +64,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
   if (authState.status === 'loading') {
     return (
-      <main className="content-shell">
+      <main className="auth-page auth-loading">
         <div className="state-panel dashboard-state">Loading session...</div>
       </main>
     );

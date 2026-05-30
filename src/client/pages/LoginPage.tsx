@@ -26,59 +26,66 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   }
 
   return (
-    <main className="content-shell">
-      <section className="page-section">
-        <header className="page-header">
-          <div>
-            <h1>Welcome back</h1>
-            <p>Sign in to manage the InfinityLinks catalog.</p>
-          </div>
-        </header>
-
-        <form className="form-panel" onSubmit={submitLogin}>
-          <label>
-            Email
-            <span className="input-with-icon">
-              <Mail aria-hidden="true" size={18} />
-              <input
-                autoComplete="email"
-                name="email"
-                onChange={(event) => setEmail(event.target.value)}
-                required
-                type="email"
-                value={email}
-              />
-            </span>
-          </label>
-
-          <label>
-            Password
-            <span className="input-with-icon">
-              <Lock aria-hidden="true" size={18} />
-              <input
-                autoComplete="current-password"
-                name="password"
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                type="password"
-                value={password}
-              />
-            </span>
-          </label>
-
-          {error ? (
-            <div className="state-panel state-panel--error" role="alert">
-              {error}
+    <main className="auth-page">
+      <section className="auth-card" aria-labelledby="login-title">
+        <div className="auth-card__accent" aria-hidden="true" />
+        <div className="auth-card__body">
+          <header className="auth-card__brand">
+            <div className="auth-card__mark" aria-hidden="true">
+              IL
             </div>
-          ) : null}
+            <div>
+              <span>InfinityLinks Admin</span>
+              <h1 id="login-title">Welcome back</h1>
+            </div>
+          </header>
+          <p>Sign in to manage the InfinityLinks catalog.</p>
 
-          <div className="form-actions">
-            <button className="button button--primary" disabled={isSubmitting} type="submit">
+          <form className="auth-card__form" onSubmit={submitLogin}>
+            <label>
+              Email
+              <span className="input-with-icon">
+                <Mail aria-hidden="true" size={18} />
+                <input
+                  autoComplete="email"
+                  className="auth-input"
+                  name="email"
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  type="email"
+                  value={email}
+                />
+              </span>
+            </label>
+
+            <label>
+              Password
+              <span className="input-with-icon">
+                <Lock aria-hidden="true" size={18} />
+                <input
+                  autoComplete="current-password"
+                  className="auth-input"
+                  name="password"
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  type="password"
+                  value={password}
+                />
+              </span>
+            </label>
+
+            {error ? (
+              <div className="auth-card__error" role="alert">
+                {error}
+              </div>
+            ) : null}
+
+            <button className="button button--primary auth-card__submit" disabled={isSubmitting} type="submit">
               <LogIn aria-hidden="true" size={18} />
               {isSubmitting ? 'Logging in...' : 'Login'}
             </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </section>
     </main>
   );

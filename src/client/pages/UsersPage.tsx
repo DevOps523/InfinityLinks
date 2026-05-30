@@ -129,7 +129,7 @@ export function UsersPage() {
       </header>
 
       {temporaryPassword ? (
-        <div className="state-panel users-temporary-password" role="status">
+        <div className="state-panel generated-password-panel" role="status">
           <div>
             <strong>Temporary password for {temporaryPassword.email}</strong>
             <p>{temporaryPassword.password}</p>
@@ -158,7 +158,7 @@ export function UsersPage() {
 
         {!isLoading && !error && users.length > 0 ? (
           <div className="table-scroll">
-            <table>
+            <table className="users-table">
               <thead>
                 <tr>
                   <th>Email</th>

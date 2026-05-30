@@ -193,8 +193,10 @@ describe('App', () => {
     render(<App />);
 
     expect(await screen.findByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    expect(screen.getByRole('main')).toHaveClass('auth-page');
     expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^login$/i })).toHaveClass('auth-card__submit');
     expect(screen.queryByText(/sign up/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /google/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /apple/i })).not.toBeInTheDocument();

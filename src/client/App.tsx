@@ -161,7 +161,10 @@ function renderPage(
     return (
       <ChangePasswordPage
         user={user}
-        onChangePassword={onChangePassword}
+        onChangePassword={async (currentPassword, newPassword) => {
+          await onChangePassword(currentPassword, newPassword);
+          setPage('dashboard');
+        }}
         onSignOut={onSignOut}
         variant="account"
       />
@@ -254,7 +257,11 @@ function AuthenticatedApp({ user, onChangePassword, onSignOut }: AuthenticatedAp
       />
       <main className="content-shell">
         <div className="content-shell__topbar">
-          <AccountMenu user={user} onChangePassword={() => setPage('change-password')} onSignOut={onSignOut} />
+          <AccountMenu
+            user={user}
+            onChangePassword={() => setPage('change-password')}
+            onSignOut={onSignOut}
+          />
         </div>
         {renderPage(
           page,

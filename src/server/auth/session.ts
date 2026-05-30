@@ -103,13 +103,27 @@ export async function getRequestSessionUser(req: Request, config: AuthConfig): P
   return session?.user;
 }
 
-export function requireApiAuth(authConfig: AuthConfig) {
+export function requireApiAuth(authConfig: AuthConfig, db?: AppDatabase) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = await getRequestSessionUser(req, authConfig);
 
       if (!user) {
         res.status(401).json({ error: 'Authentication required.' });
+        return;
+      }
+
+      if (db) {
+        const userId = Number(user.id);
+        const refreshedUser = Number.isInteger(userId) ? findAuthUserById(db, userId) : undefined;
+
+        if (!refreshedUser) {
+          res.status(401).json({ error: 'Authentication required.' });
+          return;
+        }
+
+        res.locals.authUser = toSafeSessionUser(refreshedUser);
+        next();
         return;
       }
 

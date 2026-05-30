@@ -61,7 +61,7 @@ export function createApp(options: CreateAppOptions = {}) {
         next();
       });
     } else {
-      app.use('/api', requireApiAuth(authConfig));
+      app.use('/api', requireApiAuth(authConfig, options.db));
     }
     app.use('/api/admin/users', createAdminUsersRouter(options.db));
     app.use('/api', createAdminRouter(options.db, options.config));

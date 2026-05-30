@@ -45,16 +45,18 @@ export function ChangePasswordPage({ user, onChangePassword, onSignOut, variant 
   }
 
   const content = (
-    <section className="page-section">
+    <section className="page-section change-password-page">
       <header className="page-header">
         <div>
           <h1>Change password</h1>
           <p>{isForcedChange ? 'Create a permanent password before continuing.' : 'Update your account password.'}</p>
         </div>
-        <button className="button button--secondary" disabled={isSigningOut} onClick={() => void submitSignOut()} type="button">
-          <LogOut aria-hidden="true" size={18} />
-          {isSigningOut ? 'Signing out...' : 'Sign Out'}
-        </button>
+        {isForcedChange ? (
+          <button className="button button--secondary" disabled={isSigningOut} onClick={() => void submitSignOut()} type="button">
+            <LogOut aria-hidden="true" size={18} />
+            {isSigningOut ? 'Signing out...' : 'Sign Out'}
+          </button>
+        ) : null}
       </header>
 
       <form className="form-panel" onSubmit={submitPasswordChange}>
@@ -109,5 +111,5 @@ export function ChangePasswordPage({ user, onChangePassword, onSignOut, variant 
     return content;
   }
 
-  return <main className="content-shell">{content}</main>;
+  return <main className="content-shell change-password-shell">{content}</main>;
 }

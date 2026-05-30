@@ -312,6 +312,8 @@ describe('App', () => {
     render(<App />);
 
     expect(await screen.findByRole('heading', { name: /^change password$/i })).toBeInTheDocument();
+    expect(screen.getByRole('main')).toHaveClass('change-password-shell');
+    expect(screen.getByRole('heading', { name: /^change password$/i }).closest('section')).toHaveClass('change-password-page');
     expect(screen.getByText('super@example.com')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^sign out$/i })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: /media navigation/i })).not.toBeInTheDocument();
@@ -356,6 +358,61 @@ describe('App', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Sign out failed. Please try again.');
     expect(screen.getByText('super@example.com')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /welcome back/i })).not.toBeInTheDocument();
+  });
+
+  it('returns a superadmin to the dashboard after a forced password change', async () => {
+    window.history.replaceState(null, '', '/#/users');
+    let mustChangePassword = true;
+
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return {
+          ok: true,
+          json: async () => ({
+            user: {
+              id: '2',
+              email: 'superadmin@example.com',
+              role: 'superadmin',
+              mustChangePassword
+            }
+          })
+        };
+      }
+
+      if (url === '/api/auth/change-password') {
+        expect(init?.method).toBe('POST');
+        mustChangePassword = false;
+        return { ok: true, json: async () => ({ ok: true }) };
+      }
+
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      return { ok: true, json: async () => ({ movies: [] }) };
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: /^change password$/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^current password$/i), { target: { value: 'TemporaryPass123' } });
+    fireEvent.change(screen.getByLabelText(/^new password$/i), { target: { value: 'PermanentPass123' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save password$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^dashboard$/i })).toBeInTheDocument();
+    expect(screen.queryByText('You do not have permission to manage users.')).not.toBeInTheDocument();
+    expect(window.location.hash).toBe('#/dashboard');
   });
 
   it('shows media navigation and the Add Movie link', async () => {
@@ -407,6 +464,68 @@ describe('App', () => {
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     expect(within(navigation).queryByRole('button', { name: /^users$/i })).not.toBeInTheDocument();
+  });
+
+  it('opens an admin profile dropdown with only account actions', async () => {
+    await renderAuthenticatedApp();
+
+    expect(screen.queryByRole('menu', { name: /profile menu/i })).not.toBeInTheDocument();
+    const profileButton = screen.getByRole('button', { name: /open profile menu/i });
+    expect(profileButton).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(profileButton);
+
+    const menu = screen.getByRole('menu', { name: /profile menu/i });
+    expect(profileButton).toHaveAttribute('aria-expanded', 'true');
+    expect(within(menu).queryByText('admin@example.com')).not.toBeInTheDocument();
+    expect(within(menu).queryByText('Admin')).not.toBeInTheDocument();
+    expect(within(menu).queryByRole('menuitem', { name: /^manage users$/i })).not.toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: /^change password$/i })).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: /^sign out$/i })).toBeInTheDocument();
+
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^change password$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^change password$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: /profile menu/i })).not.toBeInTheDocument();
+  });
+
+  it('shows the profile dropdown to superadmins without user management', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/auth/me') {
+        return createSessionResponse('superadmin');
+      }
+
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      return { ok: true, json: async () => ({ movies: [] }) };
+    });
+
+    await renderAuthenticatedApp();
+
+    fireEvent.click(screen.getByRole('button', { name: /open profile menu/i }));
+
+    const menu = screen.getByRole('menu', { name: /profile menu/i });
+    expect(within(menu).queryByText('superadmin@example.com')).not.toBeInTheDocument();
+    expect(within(menu).queryByText('Superadmin')).not.toBeInTheDocument();
+    expect(within(menu).queryByRole('menuitem', { name: /^manage users$/i })).not.toBeInTheDocument();
+
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^change password$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^change password$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('menu', { name: /profile menu/i })).not.toBeInTheDocument();
   });
 
   it('lets an admin create a user and shows the generated password once', async () => {
@@ -495,13 +614,252 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: /^add user$/i })).not.toBeInTheDocument();
   });
 
+  it('resets a managed user password from the action menu', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return createAdminSessionResponse();
+      }
+
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      if (url === '/api/admin/users' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => ({
+            users: [
+              {
+                id: 2,
+                email: 'super@example.com',
+                role: 'superadmin',
+                mustChangePassword: false,
+                createdAt: '2026-05-01T00:00:00.000Z',
+                updatedAt: '2026-05-01T00:00:00.000Z',
+                lastLoginAt: null
+              }
+            ]
+          })
+        };
+      }
+
+      if (url === '/api/admin/users/2/reset-password' && init?.method === 'POST') {
+        return {
+          ok: true,
+          json: async () => ({
+            user: {
+              id: 2,
+              email: 'super@example.com',
+              role: 'superadmin',
+              mustChangePassword: true,
+              createdAt: '2026-05-01T00:00:00.000Z',
+              updatedAt: '2026-05-30T00:00:00.000Z',
+              lastLoginAt: null
+            },
+            temporaryPassword: 'Fresh-Temp-123'
+          })
+        };
+      }
+
+      return { ok: true, json: async () => ({ movies: [] }) };
+    });
+
+    await renderAuthenticatedApp();
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^users$/i }));
+
+    const userCell = await screen.findByRole('cell', { name: 'super@example.com' });
+    const row = userCell.closest('tr');
+    expect(row).not.toBeNull();
+
+    fireEvent.click(within(row as HTMLElement).getByRole('button', { name: /^open action menu$/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /^reset password$/i }));
+
+    expect(await screen.findByText('Fresh-Temp-123')).toBeInTheDocument();
+    expect(screen.getByText('Must change password')).toBeInTheDocument();
+  });
+
+  it('lets an admin edit a managed user email and role from the action menu', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return createAdminSessionResponse();
+      }
+
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      if (url === '/api/admin/users' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => ({
+            users: [
+              {
+                id: 2,
+                email: 'super@example.com',
+                role: 'superadmin',
+                mustChangePassword: false,
+                createdAt: '2026-05-01T00:00:00.000Z',
+                updatedAt: '2026-05-01T00:00:00.000Z',
+                lastLoginAt: null
+              }
+            ]
+          })
+        };
+      }
+
+      if (url === '/api/admin/users/2' && init?.method === 'PATCH') {
+        expect(JSON.parse(init.body as string)).toEqual({
+          email: 'renamed@example.com',
+          role: 'admin'
+        });
+
+        return {
+          ok: true,
+          json: async () => ({
+            user: {
+              id: 2,
+              email: 'renamed@example.com',
+              role: 'admin',
+              mustChangePassword: false,
+              createdAt: '2026-05-01T00:00:00.000Z',
+              updatedAt: '2026-05-30T00:00:00.000Z',
+              lastLoginAt: null
+            }
+          })
+        };
+      }
+
+      return { ok: true, json: async () => ({ movies: [] }) };
+    });
+
+    await renderAuthenticatedApp();
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^users$/i }));
+
+    const userCell = await screen.findByRole('cell', { name: 'super@example.com' });
+    const row = userCell.closest('tr');
+    expect(row).not.toBeNull();
+
+    fireEvent.click(within(row as HTMLElement).getByRole('button', { name: /^open action menu$/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /^edit$/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /^edit user$/i });
+    expect(within(dialog).getByDisplayValue('super@example.com')).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText(/^email$/i), { target: { value: 'renamed@example.com' } });
+    fireEvent.change(within(dialog).getByLabelText(/^role$/i), { target: { value: 'admin' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^save user$/i }));
+
+    expect(await screen.findByRole('cell', { name: 'renamed@example.com' })).toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: 'super@example.com' })).not.toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'Admin' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /^edit user$/i })).not.toBeInTheDocument();
+  });
+
+  it('lets an admin delete a managed user from the action menu', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/api/auth/me') {
+        return createAdminSessionResponse();
+      }
+
+      if (url === '/api/admin/dashboard') {
+        return {
+          ok: true,
+          json: async () => ({
+            dashboard: {
+              movies: 0,
+              tvShows: 0,
+              activeLinks: 0,
+              failedTelegramJobs: 0,
+              pendingPublicSearchChanges: false
+            }
+          })
+        };
+      }
+
+      if (url === '/api/admin/users' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => ({
+            users: [
+              {
+                id: 2,
+                email: 'super@example.com',
+                role: 'superadmin',
+                mustChangePassword: false,
+                createdAt: '2026-05-01T00:00:00.000Z',
+                updatedAt: '2026-05-01T00:00:00.000Z',
+                lastLoginAt: null
+              }
+            ]
+          })
+        };
+      }
+
+      if (url === '/api/admin/users/2' && init?.method === 'DELETE') {
+        return {
+          ok: true,
+          status: 204,
+          json: async () => ({})
+        };
+      }
+
+      return { ok: true, json: async () => ({ movies: [] }) };
+    });
+
+    await renderAuthenticatedApp();
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^users$/i }));
+
+    const userCell = await screen.findByRole('cell', { name: 'super@example.com' });
+    const row = userCell.closest('tr');
+    expect(row).not.toBeNull();
+
+    fireEvent.click(within(row as HTMLElement).getByRole('button', { name: /^open action menu$/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /^delete$/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /^delete user$/i });
+    expect(within(dialog).getByText(/delete "super@example.com" permanently/i)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: /^delete$/i }));
+
+    await waitFor(() => expect(screen.queryByRole('cell', { name: 'super@example.com' })).not.toBeInTheDocument());
+    expect(screen.getByText('No users found.')).toBeInTheDocument();
+  });
+
   it('routes account menu password changes through the app shell', async () => {
     await renderAuthenticatedApp();
 
-    fireEvent.click(screen.getByRole('button', { name: /^change password$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open profile menu/i }));
+    fireEvent.click(within(screen.getByRole('menu', { name: /profile menu/i })).getByRole('menuitem', { name: /^change password$/i }));
 
     expect(await screen.findByRole('heading', { name: /^change password$/i })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: /media navigation/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^sign out$/i })).not.toBeInTheDocument();
     expect(screen.getAllByText('admin@example.com')).toHaveLength(2);
   });
 
@@ -542,7 +900,8 @@ describe('App', () => {
 
     await renderAuthenticatedApp();
 
-    fireEvent.click(screen.getByRole('button', { name: /^sign out$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open profile menu/i }));
+    fireEvent.click(within(screen.getByRole('menu', { name: /profile menu/i })).getByRole('menuitem', { name: /^sign out$/i }));
 
     expect(await screen.findByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: /media navigation/i })).not.toBeInTheDocument();

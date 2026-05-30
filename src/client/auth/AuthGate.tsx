@@ -54,6 +54,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
   async function handleChangePassword(currentPassword: string, newPassword: string) {
     await changePassword(currentPassword, newPassword);
+    window.history.replaceState(null, '', '#/dashboard');
     await refreshSession();
   }
 

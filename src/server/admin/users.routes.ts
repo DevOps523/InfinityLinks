@@ -2,11 +2,14 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { generateTemporaryPassword, hashPassword } from '../auth/passwords.js';
 import {
+  countAdminUsers,
   createAuthUser,
+  deleteAuthUser,
   findAuthUserByEmail,
   findAuthUserById,
   listAuthUsers,
   normalizeAuthEmail,
+  updateAuthUser,
   updateAuthUserPassword
 } from '../auth/users.repository.js';
 import type { AuthUser, PublicAuthUser } from '../auth/users.repository.js';
@@ -20,6 +23,8 @@ const CreateUserSchema = z.object({
   email: z.string().trim().email().transform((value) => normalizeAuthEmail(value)),
   role: RoleSchema
 });
+
+const UpdateUserSchema = CreateUserSchema;
 
 const IdParamSchema = z.object({
   id: z.preprocess((value) => {
@@ -81,6 +86,35 @@ export function createAdminUsersRouter(db: AppDatabase) {
     }
   });
 
+  router.patch('/:id', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const input = UpdateUserSchema.parse(req.body);
+      const user = findAuthUserById(db, id);
+
+      if (!user) {
+        res.status(404).json({ error: 'User not found.' });
+        return;
+      }
+
+      const duplicateUser = findAuthUserByEmail(db, input.email);
+      if (duplicateUser && duplicateUser.id !== id) {
+        res.status(409).json({ error: 'A user with that email already exists.' });
+        return;
+      }
+
+      if (user.role === 'admin' && input.role !== 'admin' && countAdminUsers(db) <= 1) {
+        res.status(400).json({ error: 'At least one admin user is required.' });
+        return;
+      }
+
+      const updatedUser = updateAuthUser(db, id, input);
+      res.json({ user: updatedUser ?? toPublicAuthUser(user) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post('/:id/reset-password', (req, res, next) => {
     try {
       const { id } = IdParamSchema.parse(req.params);
@@ -96,6 +130,34 @@ export function createAdminUsersRouter(db: AppDatabase) {
       const updatedUser = findAuthUserById(db, id);
 
       res.json({ user: updatedUser ? toPublicAuthUser(updatedUser) : toPublicAuthUser(user), temporaryPassword });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/:id', (req, res, next) => {
+    try {
+      const { id } = IdParamSchema.parse(req.params);
+      const sessionUserId = Number(res.locals.authUser?.id);
+      const user = findAuthUserById(db, id);
+
+      if (!user) {
+        res.status(404).json({ error: 'User not found.' });
+        return;
+      }
+
+      if (sessionUserId === id) {
+        res.status(400).json({ error: 'You cannot delete your own account.' });
+        return;
+      }
+
+      if (user.role === 'admin' && countAdminUsers(db) <= 1) {
+        res.status(400).json({ error: 'At least one admin user is required.' });
+        return;
+      }
+
+      deleteAuthUser(db, id);
+      res.status(204).end();
     } catch (error) {
       next(error);
     }

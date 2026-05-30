@@ -134,6 +134,81 @@ describe('auth and admin user routes', () => {
     expect(response.body).toEqual({ error: 'A user with that email already exists.' });
   });
 
+  it('lets admins edit a user email and role without changing the password', async () => {
+    seedUser(db, 'admin@example.com', 'admin');
+    seedUser(db, 'super@example.com', 'superadmin');
+    const app = createApp({ db, config });
+    const agent = request.agent(app);
+
+    await signIn(agent, 'admin@example.com');
+
+    const previousRow = db.prepare('SELECT password_hash FROM auth_users WHERE email = ?').get('super@example.com') as {
+      password_hash: string;
+    };
+
+    const response = await agent
+      .patch('/api/admin/users/2')
+      .set('X-InfinityLinks-Request', 'fetch')
+      .send({ email: 'Renamed@Example.COM', role: 'admin' })
+      .expect(200);
+
+    expect(response.body).toEqual({
+      user: {
+        id: 2,
+        email: 'renamed@example.com',
+        role: 'admin',
+        mustChangePassword: false,
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+        lastLoginAt: null
+      }
+    });
+
+    expect(db.prepare('SELECT id FROM auth_users WHERE email = ?').get('super@example.com')).toBeUndefined();
+    const updatedRow = db.prepare('SELECT password_hash FROM auth_users WHERE email = ?').get('renamed@example.com') as {
+      password_hash: string;
+    };
+    expect(updatedRow.password_hash).toBe(previousRow.password_hash);
+
+    const renamedAgent = request.agent(app);
+    await signIn(renamedAgent, 'renamed@example.com');
+    const me = await renamedAgent.get('/api/auth/me').expect(200);
+    expect(me.body.user).toMatchObject({ id: '2', email: 'renamed@example.com', role: 'admin' });
+  });
+
+  it('rejects editing a user to a duplicate email', async () => {
+    seedUser(db, 'admin@example.com', 'admin');
+    seedUser(db, 'super@example.com', 'superadmin');
+    const app = createApp({ db, config });
+    const agent = request.agent(app);
+
+    await signIn(agent, 'admin@example.com');
+
+    const response = await agent
+      .patch('/api/admin/users/2')
+      .set('X-InfinityLinks-Request', 'fetch')
+      .send({ email: 'ADMIN@example.com', role: 'superadmin' })
+      .expect(409);
+
+    expect(response.body).toEqual({ error: 'A user with that email already exists.' });
+  });
+
+  it('prevents removing the last admin role when editing users', async () => {
+    seedUser(db, 'admin@example.com', 'admin');
+    const app = createApp({ db, config });
+    const agent = request.agent(app);
+
+    await signIn(agent, 'admin@example.com');
+
+    const response = await agent
+      .patch('/api/admin/users/1')
+      .set('X-InfinityLinks-Request', 'fetch')
+      .send({ email: 'admin@example.com', role: 'superadmin' })
+      .expect(400);
+
+    expect(response.body).toEqual({ error: 'At least one admin user is required.' });
+  });
+
   it('prevents superadmins from managing users', async () => {
     seedUser(db, 'super@example.com', 'superadmin');
     const app = createApp({ db, config });
@@ -167,9 +242,9 @@ describe('auth and admin user routes', () => {
     await signIn(agent, 'admin@example.com');
     db.prepare('DELETE FROM auth_users WHERE email = ?').run('admin@example.com');
 
-    const response = await agent.get('/api/admin/users').expect(403);
+    const response = await agent.get('/api/admin/users').expect(401);
 
-    expect(response.body).toEqual({ error: 'You do not have permission to manage users.' });
+    expect(response.body).toEqual({ error: 'Authentication required.' });
   });
 
   it('lets admins reset a superadmin password', async () => {
@@ -205,6 +280,35 @@ describe('auth and admin user routes', () => {
     };
     expect(verifyPassword(response.body.temporaryPassword, row.password_hash)).toBe(true);
     expect(row.must_change_password).toBe(1);
+  });
+
+  it('lets admins delete a user and blocks that stale session from API access', async () => {
+    seedUser(db, 'admin@example.com', 'admin');
+    seedUser(db, 'super@example.com', 'superadmin');
+    const app = createApp({ db, config });
+    const adminAgent = request.agent(app);
+    const deletedAgent = request.agent(app);
+
+    await signIn(adminAgent, 'admin@example.com');
+    await signIn(deletedAgent, 'super@example.com');
+
+    await adminAgent.delete('/api/admin/users/2').set('X-InfinityLinks-Request', 'fetch').expect(204);
+
+    expect(db.prepare('SELECT id FROM auth_users WHERE email = ?').get('super@example.com')).toBeUndefined();
+    await deletedAgent.get('/api/admin/dashboard').expect(401);
+  });
+
+  it('prevents admins from deleting their own account', async () => {
+    seedUser(db, 'admin@example.com', 'admin');
+    seedUser(db, 'other@example.com', 'admin');
+    const app = createApp({ db, config });
+    const agent = request.agent(app);
+
+    await signIn(agent, 'admin@example.com');
+
+    const response = await agent.delete('/api/admin/users/1').set('X-InfinityLinks-Request', 'fetch').expect(400);
+
+    expect(response.body).toEqual({ error: 'You cannot delete your own account.' });
   });
 
   it('changes own password and clears forced password change', async () => {

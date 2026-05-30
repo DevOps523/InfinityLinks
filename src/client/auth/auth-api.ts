@@ -28,6 +28,10 @@ type UserWithTemporaryPasswordResponse = {
   temporaryPassword: string;
 };
 
+type UserResponse = {
+  user: ManagedUser;
+};
+
 const AUTH_RETURN_REDIRECT_HEADER = 'X-Auth-Return-Redirect';
 
 function getContentType(response: Response) {
@@ -138,6 +142,19 @@ export async function resetUserPassword(id: number) {
   return apiJson<UserWithTemporaryPasswordResponse>(`/api/admin/users/${id}/reset-password`, {
     method: 'POST'
   }) as Promise<UserWithTemporaryPasswordResponse>;
+}
+
+export async function updateUser(id: number, input: { email: string; role: UserRole }) {
+  return apiJson<UserResponse>(`/api/admin/users/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input)
+  }) as Promise<UserResponse>;
+}
+
+export async function deleteUser(id: number) {
+  await apiJson(`/api/admin/users/${id}`, {
+    method: 'DELETE'
+  });
 }
 
 export async function signOut() {

@@ -68,6 +68,13 @@ export function hasAdminUser(db: AppDatabase) {
   return row.count > 0;
 }
 
+export function countAdminUsers(db: AppDatabase) {
+  const row = db.prepare("SELECT COUNT(*) AS count FROM auth_users WHERE role = 'admin'").get() as {
+    count: number;
+  };
+  return row.count;
+}
+
 export function listAuthUsers(db: AppDatabase): PublicAuthUser[] {
   const rows = db.prepare('SELECT * FROM auth_users ORDER BY email ASC').all() as AuthUserRow[];
 
@@ -109,6 +116,34 @@ export function updateAuthUserPassword(
     )
     .run(passwordHash, mustChangePassword ? 1 : 0, id);
 
+  return result.changes > 0;
+}
+
+export function updateAuthUser(
+  db: AppDatabase,
+  id: number,
+  input: { email: string; role: AuthUserRole }
+): PublicAuthUser | undefined {
+  const result = db
+    .prepare(
+      `UPDATE auth_users
+          SET email = ?,
+              role = ?,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`
+    )
+    .run(normalizeAuthEmail(input.email), input.role, id);
+
+  if (result.changes === 0) {
+    return undefined;
+  }
+
+  const user = findAuthUserById(db, id);
+  return user ? toPublicAuthUser(user) : undefined;
+}
+
+export function deleteAuthUser(db: AppDatabase, id: number) {
+  const result = db.prepare('DELETE FROM auth_users WHERE id = ?').run(id);
   return result.changes > 0;
 }
 

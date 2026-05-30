@@ -330,7 +330,7 @@ Expected: JSON status output.
 
 Stop the manual app with `Ctrl+C` before continuing.
 
-## Step 11. Install The systemd Service
+## Step 11. Install The systemd Service - last stop not yet implemented
 
 Copy the service file:
 

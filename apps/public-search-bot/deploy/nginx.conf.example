@@ -1,17 +1,17 @@
 server {
     listen 80;
-    server_name your-vps.example.com;
+    server_name infinitylinks.fun;
 
     return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name your-vps.example.com;
+    server_name infinitylinks.fun;
 
     # Certbot can manage these paths after you issue a certificate.
-    ssl_certificate /etc/letsencrypt/live/your-vps.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/your-vps.example.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/infinitylinks.fun/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/infinitylinks.fun/privkey.pem;
 
     location = /api/sync {
         client_max_body_size 5m;

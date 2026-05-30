@@ -18,7 +18,7 @@ type LinkEditorModalProps = {
 };
 
 const qualities = ['SD', 'HD', 'Full HD', '2K', '4K'];
-const providers = ['Filekeeper', 'Mixdrop'];
+const providers = ['Terabox', 'Telebox' ,'Filekeeper', 'Mixdrop', 'DLSurf'];
 
 export function isHttpOrHttpsUrl(value: string) {
   try {

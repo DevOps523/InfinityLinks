@@ -1083,7 +1083,7 @@ describe('App', () => {
     fireEvent.click(within(navigation).getByRole('button', { name: /^public search$/i }));
 
     const previewSection = (await screen.findByText('Catalog preview')).closest('.public-search-preview') as HTMLElement;
-    expect(within(previewSection).getByText('3')).toBeInTheDocument();
+    await waitFor(() => expect(within(previewSection).getByText('3')).toBeInTheDocument());
     expect(within(previewSection).getByText('2')).toBeInTheDocument();
     expect(within(previewSection).queryByText('Sample movies')).not.toBeInTheDocument();
     expect(within(previewSection).queryByText('Sample TV shows')).not.toBeInTheDocument();

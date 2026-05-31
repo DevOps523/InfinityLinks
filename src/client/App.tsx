@@ -62,6 +62,14 @@ function pageToHash(page: PageKey) {
   return `#/${page}`;
 }
 
+function pageToUrl(page: PageKey) {
+  return `/${pageToHash(page)}`;
+}
+
+function isCurrentPageUrl(page: PageKey) {
+  return window.location.pathname === '/' && window.location.search === '' && window.location.hash === pageToHash(page);
+}
+
 function renderPage(
   page: PageKey,
   state: AppState,
@@ -206,8 +214,14 @@ function AuthenticatedApp({ user, onChangePassword, onSignOut }: AuthenticatedAp
   const setPage = useCallback((nextPage: PageKey) => {
     setPageState(nextPage);
 
-    if (refreshSafePages.has(nextPage) && window.location.hash !== pageToHash(nextPage)) {
-      window.history.pushState(null, '', pageToHash(nextPage));
+    if (refreshSafePages.has(nextPage) && !isCurrentPageUrl(nextPage)) {
+      window.history.pushState(null, '', pageToUrl(nextPage));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (refreshSafePages.has(page) && !isCurrentPageUrl(page)) {
+      window.history.replaceState(null, '', pageToUrl(page));
     }
   }, []);
 

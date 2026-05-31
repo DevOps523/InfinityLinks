@@ -206,6 +206,8 @@ describe('App', () => {
   it('submits login through Auth.js credentials flow', async () => {
     let authenticated = false;
 
+    window.history.replaceState(null, '', '/admin');
+
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/api/auth/me') {
         return {
@@ -256,6 +258,10 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /^login$/i }));
 
     expect(await screen.findByRole('heading', { name: /^dashboard$/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/');
+      expect(window.location.hash).toBe('#/dashboard');
+    });
   });
 
   it('shows a login error when Auth.js rejects credentials', async () => {
@@ -866,6 +872,8 @@ describe('App', () => {
   });
 
   it('signs out from the account menu', async () => {
+    window.history.replaceState(null, '', '/admin#/movies');
+
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/api/auth/me') {
         return createAdminSessionResponse();
@@ -907,6 +915,28 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: /media navigation/i })).not.toBeInTheDocument();
+    expect(window.location.pathname).toBe('/');
+    expect(window.location.hash).toBe('');
+  });
+
+  it('normalizes navigation URLs from stale server paths', async () => {
+    window.history.replaceState(null, '', '/admin');
+
+    await renderAuthenticatedApp();
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/');
+      expect(window.location.hash).toBe('#/dashboard');
+    });
+
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    fireEvent.click(within(navigation).getByRole('button', { name: /^movies$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^movies$/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/');
+      expect(window.location.hash).toBe('#/movies');
+    });
   });
 
   it('renders the dashboard with local admin counts', async () => {

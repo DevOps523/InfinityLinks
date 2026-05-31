@@ -54,12 +54,13 @@ export function AuthGate({ children }: AuthGateProps) {
 
   async function handleChangePassword(currentPassword: string, newPassword: string) {
     await changePassword(currentPassword, newPassword);
-    window.history.replaceState(null, '', '#/dashboard');
+    window.history.replaceState(null, '', '/#/dashboard');
     await refreshSession();
   }
 
   async function handleSignOut() {
     await signOut();
+    window.history.replaceState(null, '', '/');
     setAuthState({ status: 'signed-out', user: null });
   }
 

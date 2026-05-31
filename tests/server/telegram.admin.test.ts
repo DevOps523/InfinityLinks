@@ -2,6 +2,7 @@ import express from 'express';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/server/app.js';
+import type { SessionUser } from '../../src/server/auth/session.js';
 import type { AppConfig } from '../../src/server/config.js';
 import { createDatabase, type AppDatabase } from '../../src/server/db/database.js';
 import { migrate } from '../../src/server/db/migrate.js';
@@ -21,20 +22,29 @@ const config: AppConfig = {
   publicSearchGroupHandle: '@infinitylinks69'
 };
 
-const testAuthUser = {
+const TELEGRAM_JOBS_FORBIDDEN_RESPONSE = { error: 'You do not have permission to manage Telegram jobs.' };
+
+const testAuthUser: SessionUser = {
   id: '1',
   email: 'admin@example.com',
-  role: 'admin' as const,
+  role: 'admin',
   mustChangePassword: false
 };
 
-function app(db: AppDatabase) {
+const superadminAuthUser: SessionUser = {
+  id: '2',
+  email: 'superadmin@example.com',
+  role: 'superadmin',
+  mustChangePassword: false
+};
+
+function app(db: AppDatabase, authUser: SessionUser = testAuthUser) {
   const testApp = express();
   testApp.use((req, _res, next) => {
     req.headers['x-infinitylinks-request'] = 'fetch';
     next();
   });
-  testApp.use(createApp({ db, config, testAuthUser }));
+  testApp.use(createApp({ db, config, testAuthUser: authUser }));
   return testApp;
 }
 
@@ -81,6 +91,12 @@ describe('telegram admin jobs', () => {
     expect(response.body.jobs.map((job: { entityId: number }) => job.entityId)).not.toContain(999);
   });
 
+  it('returns 403 to superadmin users when listing failed Telegram jobs', async () => {
+    const response = await request(app(db, superadminAuthUser)).get('/api/telegram/jobs/failed').expect(403);
+
+    expect(response.body).toEqual(TELEGRAM_JOBS_FORBIDDEN_RESPONSE);
+  });
+
   it('requeues a failed Telegram job without resetting attempts', async () => {
     const insert = db
       .prepare(
@@ -101,6 +117,32 @@ describe('telegram admin jobs', () => {
     expect(job.attempts).toBe(4);
     expect(job.last_error).toBeNull();
     expect(new Date(`${job.next_run_at.replace(' ', 'T')}Z`).getTime()).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('returns 403 to superadmin users when retrying a failed Telegram job', async () => {
+    const insert = db
+      .prepare(
+        `INSERT INTO telegram_jobs (
+           job_type, entity_type, entity_id, payload, status, attempts, next_run_at, last_error
+         )
+         VALUES ('delete', 'season', 7, '{"messageId":123}', 'failed', 4, '2099-01-01 00:00:00', 'Telegram failed')`
+      )
+      .run();
+
+    const response = await request(app(db, superadminAuthUser))
+      .post(`/api/telegram/jobs/${insert.lastInsertRowid}/retry`)
+      .expect(403);
+
+    expect(response.body).toEqual(TELEGRAM_JOBS_FORBIDDEN_RESPONSE);
+
+    const job = db.prepare('SELECT status, attempts, last_error, next_run_at FROM telegram_jobs WHERE id = ?').get(
+      insert.lastInsertRowid
+    ) as { status: string; attempts: number; last_error: string; next_run_at: string };
+
+    expect(job.status).toBe('failed');
+    expect(job.attempts).toBe(4);
+    expect(job.last_error).toBe('Telegram failed');
+    expect(job.next_run_at).toBe('2099-01-01 00:00:00');
   });
 
   it('returns 404 when retrying a job that is not currently failed', async () => {

@@ -43,6 +43,7 @@ function getAdminApiRequestGuardOptions(config: AppConfig | undefined) {
 
 export function createApp(options: CreateAppOptions = {}) {
   const app = express();
+  app.set('trust proxy', 'loopback');
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/api/health', (_req, res) => {

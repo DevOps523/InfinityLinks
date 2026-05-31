@@ -4,10 +4,12 @@ import type { AuthConfig } from '@auth/core';
 import type { NextFunction, Request, Response } from 'express';
 import type { AppConfig } from '../config.js';
 import type { AppDatabase } from '../db/database.js';
+import { createLoginAttemptLimiter } from './login-attempt-limiter.js';
 import { verifyPassword } from './passwords.js';
 import {
   findAuthUserByEmail,
   findAuthUserById,
+  normalizeAuthEmail,
   toSafeSessionUser,
   updateAuthUserLastLogin,
   type AuthUserRole
@@ -19,6 +21,17 @@ export type SessionUser = {
   role: AuthUserRole;
   mustChangePassword: boolean;
 };
+
+const PASSWORD_CHANGE_REQUIRED_RESPONSE = {
+  error: 'Password change required.',
+  code: 'PASSWORD_CHANGE_REQUIRED'
+};
+
+const AUTH_CLIENT_IP_HEADER = 'x-infinitylinks-auth-client-ip';
+
+function getCredentialsClientIp(request: { headers: { get(name: string): string | null } }) {
+  return request.headers.get(AUTH_CLIENT_IP_HEADER)?.trim() || 'unknown';
+}
 
 declare module 'express-serve-static-core' {
   interface Locals {
@@ -45,6 +58,8 @@ declare module '@auth/core/jwt' {
 }
 
 export function createAuthConfig(db: AppDatabase, config: AppConfig): AuthConfig {
+  const loginAttemptLimiter = createLoginAttemptLimiter({ limit: 10, windowMs: 15 * 60_000 });
+
   return {
     secret: config.authSecret,
     trustHost: true,
@@ -55,15 +70,24 @@ export function createAuthConfig(db: AppDatabase, config: AppConfig): AuthConfig
           email: { label: 'Email', type: 'email' },
           password: { label: 'Password', type: 'password' }
         },
-        authorize(credentials) {
+        authorize(credentials, request) {
           const email = typeof credentials?.email === 'string' ? credentials.email : '';
           const password = typeof credentials?.password === 'string' ? credentials.password : '';
-          const user = findAuthUserByEmail(db, email);
+          const clientIp = getCredentialsClientIp(request);
+          const limiterKey = `${clientIp}:${normalizeAuthEmail(email)}`;
 
-          if (!user || !verifyPassword(password, user.passwordHash)) {
+          if (loginAttemptLimiter.isBlocked(limiterKey)) {
             return null;
           }
 
+          const user = findAuthUserByEmail(db, email);
+
+          if (!user || !verifyPassword(password, user.passwordHash)) {
+            loginAttemptLimiter.recordFailure(limiterKey);
+            return null;
+          }
+
+          loginAttemptLimiter.clear(limiterKey);
           updateAuthUserLastLogin(db, user.id);
           return toSafeSessionUser(user);
         }
@@ -95,7 +119,12 @@ export function createAuthConfig(db: AppDatabase, config: AppConfig): AuthConfig
 }
 
 export function createAuthHandler(db: AppDatabase, config: AppConfig) {
-  return ExpressAuth(createAuthConfig(db, config));
+  const authHandler = ExpressAuth(createAuthConfig(db, config));
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    req.headers[AUTH_CLIENT_IP_HEADER] = req.ip || req.socket.remoteAddress || 'unknown';
+    return authHandler(req, res, next);
+  };
 }
 
 export async function getRequestSessionUser(req: Request, config: AuthConfig): Promise<SessionUser | undefined> {
@@ -122,8 +151,18 @@ export function requireApiAuth(authConfig: AuthConfig, db?: AppDatabase) {
           return;
         }
 
+        if (refreshedUser.mustChangePassword) {
+          res.status(403).json(PASSWORD_CHANGE_REQUIRED_RESPONSE);
+          return;
+        }
+
         res.locals.authUser = toSafeSessionUser(refreshedUser);
         next();
+        return;
+      }
+
+      if (user.mustChangePassword) {
+        res.status(403).json(PASSWORD_CHANGE_REQUIRED_RESPONSE);
         return;
       }
 

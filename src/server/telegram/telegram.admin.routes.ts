@@ -1,7 +1,9 @@
-import { Router } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { AppDatabase } from '../db/database.js';
 import { listFailedTelegramJobs, retryFailedTelegramJob } from './telegram.queue.js';
+
+const TELEGRAM_JOBS_FORBIDDEN_RESPONSE = { error: 'You do not have permission to manage Telegram jobs.' };
 
 const IdParamSchema = z.object({
   id: z.preprocess((value) => {
@@ -13,8 +15,19 @@ const IdParamSchema = z.object({
   }, z.number().int().positive())
 });
 
+function requireTelegramJobsAdmin(_req: Request, res: Response, next: NextFunction) {
+  if (res.locals.authUser?.role !== 'admin') {
+    res.status(403).json(TELEGRAM_JOBS_FORBIDDEN_RESPONSE);
+    return;
+  }
+
+  next();
+}
+
 export function createTelegramAdminRouter(db: AppDatabase) {
   const router = Router();
+
+  router.use('/telegram/jobs', requireTelegramJobsAdmin);
 
   router.get('/telegram/jobs/failed', (_req, res, next) => {
     try {

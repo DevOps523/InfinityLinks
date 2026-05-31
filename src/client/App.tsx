@@ -40,6 +40,8 @@ type AuthenticatedAppProps = {
   onSignOut: () => Promise<void>;
 };
 
+const TELEGRAM_JOBS_FORBIDDEN_MESSAGE = 'You do not have permission to manage Telegram jobs.';
+
 const refreshSafePages = new Set<PageKey>([
   'dashboard',
   'movies',
@@ -142,6 +144,14 @@ function renderPage(
   }
 
   if (page === 'telegram-jobs') {
+    if (user.role !== 'admin') {
+      return (
+        <div className="state-panel state-panel--error" role="alert">
+          {TELEGRAM_JOBS_FORBIDDEN_MESSAGE}
+        </div>
+      );
+    }
+
     return <TelegramJobsPage onFailedJobCountChange={setFailedTelegramJobCount} />;
   }
 

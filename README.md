@@ -51,18 +51,23 @@ Only active links and content that has already been posted to the Telegram group
 
 Sync is triggered from the local admin app on the `Public Search` page. The `Sync Public Search` button exports the current public catalog from the private local database and posts it to the VPS sync endpoint. In the local admin app's `.env`, set `PUBLIC_SEARCH_SYNC_URL` to the VPS `/api/sync` URL and use the same `PUBLIC_SEARCH_SYNC_TOKEN` value that the VPS service uses.
 
-Copy or deploy only `apps/public-search-bot/` to the VPS, then run the standalone app's local commands from that directory. Use Node 22.x because the standalone package requires Node `>=22 <24`.
+Copy or deploy only `apps/public-search-bot/` to the VPS. Use Node 22.x because the standalone package requires Node `>=22 <24`.
 
-```sh
-cd /opt/infinitylinks-public-search-bot
+```bash
+cd /opt/publicinfinity
 npm install
 npm run build
-npm start
 ```
 
-Create the VPS service environment from `apps/public-search-bot/.env.example`. The standalone service loads `.env` by default, so copy the example to `.env` on the VPS or inject these variables through your process manager. After copying the example, add `PUBLIC_SEARCH_STATUS_TOKEN` as a separate required read-only value; do not reuse `PUBLIC_SEARCH_SYNC_TOKEN`.
+For production, keep the VPS service environment in `/etc/infinitylinks/public-search-bot.env`, keep the Google service account JSON in `/etc/infinitylinks/google-service-account.json`, and keep SQLite state in `/var/lib/infinitylinks/public-search.sqlite`. Do not create a production `.env`, database, or Google JSON file inside `/opt/publicinfinity`.
+
+Run the production bot through the hardened systemd service in [`docs/deployment/secure-vps-deployment.md`](docs/deployment/secure-vps-deployment.md) so it uses the dedicated `infinitylinks` user and locked-down write paths.
+
+Generate different 32-plus-character values for `PUBLIC_SEARCH_SYNC_TOKEN`, `PUBLIC_SEARCH_STATUS_TOKEN`, and `SUBSCRIPTION_ADMIN_TOKEN`; do not reuse any of them.
 
 Full VPS setup details, including reverse proxy and process manager notes, are in [`apps/public-search-bot/README.md`](apps/public-search-bot/README.md).
+
+For production hardening, follow the step-by-step guide in [`docs/deployment/secure-vps-deployment.md`](docs/deployment/secure-vps-deployment.md) before exposing the VPS service.
 
 ### Local-to-VPS Deployment Configuration
 
@@ -71,40 +76,39 @@ Use this split when deploying from your private local admin app to the public VP
 1. Prepare the standalone VPS app:
 
    ```sh
-   cd /opt/infinitylinks-public-search-bot
+   cd /opt/publicinfinity
    npm install
-   cp .env.example .env
    ```
 
-2. Configure the VPS `.env` for the public bot service:
+2. Configure `/etc/infinitylinks/public-search-bot.env` for the public bot service:
 
    ```env
-   PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
-   PUBLIC_SEARCH_SYNC_TOKEN=use_the_same_long_random_secret_as_local
-   PUBLIC_SEARCH_STATUS_TOKEN=replace_with_read_only_status_token
+   PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token_from_botfather
+   PUBLIC_SEARCH_SYNC_TOKEN=replace_with_32_plus_random_public_search_sync_token
+   PUBLIC_SEARCH_STATUS_TOKEN=replace_with_32_plus_random_public_search_status_token
    PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
-   PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
+   PUBLIC_SEARCH_DATABASE_PATH=/var/lib/infinitylinks/public-search.sqlite
    PUBLIC_SEARCH_HOST=127.0.0.1
    PUBLIC_SEARCH_PORT=3001
-   SUBSCRIPTION_BOT_TOKEN=replace_with_subscription_bot_token
-   SUBSCRIPTION_ADMIN_TOKEN=replace_with_subscription_admin_secret
+   SUBSCRIPTION_BOT_TOKEN=replace_with_subscription_bot_token_from_botfather
+   SUBSCRIPTION_ADMIN_TOKEN=replace_with_32_plus_random_subscription_admin_token
    GOOGLE_SHEETS_SPREADSHEET_ID=replace_with_google_sheet_id
-   GOOGLE_SERVICE_ACCOUNT_KEY_FILE=/opt/infinitylinks-public-search-bot/google-service-account.json
+   GOOGLE_SERVICE_ACCOUNT_KEY_FILE=/etc/infinitylinks/google-service-account.json
    ```
 
    `PUBLIC_BOT_TOKEN` is the token for the public search bot. Add the public search bot and the `SUBSCRIPTION_BOT_TOKEN` bot as admins in [@infinitylinks69](https://t.me/infinitylinks69).
    `PUBLIC_SEARCH_STATUS_TOKEN` is a read-only token for status checks. Keep it separate from `PUBLIC_SEARCH_SYNC_TOKEN`, which authorizes catalog sync writes.
    `SUBSCRIPTION_ADMIN_TOKEN` protects the subscription update and alert endpoints used by Google Apps Script.
    Keep `PUBLIC_SEARCH_HOST=127.0.0.1` so the Node service is reachable only through the VPS reverse proxy.
+   Keep this file owned by `root:infinitylinks` with mode `640`.
 
-3. Build and run the VPS service:
+3. Build the VPS service, then install and start the hardened systemd service from the deployment guide:
 
-   ```sh
+   ```bash
    npm run build
-   npm start
    ```
 
-   For a process manager such as systemd or PM2, run the same start command with the VPS `.env` variables loaded. Keep the service listening on `127.0.0.1:3001` behind your reverse proxy.
+   The service must load `/etc/infinitylinks/public-search-bot.env`, run as `infinitylinks`, and keep the app listening on `127.0.0.1:3001` behind your reverse proxy.
 
 4. Point the VPS domain to the service. Example Nginx site:
 
@@ -135,9 +139,9 @@ Use this split when deploying from your private local admin app to the public VP
    DATABASE_PATH=./data/infinitylinks.sqlite
 
    PUBLIC_SEARCH_SYNC_URL=https://your-vps.example.com/api/sync
-   PUBLIC_SEARCH_SYNC_TOKEN=use_the_same_long_random_secret_as_vps
-   PUBLIC_SEARCH_STATUS_URL=https://your-vps-domain.example/api/status
-   PUBLIC_SEARCH_STATUS_TOKEN=replace-with-read-only-status-token
+   PUBLIC_SEARCH_SYNC_TOKEN=use_the_same_32_plus_random_public_search_sync_token_as_vps
+   PUBLIC_SEARCH_STATUS_URL=https://your-vps.example.com/api/status
+   PUBLIC_SEARCH_STATUS_TOKEN=use_the_same_32_plus_random_public_search_status_token_as_vps
    PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
    ```
 
@@ -155,7 +159,7 @@ Use this split when deploying from your private local admin app to the public VP
 7. Quick checks for the standalone VPS app:
 
    ```sh
-   cd /opt/infinitylinks-public-search-bot
+   cd /opt/publicinfinity
    npm run build
    npm test
    ```
@@ -174,16 +178,17 @@ rm -f ./data/infinitylinks.sqlite
 npm run db:migrate
 ```
 
-To reset the standalone public search bot database:
+To reset a local-development standalone public search bot database:
 
 ```sh
 cd /c/Users/Batosai/Desktop/infinitylinks/apps/public-search-bot
 rm -f ./data/public-search.sqlite
+rm -f ./data/public-search.sqlite-wal ./data/public-search.sqlite-shm ./data/public-search.sqlite-journal
 npm run db:migrate
 npm run dev
 ```
 
-After resetting the public search bot database, open the local admin app and click `Sync Public Search` again. The public bot database starts empty until the catalog is synced.
+On a production VPS, the public search bot database lives at `/var/lib/infinitylinks/public-search.sqlite`; stop `public-search-bot` before any reset or restore. After resetting the public search bot database, open the local admin app and click `Sync Public Search` again. The public bot database starts empty until the catalog is synced.
 
 ## MVP Scope
 

@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+google-service-account.json
 dist/
 data/*
 !data/

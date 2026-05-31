@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashPassword, verifyPassword } from '../../src/server/auth/passwords.js';
 import { createApp } from '../../src/server/app.js';
 import type { AppConfig } from '../../src/server/config.js';
@@ -20,11 +20,12 @@ const config: AppConfig = {
   publicSearchGroupHandle: '@infinitylinks69'
 };
 
-async function signIn(agent: request.Agent, email: string, password = 'Password123456') {
+async function attemptSignIn(agent: request.Agent, email: string, password: string, ip = '203.0.113.10') {
   const csrf = await agent.get('/auth/csrf').expect(200);
 
-  await agent
+  return agent
     .post('/auth/callback/credentials')
+    .set('X-Forwarded-For', ip)
     .type('form')
     .send({
       csrfToken: csrf.body.csrfToken,
@@ -36,6 +37,20 @@ async function signIn(agent: request.Agent, email: string, password = 'Password1
     .expect((response) => {
       expect([200, 302]).toContain(response.status);
     });
+}
+
+async function signIn(agent: request.Agent, email: string, password = 'Password123456', ip = '203.0.113.10') {
+  await attemptSignIn(agent, email, password, ip);
+}
+
+async function withMutedExpectedCredentialErrors(callback: () => Promise<void>) {
+  const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+  try {
+    await callback();
+  } finally {
+    consoleError.mockRestore();
+  }
 }
 
 function seedUser(db: AppDatabase, email: string, role: 'admin' | 'superadmin', options: { mustChangePassword?: boolean } = {}) {
@@ -81,6 +96,54 @@ describe('auth and admin user routes', () => {
     const response = await request(app).get('/api/auth/me').expect(200);
 
     expect(response.body).toEqual({ user: null });
+  });
+
+  it('blocks credential login only for the email and IP pair that exceeded failed attempts', async () => {
+    await withMutedExpectedCredentialErrors(async () => {
+      seedUser(db, 'admin@example.com', 'admin');
+      seedUser(db, 'other@example.com', 'admin');
+      const app = createApp({ db, config });
+      const blockedAgent = request.agent(app);
+
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        await attemptSignIn(blockedAgent, ' Admin@Example.COM ', 'WrongPassword123456', '203.0.113.10');
+      }
+
+      const blockedCorrectAgent = request.agent(app);
+      await attemptSignIn(blockedCorrectAgent, 'admin@example.com', 'Password123456', '203.0.113.10');
+      const blockedSession = await blockedCorrectAgent.get('/api/auth/me').expect(200);
+      expect(blockedSession.body).toEqual({ user: null });
+
+      const otherEmailAgent = request.agent(app);
+      await signIn(otherEmailAgent, 'other@example.com', 'Password123456', '203.0.113.10');
+      const otherEmailSession = await otherEmailAgent.get('/api/auth/me').expect(200);
+      expect(otherEmailSession.body.user).toMatchObject({ email: 'other@example.com' });
+
+      const otherIpAgent = request.agent(app);
+      await signIn(otherIpAgent, 'admin@example.com', 'Password123456', '198.51.100.25');
+      const otherIpSession = await otherIpAgent.get('/api/auth/me').expect(200);
+      expect(otherIpSession.body.user).toMatchObject({ email: 'admin@example.com' });
+    });
+  });
+
+  it('clears accumulated credential failures after a successful login for the same email and IP', async () => {
+    await withMutedExpectedCredentialErrors(async () => {
+      seedUser(db, 'admin@example.com', 'admin');
+      const app = createApp({ db, config });
+      const agent = request.agent(app);
+
+      for (let attempt = 0; attempt < 9; attempt += 1) {
+        await attemptSignIn(agent, 'admin@example.com', 'WrongPassword123456', '203.0.113.10');
+      }
+
+      await signIn(agent, 'admin@example.com', 'Password123456', '203.0.113.10');
+      await attemptSignIn(agent, 'admin@example.com', 'WrongPassword123456', '203.0.113.10');
+
+      const freshAgent = request.agent(app);
+      await signIn(freshAgent, 'admin@example.com', 'Password123456', '203.0.113.10');
+      const response = await freshAgent.get('/api/auth/me').expect(200);
+      expect(response.body.user).toMatchObject({ email: 'admin@example.com' });
+    });
   });
 
   it('allows admins to create users and returns the temporary password once', async () => {
@@ -245,6 +308,44 @@ describe('auth and admin user routes', () => {
     const response = await agent.get('/api/admin/users').expect(401);
 
     expect(response.body).toEqual({ error: 'Authentication required.' });
+  });
+
+  it('requires must-change users to change their password before accessing protected admin APIs', async () => {
+    seedUser(db, 'admin@example.com', 'admin', { mustChangePassword: true });
+    const app = createApp({ db, config });
+    const agent = request.agent(app);
+
+    await signIn(agent, 'admin@example.com');
+
+    const me = await agent.get('/api/auth/me').expect(200);
+    expect(me.body.user).toEqual({
+      id: '1',
+      email: 'admin@example.com',
+      role: 'admin',
+      mustChangePassword: true
+    });
+
+    const expectedResponse = {
+      error: 'Password change required.',
+      code: 'PASSWORD_CHANGE_REQUIRED'
+    };
+
+    const dashboardBlocked = await agent.get('/api/admin/dashboard').expect(403);
+    expect(dashboardBlocked.body).toEqual(expectedResponse);
+
+    const usersBlocked = await agent.get('/api/admin/users').expect(403);
+    expect(usersBlocked.body).toEqual(expectedResponse);
+
+    await agent
+      .post('/api/auth/change-password')
+      .set('X-InfinityLinks-Request', 'fetch')
+      .send({
+        currentPassword: 'Password123456',
+        newPassword: 'NewPassword123456'
+      })
+      .expect(200);
+
+    await agent.get('/api/admin/dashboard').expect(200);
   });
 
   it('lets admins reset a superadmin password', async () => {

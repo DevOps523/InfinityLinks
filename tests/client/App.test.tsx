@@ -7,6 +7,7 @@ import { TmdbSearch } from '../../src/client/components/TmdbSearch';
 import { ToastProvider, useToast } from '../../src/client/components/ToastProvider';
 
 const fetchMock = vi.fn();
+const TELEGRAM_JOBS_FORBIDDEN_MESSAGE = 'You do not have permission to manage Telegram jobs.';
 
 type PublicSearchSyncStatusFixture = {
   configured: boolean;
@@ -464,6 +465,7 @@ describe('App', () => {
 
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     expect(within(navigation).queryByRole('button', { name: /^users$/i })).not.toBeInTheDocument();
+    expect(within(navigation).queryByRole('button', { name: /^telegram jobs$/i })).not.toBeInTheDocument();
   });
 
   it('opens an admin profile dropdown with only account actions', async () => {
@@ -1152,6 +1154,38 @@ describe('App', () => {
     const navigation = screen.getByRole('navigation', { name: /media navigation/i });
     expect(within(navigation).getByRole('button', { name: /^telegram jobs$/i })).toHaveAttribute('aria-current', 'page');
     expect(await screen.findByText('No failed Telegram jobs.')).toBeInTheDocument();
+  });
+
+  it('shows a Telegram jobs permission error for direct superadmin hash navigation without fetching failed jobs', async () => {
+    let failedJobsRequests = 0;
+
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/auth/me') {
+        return createSessionResponse('superadmin');
+      }
+
+      if (url === '/api/telegram/jobs/failed') {
+        failedJobsRequests += 1;
+        return {
+          ok: true,
+          json: async () => ({ jobs: [] })
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ movies: [] })
+      };
+    });
+    window.history.replaceState(null, '', '/#/telegram-jobs');
+
+    await renderAuthenticatedApp();
+
+    expect(screen.getByRole('alert')).toHaveTextContent(TELEGRAM_JOBS_FORBIDDEN_MESSAGE);
+    expect(screen.queryByRole('heading', { name: /^telegram jobs$/i })).not.toBeInTheDocument();
+    const navigation = screen.getByRole('navigation', { name: /media navigation/i });
+    expect(within(navigation).queryByRole('button', { name: /^telegram jobs$/i })).not.toBeInTheDocument();
+    expect(failedJobsRequests).toBe(0);
   });
 
   it('updates the URL hash when navigating between top-level pages', async () => {
@@ -2441,7 +2475,8 @@ describe('App', () => {
     render(<LinkEditorModal open links={[]} onClose={vi.fn()} onSave={onSave} />);
 
     const providerSelect = screen.getByLabelText(/^provider$/i);
-    expect(providerSelect).toHaveDisplayValue('Filekeeper');
+    expect(providerSelect).toHaveDisplayValue('Terabox');
+    expect(within(providerSelect).getByRole('option', { name: 'Terabox' })).toBeInTheDocument();
     expect(within(providerSelect).getByRole('option', { name: 'Filekeeper' })).toBeInTheDocument();
     expect(within(providerSelect).getByRole('option', { name: 'Mixdrop' })).toBeInTheDocument();
 

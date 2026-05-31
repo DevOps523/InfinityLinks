@@ -21,19 +21,22 @@ type SidebarProps = {
   onNavigate: (page: PageKey) => void;
 };
 
-const items: Array<{ key: PageKey; label: string; icon: typeof Film }> = [
+const commonItems: Array<{ key: PageKey; label: string; icon: typeof Film }> = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'movies', label: 'Movies', icon: Film },
   { key: 'add-movie', label: 'Add Movie', icon: Plus },
   { key: 'tv-shows', label: 'TV Shows', icon: Tv },
   { key: 'add-tv-show', label: 'Add TV Show', icon: Clapperboard },
-  { key: 'public-search', label: 'Public Search', icon: Search },
-  { key: 'telegram-jobs', label: 'Telegram Jobs', icon: Send }
+  { key: 'public-search', label: 'Public Search', icon: Search }
+];
+
+const adminItems: Array<{ key: PageKey; label: string; icon: typeof Film }> = [
+  { key: 'telegram-jobs', label: 'Telegram Jobs', icon: Send },
+  { key: 'users', label: 'Users', icon: Users }
 ];
 
 export function Sidebar({ currentPage, failedTelegramJobCount = 0, userRole, onNavigate }: SidebarProps) {
-  const visibleItems =
-    userRole === 'admin' ? [...items, { key: 'users' as PageKey, label: 'Users', icon: Users }] : items;
+  const visibleItems = userRole === 'admin' ? [...commonItems, ...adminItems] : commonItems;
 
   return (
     <aside className="sidebar">

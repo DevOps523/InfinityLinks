@@ -2,6 +2,8 @@
 
 Standalone VPS app for the public InfinityLinks Telegram search bot.
 
+For a hardened production rollout with `/etc` secrets, systemd sandboxing, Nginx/TLS, firewall rules, and verification gates, use [`../../docs/deployment/secure-vps-deployment.md`](../../docs/deployment/secure-vps-deployment.md).
+
 The private InfinityLinks admin app stays on your Windows PC. This VPS app only runs:
 
 - the public Telegram search bot
@@ -21,8 +23,8 @@ Linux service user: infinitylinks
 systemd service name: public-search-bot
 local listen address: 127.0.0.1:3001
 public HTTPS domain: https://your-vps.example.com
-SQLite database: /opt/publicinfinity/data/public-search.sqlite
-Google service account file: /opt/publicinfinity/google-service-account.json
+SQLite database: /var/lib/infinitylinks/public-search.sqlite
+Google service account file: /etc/infinitylinks/google-service-account.json
 ```
 
 Keep `PUBLIC_SEARCH_HOST=127.0.0.1`. Nginx is the public entry point.
@@ -123,6 +125,19 @@ Do not commit the JSON file. It is a secret.
 
 ## Step 4. Upload The App Folder To The VPS
 
+Create the dedicated Linux user and target directories before uploading:
+
+```bash
+ssh root@your-vps-ip
+id -u infinitylinks >/dev/null 2>&1 || sudo adduser --system --group --home /opt/publicinfinity --no-create-home infinitylinks
+sudo install -d -o infinitylinks -g infinitylinks -m 755 /opt/publicinfinity
+sudo install -d -o root -g infinitylinks -m 750 /etc/infinitylinks
+sudo install -d -o infinitylinks -g infinitylinks -m 750 /var/lib/infinitylinks
+exit
+```
+
+Do not run this service as `www-data`.
+
 From your PC, upload only this folder:
 
 ```text
@@ -133,12 +148,21 @@ Use `rsync` if available:
 
 ```bash
 rsync -av --delete \
+  --include '.env.example' \
   --exclude '.env' \
   --exclude '.env.*' \
   --exclude 'google-service-account.json' \
   --exclude 'data/' \
   --exclude 'dist/' \
   --exclude 'node_modules/' \
+  --exclude '*.sqlite' \
+  --exclude '*.sqlite3' \
+  --exclude '*.sqlite-wal' \
+  --exclude '*.sqlite-shm' \
+  --exclude '*.sqlite-journal' \
+  --exclude '*.sqlite3-wal' \
+  --exclude '*.sqlite3-shm' \
+  --exclude '*.sqlite3-journal' \
   apps/public-search-bot/ root@your-vps-ip:/opt/publicinfinity/
 ```
 
@@ -201,39 +225,50 @@ rm -rf node_modules
 npm ci
 ```
 
-## Step 6. Create The VPS Environment File
+## Step 6. Confirm The Service User And Directories
 
-Create `.env` on the VPS:
+Confirm the dedicated Linux user and production directories exist:
 
 ```bash
-cd /opt/publicinfinity
-cp .env.example .env
-nano .env
+id infinitylinks
+sudo install -d -o infinitylinks -g infinitylinks -m 755 /opt/publicinfinity
+sudo install -d -o root -g infinitylinks -m 750 /etc/infinitylinks
+sudo install -d -o infinitylinks -g infinitylinks -m 750 /var/lib/infinitylinks
+```
+
+## Step 7. Create The VPS Environment File
+
+Create the production environment file outside the app tree:
+
+```bash
+sudo nano /etc/infinitylinks/public-search-bot.env
+sudo chown root:infinitylinks /etc/infinitylinks/public-search-bot.env
+sudo chmod 640 /etc/infinitylinks/public-search-bot.env
 ```
 
 Use this shape:
 
 ```env
-PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token
-PUBLIC_SEARCH_SYNC_TOKEN=replace_with_long_random_sync_secret
-PUBLIC_SEARCH_STATUS_TOKEN=replace_with_long_random_status_secret
+PUBLIC_BOT_TOKEN=replace_with_public_search_bot_token_from_botfather
+PUBLIC_SEARCH_SYNC_TOKEN=replace_with_32_plus_random_public_search_sync_token
+PUBLIC_SEARCH_STATUS_TOKEN=replace_with_32_plus_random_public_search_status_token
 PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
-PUBLIC_SEARCH_DATABASE_PATH=./data/public-search.sqlite
+PUBLIC_SEARCH_DATABASE_PATH=/var/lib/infinitylinks/public-search.sqlite
 PUBLIC_SEARCH_HOST=127.0.0.1
 PUBLIC_SEARCH_PORT=3001
 
-SUBSCRIPTION_BOT_TOKEN=replace_with_subscription_bot_token
+SUBSCRIPTION_BOT_TOKEN=replace_with_subscription_bot_token_from_botfather
 SUBSCRIPTION_GROUP_CHAT_ID=-1003963665033
 SUBSCRIPTION_ALERT_THREAD_ID=46
 SUBSCRIPTION_ADMIN_CONTACT=@seinen_illuminatiks
 SUBSCRIPTION_TRIAL_SEARCH_LIMIT=5
 SUBSCRIPTION_OVERDUE_GRACE_DAYS=1
-SUBSCRIPTION_ADMIN_TOKEN=replace_with_long_random_subscription_secret
+SUBSCRIPTION_ADMIN_TOKEN=replace_with_32_plus_random_subscription_admin_token
 
 GOOGLE_SHEETS_SPREADSHEET_ID=replace_with_google_sheet_id
 GOOGLE_SHEETS_USERS_RANGE=Users!A:H
 GOOGLE_SHEETS_HISTORY_RANGE=History!A:G
-GOOGLE_SERVICE_ACCOUNT_KEY_FILE=/opt/publicinfinity/google-service-account.json
+GOOGLE_SERVICE_ACCOUNT_KEY_FILE=/etc/infinitylinks/google-service-account.json
 ```
 
 Important:
@@ -241,74 +276,67 @@ Important:
 - Keep `PUBLIC_SEARCH_HOST=127.0.0.1`.
 - Use three different secrets for `PUBLIC_SEARCH_SYNC_TOKEN`, `PUBLIC_SEARCH_STATUS_TOKEN`, and `SUBSCRIPTION_ADMIN_TOKEN`.
 - `SUBSCRIPTION_ADMIN_TOKEN` must also be saved in Google Apps Script later.
+- Keep production secrets in `/etc/infinitylinks/public-search-bot.env`, not `/opt/publicinfinity/.env`.
 
-## Step 7. Add The Google JSON On The VPS
+## Step 8. Add The Google JSON On The VPS
 
 Create the file on the VPS:
 
 ```bash
-nano /opt/publicinfinity/google-service-account.json
+sudo nano /etc/infinitylinks/google-service-account.json
 ```
 
 Paste the full Google service account JSON into that file and save.
 
-Confirm the `.env` path matches:
+Confirm `/etc/infinitylinks/public-search-bot.env` contains this path:
 
 ```env
-GOOGLE_SERVICE_ACCOUNT_KEY_FILE=/opt/publicinfinity/google-service-account.json
+GOOGLE_SERVICE_ACCOUNT_KEY_FILE=/etc/infinitylinks/google-service-account.json
 ```
 
-## Step 8. Create The Service User And File Permissions
-
-Create the dedicated Linux user:
-
-```bash
-sudo adduser --system --group --home /opt/publicinfinity --no-create-home infinitylinks
-```
+## Step 9. Create Writable Paths And File Permissions
 
 Create the writable database folder:
 
 ```bash
-sudo install -d -o infinitylinks -g infinitylinks /opt/publicinfinity/data
-sudo chown -R infinitylinks:infinitylinks /opt/publicinfinity/data
+sudo install -d -o infinitylinks -g infinitylinks -m 750 /var/lib/infinitylinks
+sudo chown -R infinitylinks:infinitylinks /var/lib/infinitylinks
 ```
 
 Protect secrets:
 
 ```bash
-sudo chown root:infinitylinks /opt/publicinfinity/.env
-sudo chmod 640 /opt/publicinfinity/.env
-sudo chown root:infinitylinks /opt/publicinfinity/google-service-account.json
-sudo chmod 640 /opt/publicinfinity/google-service-account.json
+sudo chown root:infinitylinks /etc/infinitylinks/public-search-bot.env
+sudo chmod 640 /etc/infinitylinks/public-search-bot.env
+sudo chown root:infinitylinks /etc/infinitylinks/google-service-account.json
+sudo chmod 640 /etc/infinitylinks/google-service-account.json
 ```
 
-Do not run this service as `www-data`.
-
-## Step 9. Build And Create The Database
+## Step 10. Build And Create The Database
 
 Run:
 
 ```bash
 cd /opt/publicinfinity
-set -a; set +H; . ./.env; set +a
+set -a; set +H; . /etc/infinitylinks/public-search-bot.env; set +a
 npm run build
-npm run db:migrate
-sudo chown -R infinitylinks:infinitylinks /opt/publicinfinity/data
+sudo -u infinitylinks env PUBLIC_SEARCH_DATABASE_PATH="$PUBLIC_SEARCH_DATABASE_PATH" npm run db:migrate
+sudo chown -R infinitylinks:infinitylinks /var/lib/infinitylinks
 ```
 
 Expected database:
 
 ```text
-/opt/publicinfinity/data/public-search.sqlite
+/var/lib/infinitylinks/public-search.sqlite
 ```
 
-## Step 10. Test The App Before systemd
+## Step 11. Test The App Before systemd
 
 Start the app manually:
 
 ```bash
 cd /opt/publicinfinity
-set -a; set +H; . ./.env; set +a
+set -a; set +H; . /etc/infinitylinks/public-search-bot.env; set +a
 npm start
 ```
 
@@ -322,7 +350,7 @@ Open a second SSH terminal and test status:
 
 ```bash
 cd /opt/publicinfinity
-set -a; set +H; . ./.env; set +a
+set -a; set +H; . /etc/infinitylinks/public-search-bot.env; set +a
 curl -H "Authorization: Bearer $PUBLIC_SEARCH_STATUS_TOKEN" http://127.0.0.1:3001/api/status
 ```
 
@@ -330,7 +358,7 @@ Expected: JSON status output.
 
 Stop the manual app with `Ctrl+C` before continuing.
 
-## Step 11. Install The systemd Service - last stop not yet implemented
+## Step 12. Install The systemd Service
 
 Copy the service file:
 
@@ -343,12 +371,12 @@ Confirm these lines:
 
 ```ini
 WorkingDirectory=/opt/publicinfinity
-EnvironmentFile=/opt/publicinfinity/.env
+EnvironmentFile=/etc/infinitylinks/public-search-bot.env
 Environment=NODE_OPTIONS=--dns-result-order=ipv4first
 ExecStart=/usr/bin/npm start
 User=infinitylinks
 Group=infinitylinks
-ReadWritePaths=/opt/publicinfinity/data
+ReadWritePaths=/var/lib/infinitylinks
 ```
 
 If `npm` is not at `/usr/bin/npm`, find it:
@@ -375,7 +403,7 @@ sudo journalctl -u public-search-bot -n 100 --no-pager
 sudo journalctl -u public-search-bot -f
 ```
 
-## Step 12. Configure Nginx And HTTPS
+## Step 13. Configure Nginx And HTTPS
 
 Copy the Nginx example:
 
@@ -384,7 +412,7 @@ sudo cp /opt/publicinfinity/deploy/nginx.conf.example /etc/nginx/sites-available
 sudo nano /etc/nginx/sites-available/public-search-bot
 ```
 
-Replace every `your-vps.example.com` with your real domain.
+Replace every `your-vps.example.com` with your real domain. The checked-in example is HTTP-only so `nginx -t` can pass before Certbot creates certificate files.
 
 Keep this proxy target:
 
@@ -407,15 +435,17 @@ sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d your-vps.example.com
 ```
 
+Certbot will update the site with HTTPS listeners and certificate paths.
+
 The sync and subscription APIs use bearer tokens, so use HTTPS before connecting the local admin app or Google Apps Script.
 
-## Step 13. Test The Public API
+## Step 14. Test The Public API
 
 From the VPS:
 
 ```bash
 cd /opt/publicinfinity
-set -a; set +H; . ./.env; set +a
+set -a; set +H; . /etc/infinitylinks/public-search-bot.env; set +a
 curl -H "Authorization: Bearer $PUBLIC_SEARCH_STATUS_TOKEN" http://127.0.0.1:3001/api/status
 ```
 
@@ -435,7 +465,7 @@ sudo systemctl status nginx
 sudo journalctl -u nginx -n 100 --no-pager
 ```
 
-## Step 14. Configure Google Apps Script
+## Step 15. Configure Google Apps Script
 
 Open the Google Sheet.
 
@@ -461,21 +491,21 @@ Use:
 - `Subscriptions > Update Subscription` after editing subscription rows.
 - `Subscriptions > Send Alert` when you want the Telegram alert topic refreshed.
 
-## Step 15. Configure The Local Admin App On Your PC
+## Step 16. Configure The Local Admin App On Your PC
 
 In the root InfinityLinks `.env` on your PC, set:
 
 ```env
 PUBLIC_SEARCH_SYNC_URL=https://your-vps.example.com/api/sync
-PUBLIC_SEARCH_SYNC_TOKEN=replace_with_the_same_sync_token_from_the_vps
+PUBLIC_SEARCH_SYNC_TOKEN=use_the_same_32_plus_random_public_search_sync_token_as_vps
 PUBLIC_SEARCH_STATUS_URL=https://your-vps.example.com/api/status
-PUBLIC_SEARCH_STATUS_TOKEN=replace_with_the_same_status_token_from_the_vps
+PUBLIC_SEARCH_STATUS_TOKEN=use_the_same_32_plus_random_public_search_status_token_as_vps
 PUBLIC_SEARCH_GROUP_HANDLE=@infinitylinks69
 ```
 
 The local admin app only pushes public catalog data and reads bot status. It does not run the public Telegram search bot.
 
-## Step 16. Sync The Public Catalog
+## Step 17. Sync The Public Catalog
 
 On your PC:
 
@@ -487,7 +517,7 @@ On your PC:
 
 The VPS database starts empty. The public bot will not return movie or TV results until this sync succeeds.
 
-## Step 17. Test In Telegram
+## Step 18. Test In Telegram
 
 1. Open the public search bot.
 2. Send `/start`.
@@ -519,10 +549,10 @@ cd /opt/publicinfinity
 sudo systemctl stop public-search-bot
 # upload or replace the app files with the new apps/public-search-bot contents
 npm ci
-set -a; set +H; . ./.env; set +a
+set -a; set +H; . /etc/infinitylinks/public-search-bot.env; set +a
 npm run build
-npm run db:migrate
-sudo chown -R infinitylinks:infinitylinks /opt/publicinfinity/data
+sudo -u infinitylinks env PUBLIC_SEARCH_DATABASE_PATH="$PUBLIC_SEARCH_DATABASE_PATH" npm run db:migrate
+sudo chown -R infinitylinks:infinitylinks /var/lib/infinitylinks
 sudo systemctl start public-search-bot
 sudo journalctl -u public-search-bot -n 100 --no-pager
 ```
@@ -533,8 +563,9 @@ After restarting, run a public status check and sync the catalog again from the 
 
 ```bash
 cd /opt/publicinfinity
+set -a; set +H; . /etc/infinitylinks/public-search-bot.env; set +a
 npm run build
-npm run db:migrate
+sudo -u infinitylinks env PUBLIC_SEARCH_DATABASE_PATH="$PUBLIC_SEARCH_DATABASE_PATH" npm run db:migrate
 npm start
 npm test
 sudo systemctl status public-search-bot
@@ -549,9 +580,9 @@ The service user cannot write the SQLite file or folder. Run:
 
 ```bash
 sudo systemctl stop public-search-bot
-sudo install -d -o infinitylinks -g infinitylinks /opt/publicinfinity/data
-sudo chown -R infinitylinks:infinitylinks /opt/publicinfinity/data
-sudo chmod 750 /opt/publicinfinity/data
+sudo install -d -o infinitylinks -g infinitylinks -m 750 /var/lib/infinitylinks
+sudo chown -R infinitylinks:infinitylinks /var/lib/infinitylinks
+sudo chmod 750 /var/lib/infinitylinks
 sudo systemctl start public-search-bot
 ```
 
@@ -607,7 +638,7 @@ Check:
 Check:
 
 - `PUBLIC_SEARCH_SYNC_URL=https://your-vps.example.com/api/sync`
-- local `PUBLIC_SEARCH_SYNC_TOKEN` matches the VPS `.env`
+- local `PUBLIC_SEARCH_SYNC_TOKEN` matches `/etc/infinitylinks/public-search-bot.env`
 - Nginx proxies to `127.0.0.1:3001`
 - `sudo systemctl status public-search-bot` shows running
 - `sudo journalctl -u public-search-bot -n 100 --no-pager` has no sync errors
@@ -617,7 +648,7 @@ Check:
 Check:
 
 - `SUBSCRIPTION_API_BASE_URL=https://your-vps.example.com`
-- Apps Script `SUBSCRIPTION_ADMIN_TOKEN` matches the VPS `.env`
+- Apps Script `SUBSCRIPTION_ADMIN_TOKEN` matches `/etc/infinitylinks/public-search-bot.env`
 - `GOOGLE_SERVICE_ACCOUNT_KEY_FILE` exists on the VPS
 - the Google Sheet is shared with the service account `client_email`
 - the `Users` and `History` headers match exactly

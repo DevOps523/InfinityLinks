@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>InfinityLinks Codex Security Scan</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fff;
+      --bg-elev: #fafafa;
+      --bg-muted: #f5f5f7;
+      --fg: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --accent: #2563eb;
+      --code: #f3f4f6;
+      --shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b0f14;
+        --bg-elev: #0f141b;
+        --bg-muted: #121923;
+        --fg: #e5e7eb;
+        --muted: #9ca3af;
+        --border: #243040;
+        --accent: #60a5fa;
+        --code: #111827;
+        --shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 15px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    body.sidebar-collapsed .layout { grid-template-columns: 44px minmax(0, 1fr); }
+
+    .sidebar {
+      min-height: 100vh;
+      border-right: 1px solid var(--border);
+      background: var(--bg-muted);
+    }
+
+    .toc-inner {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: auto;
+      padding: 10px 8px;
+    }
+
+    .nav-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      margin: 0 0 8px;
+      text-transform: uppercase;
+    }
+
+    .nav-toggle {
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--fg);
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5px;
+    }
+
+    .nav-toggle:hover { box-shadow: var(--shadow); }
+    .nav-meta { color: var(--muted); font-size: 12px; margin: 0 0 12px; padding: 0 4px; }
+
+    body.sidebar-collapsed .toc-inner {
+      display: flex;
+      align-items: center;
+      padding: 8px 6px;
+    }
+
+    body.sidebar-collapsed .nav-title span,
+    body.sidebar-collapsed .nav-meta,
+    body.sidebar-collapsed .toc { display: none; }
+
+    main { max-width: 1040px; padding: 32px 44px 80px; }
+    h1, h2, h3 { line-height: 1.2; margin-top: 1.7em; }
+    h1:first-child { margin-top: 0; }
+    h2 { border-top: 1px solid var(--border); padding-top: 1em; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { background: var(--code); border-radius: 4px; padding: 0.1em 0.3em; }
+    pre { background: var(--code); border: 1px solid var(--border); border-radius: 8px; overflow: auto; padding: 16px; }
+    pre code { background: transparent; padding: 0; }
+    table { border-collapse: collapse; width: 100%; margin: 18px 0; }
+    th, td { border: 1px solid var(--border); padding: 8px 10px; vertical-align: top; }
+    th { text-align: left; background: var(--code); }
+
+    main h3[id^="0-"] + table,
+    main h3[id^="1-"] + table,
+    main h3[id^="2-"] + table,
+    main h3[id^="3-"] + table,
+    main h3[id^="4-"] + table,
+    main h3[id^="5-"] + table,
+    main h3[id^="6-"] + table,
+    main h3[id^="7-"] + table,
+    main h3[id^="8-"] + table,
+    main h3[id^="9-"] + table {
+      margin: 10px 0 24px;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      background: var(--bg-elev);
+      box-shadow: var(--shadow);
+    }
+
+    main h3[id^="0-"] + table th,
+    main h3[id^="1-"] + table th,
+    main h3[id^="2-"] + table th,
+    main h3[id^="3-"] + table th,
+    main h3[id^="4-"] + table th,
+    main h3[id^="5-"] + table th,
+    main h3[id^="6-"] + table th,
+    main h3[id^="7-"] + table th,
+    main h3[id^="8-"] + table th,
+    main h3[id^="9-"] + table th { display: none; }
+
+    main h3[id^="0-"] + table td:first-child,
+    main h3[id^="1-"] + table td:first-child,
+    main h3[id^="2-"] + table td:first-child,
+    main h3[id^="3-"] + table td:first-child,
+    main h3[id^="4-"] + table td:first-child,
+    main h3[id^="5-"] + table td:first-child,
+    main h3[id^="6-"] + table td:first-child,
+    main h3[id^="7-"] + table td:first-child,
+    main h3[id^="8-"] + table td:first-child,
+    main h3[id^="9-"] + table td:first-child {
+      width: 170px;
+      color: var(--muted);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    main h3[id^="0-"] + table td,
+    main h3[id^="1-"] + table td,
+    main h3[id^="2-"] + table td,
+    main h3[id^="3-"] + table td,
+    main h3[id^="4-"] + table td,
+    main h3[id^="5-"] + table td,
+    main h3[id^="6-"] + table td,
+    main h3[id^="7-"] + table td,
+    main h3[id^="8-"] + table td,
+    main h3[id^="9-"] + table td { border-left: 0; border-right: 0; }
+
+    .toc { list-style: none; padding: 0; margin: 0; }
+    .toc a {
+      display: block;
+      border-radius: 6px;
+      color: var(--fg);
+      font-size: 13px;
+      line-height: 1.3;
+      padding: 4px 6px;
+      position: relative;
+      transition: background 160ms ease, color 160ms ease, padding-left 160ms ease;
+    }
+
+    .toc a:hover { background: var(--bg-elev); text-decoration: none; }
+    .toc-item { list-style: none; margin: 1px 0; }
+    .toc-item.depth-1 > a { font-weight: 700; }
+    .toc-item.depth-2 { padding-left: 14px; }
+    .toc-item.depth-3 { padding-left: 28px; }
+
+    .toc-item.active > a {
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+      font-weight: 700;
+      padding-left: 10px;
+    }
+
+    .toc-item.active > a::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 4px;
+      bottom: 4px;
+      width: 3px;
+      border-radius: 2px;
+      background: var(--accent);
+    }
+
+    @media (max-width: 900px) {
+      .layout { display: block; }
+      .sidebar { min-height: 0; border-right: 0; border-bottom: 1px solid var(--border); }
+      .toc-inner { position: static; height: auto; max-height: 45vh; }
+      main { padding: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" aria-label="Table of contents">
+      <div class="toc-inner">
+        <div class="nav-title">
+          <span>Outline</span>
+          <button id="navToggle" class="nav-toggle" aria-pressed="false" aria-label="Collapse sidebar" title="Collapse sidebar">
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path id="navToggleIcon" d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <div class="nav-meta">InfinityLinks Codex Security Scan</div>
+        <ul class="toc">
+          <li class="toc-item depth-1"><a href="#security-review-infinitylinks">Security Review: InfinityLinks</a></li>
+<li class="toc-item depth-2"><a href="#scope">Scope</a></li>
+<li class="toc-item depth-3"><a href="#scan-summary">Scan Summary</a></li>
+<li class="toc-item depth-2"><a href="#threat-model">Threat Model</a></li>
+<li class="toc-item depth-2"><a href="#overview">Overview</a></li>
+<li class="toc-item depth-2"><a href="#threat-model-trust-boundaries-and-assumptions">Threat Model, Trust Boundaries, and Assumptions</a></li>
+<li class="toc-item depth-2"><a href="#attack-surface-mitigations-and-attacker-stories">Attack Surface, Mitigations, and Attacker Stories</a></li>
+<li class="toc-item depth-2"><a href="#severity-calibration-critical-high-medium-low">Severity Calibration (Critical, High, Medium, Low)</a></li>
+<li class="toc-item depth-2"><a href="#findings">Findings</a></li>
+<li class="toc-item depth-3"><a href="#confidence-scale">Confidence Scale</a></li>
+<li class="toc-item depth-3"><a href="#1-google-service-account-key-is-present-in-the-deployable-app-tree">[1] Google service account key is present in the deployable app tree</a></li>
+<li class="toc-item depth-3"><a href="#2-forced-password-change-state-is-enforced-only-in-the-browser-ui">[2] Forced password-change state is enforced only in the browser UI</a></li>
+<li class="toc-item depth-3"><a href="#3-public-bot-bearer-tokens-accept-trivially-weak-or-placeholder-values">[3] Public bot bearer tokens accept trivially weak or placeholder values</a></li>
+<li class="toc-item depth-3"><a href="#4-authenticated-non-admin-users-can-list-and-retry-failed-telegram-jobs">[4] Authenticated non-admin users can list and retry failed Telegram jobs</a></li>
+<li class="toc-item depth-3"><a href="#5-credentials-login-has-no-failed-attempt-throttling">[5] Credentials login has no failed-attempt throttling</a></li>
+<li class="toc-item depth-3"><a href="#6-status-and-subscription-bearer-endpoints-do-not-throttle-failed-authentication">[6] Status and subscription bearer endpoints do not throttle failed authentication</a></li>
+<li class="toc-item depth-2"><a href="#reviewed-surfaces">Reviewed Surfaces</a></li>
+<li class="toc-item depth-2"><a href="#open-questions-and-follow-up">Open Questions And Follow Up</a></li>
+<li class="toc-item depth-2"><a href="#secure-vps-deployment-guide">Secure VPS Deployment Guide</a></li>
+        </ul>
+      </div>
+    </aside>
+    <main>
+      <h1 id="security-review-infinitylinks">Security Review: InfinityLinks</h1>
+
+<h2 id="scope">Scope</h2>
+
+<ul><li>Scan mode: repository-wide Codex Security scan of <code>C:\Users\Administrator\Desktop\InfinityLinks</code> at commit <code>d265a9dc1ace0d85393797c38b3eeff6ea61db06</code>.</li><li>Primary focus requested by the user: login/authentication, browser credential exposure, and secure VPS deployment.</li><li>In-scope code: private local admin app, public-search bot VPS service, Telegram integrations, SQLite repositories, deployment docs, and client/browser code present in this checkout.</li><li>Generated context: the threat model was generated during Phase 1 and copied to <code>artifacts/01_context/threat_model.md</code> for this scan.</li><li>Runtime validation: targeted Vitest artifacts reproduced the surviving auth, token-policy, token-throttling, and Telegram job authorization issues. Secret files were inspected only in redacted form.</li><li>Explicit limitation: this scan did not connect to a live VPS, Telegram account, Google Sheet, or external network service. It reviewed this local checkout and existing local build artifacts.</li></ul>
+
+<h3 id="scan-summary">Scan Summary</h3>
+
+<table>
+<thead><tr>
+<th>Field</th>
+<th>Value</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>Reportable findings</td>
+<td>6</td>
+</tr>
+<tr>
+<td>Severity mix</td>
+<td>high 1, medium 3, low 2</td>
+</tr>
+<tr>
+<td>Confidence mix</td>
+<td>high 6</td>
+</tr>
+<tr>
+<td>Coverage</td>
+<td>114/114 ranked deep-review rows closed in <code>artifacts/02_discovery/work_ledger.jsonl</code></td>
+</tr>
+<tr>
+<td>Validation mode</td>
+<td>Source review plus targeted local Vitest validation artifacts</td>
+</tr>
+<tr>
+<td>Markdown report</td>
+<td><code>C:\Users\Administrator\Desktop\InfinityLinks\.codex-security-scans\InfinityLinks\d265a9dc1ace0d85393797c38b3eeff6ea61db06_20260530T222157+0800\report.md</code></td>
+</tr>
+<tr>
+<td>HTML report</td>
+<td><code>C:\Users\Administrator\Desktop\InfinityLinks\.codex-security-scans\InfinityLinks\d265a9dc1ace0d85393797c38b3eeff6ea61db06_20260530T222157+0800\report.html</code></td>
+</tr>
+</tbody></table>
+
+<h2 id="threat-model">Threat Model</h2>
+
+<h2 id="overview">Overview</h2>
+
+<p>InfinityLinks is a TypeScript/Node.js application with two runtime products:</p>
+
+<ul><li>A private local admin web app in <code>src/</code> that serves a React UI and Express API for managing movie and TV streaming links, posting updates to Telegram, syncing a public search catalog, and managing admin users.</li><li>A standalone VPS public search bot in <code>apps/public-search-bot/</code> that exposes token-protected sync/status/subscription APIs and runs Telegram long polling for public users.</li></ul>
+
+<p>The private admin app is expected to bind only to loopback addresses (<code>src/server/config.ts</code>) and should not be directly exposed to the internet. It protects API routes with Auth.js credentials sessions (<code>src/server/auth/session.ts</code>), stores users and media data in SQLite (<code>src/server/db/</code>), and keeps secrets in environment variables. The VPS bot is the internet-facing component through Nginx/HTTPS, with its own SQLite database, Telegram bot tokens, Google Sheets service account file, and bearer-token protected APIs.</p>
+
+<p>The assets that matter most are admin credentials, Auth.js session integrity, password hashes, local SQLite databases, Telegram bot tokens, TMDB API keys, public search sync/status/subscription bearer tokens, Google service account JSON, Telegram group/channel authority, catalog integrity, and the confidentiality of unpublished or private media link data.</p>
+
+<h2 id="threat-model-trust-boundaries-and-assumptions">Threat Model, Trust Boundaries, and Assumptions</h2>
+
+<p>Primary trust boundaries:</p>
+
+<ul><li>Browser to local admin Express server. The browser can be malicious or compromised. All <code>/api/*</code> calls must be authenticated server-side; client-side routing and UI checks are not security boundaries.</li><li>Auth.js credential callback and session cookies. Login credentials cross from browser-controlled form input into <code>@auth/express</code>; session state is stored in signed/encrypted JWT cookies derived from <code>AUTH_SECRET</code>.</li><li>Admin API to SQLite. Request bodies and route parameters cross into SQL query builders in repositories. Prepared statements are expected to preserve SQL syntax boundaries.</li><li>Local admin app to Telegram and TMDB. Operator-controlled secrets authorize outbound requests. Any SSRF-like behavior, log leakage, or user-influenced outbound URL construction would matter.</li><li>Local admin app to VPS public search service. Catalog sync crosses from a private environment to a public internet-facing endpoint, authenticated by <code>PUBLIC_SEARCH_SYNC_TOKEN</code>.</li><li>VPS public users to Telegram bot handlers. Public Telegram messages, callback payloads, usernames, and user IDs are attacker-controlled and must not grant access to private sync/status/subscription operations.</li><li>Google Apps Script to VPS subscription APIs. Sheet data and Apps Script HTTP requests are semi-trusted operational inputs authenticated by <code>SUBSCRIPTION_ADMIN_TOKEN</code>.</li><li>Nginx/reverse proxy to public-search Express app. The public app should listen on loopback and trust only proxy-provided request metadata that Nginx controls.</li><li>Build/release tooling to runtime. Packaged executables, generated <code>dist/</code>, local <code>.env</code> files, SQLite files, and <code>node_modules/</code> are not source trust anchors.</li></ul>
+
+<p>Attacker-controlled inputs include login email/password fields, all browser requests, media/link form fields, admin user management form fields, public search sync/status requests if tokens leak, Telegram public bot messages and callback data, Google Sheet row values after sheet editors modify them, HTTP headers at the reverse proxy boundary, and any file paths/config values that can be influenced by environment variables in deployment.</p>
+
+<p>Operator-controlled inputs include <code>.env</code> values, Telegram bot membership/admin permissions, Google service account JSON, Google Sheet sharing, VPS systemd/Nginx configuration, SQLite database files, and the choice to expose or keep private the local admin app.</p>
+
+<p>Developer-controlled inputs include source code, tests, package lockfiles, release scripts, and deployment examples. These are in scope for supply-chain and secure-default review, but a vulnerability is less severe when exploitation requires commit access or local shell access.</p>
+
+<p>Assumptions:</p>
+
+<ul><li>The private admin app is not intentionally internet-exposed; if it is exposed beyond loopback, auth/session/CSRF/host controls become high-impact internet-facing controls.</li><li><code>AUTH_SECRET</code>, bot tokens, sync/status/subscription tokens, and Google service account JSON remain secret and are never committed, logged, or served to the browser.</li><li>Nginx terminates HTTPS for the VPS app and proxies to <code>127.0.0.1:3001</code>.</li><li>SQLite databases are local files and must be protected by filesystem permissions; remote attackers should only influence database writes through authenticated APIs or Telegram bot workflows.</li></ul>
+
+<h2 id="attack-surface-mitigations-and-attacker-stories">Attack Surface, Mitigations, and Attacker Stories</h2>
+
+<p>Admin authentication and session management are the highest-risk surfaces. <code>src/server/auth/session.ts</code> uses Auth.js credentials, JWT sessions, scrypt password verification, and database-backed user refresh on each API request. <code>src/server/auth/passwords.ts</code> hashes passwords with scrypt and random salts. <code>src/server/auth/auth.routes.ts</code> handles current-user and password-change APIs. <code>src/client/auth/auth-api.ts</code> performs CSRF-token fetches before credential login and sign-out. Relevant failure modes include weak or leaked <code>AUTH_SECRET</code>, cookies accepted over untrusted hosts, missing CSRF protections on state-changing APIs, brute-forceable login, session state that stays privileged after role/user changes, and temporary passwords exposed in browser responses longer than necessary.</p>
+
+<p>Admin authorization is concentrated in <code>src/server/app.ts</code>, <code>src/server/auth/session.ts</code>, and <code>src/server/admin/users.routes.ts</code>. The API-wide <code>requireApiAuth</code> middleware protects <code>/api</code> routes before admin/media/Telegram/public-search routers mount. User-management routes require the current database user to have role <code>admin</code>. Important attacker stories include a lower-privilege user invoking admin-only user management, a deleted or demoted user continuing to act through a stale JWT, and direct API calls bypassing React UI restrictions.</p>
+
+<p>Browser credential exposure matters because the app necessarily sends login passwords and generated temporary passwords through the browser. The expected invariant is that secrets are sent only over same-origin HTTPS or loopback, are never stored in localStorage/sessionStorage, are not embedded in the static bundle, and are not logged. A compromised browser is generally out of scope, but accidental exposure through source maps, error pages, debug output, persistent storage, or a public local app binding would be in scope.</p>
+
+<p>Request origin/host controls matter because the local admin app is intended to be private. <code>src/server/config.ts</code> restricts <code>HOST</code> to loopback values and requires HTTPS URLs for public search sync/status targets. <code>src/server/security/api-request-guard.ts</code> is expected to reject suspicious admin API requests based on host/custom-header checks. If that guard is bypassable, a malicious website could try to drive loopback admin APIs from the user&#x27;s browser.</p>
+
+<p>Data validation and injection risks are present wherever request bodies reach SQLite repositories or outbound APIs. The codebase uses Zod in many route/config layers and better-sqlite3 prepared statements in repositories. A critical failure would be attacker-controlled SQL syntax or file path traversal leading to database overwrite or arbitrary file access. A lower-severity failure would be malformed media data causing inconsistent catalog entries without privilege escalation.</p>
+
+<p>Public search VPS APIs are internet-facing. <code>apps/public-search-bot/src/config.ts</code> requires distinct sync/status/subscription bearer tokens and loopback binding by default. <code>apps/public-search-bot/src/sync.routes.ts</code>, <code>status.routes.ts</code>, and subscription routes must compare bearer tokens safely, enforce payload limits, rate-limit expensive write paths, and avoid leaking catalog or operational status beyond the intended audience. Public Telegram bot handlers must treat message text, callback data, usernames, and user IDs as untrusted.</p>
+
+<p>Telegram and Google integrations are privileged external boundaries. Telegram bot tokens can post, search, alert, or remove users from the group depending on bot permissions. Google service account JSON can read/write subscription sheets. Any repository behavior that logs these secrets, serves them statically, commits them, copies them into release bundles, or exposes them in client responses is high impact.</p>
+
+<p>Deployment and packaging are security-relevant. <code>README.md</code>, <code>apps/public-search-bot/README.md</code>, deploy examples, <code>.env.example</code>, <code>.gitignore</code>, and release scripts define secure defaults. The important mitigations are loopback binding, HTTPS at Nginx, separate tokens for write/read/admin APIs, protected filesystem permissions on <code>.env</code> and Google JSON, excluding local databases/secrets from uploads, and running the VPS app as a dedicated non-root user.</p>
+
+<h2 id="severity-calibration-critical-high-medium-low">Severity Calibration (Critical, High, Medium, Low)</h2>
+
+<p>Critical findings in this repository would include hardcoded real secrets in source or built client assets; an unauthenticated or CSRF-prone path that can create users, reset passwords, sync arbitrary public catalog data, or control Telegram postings; SQL injection reachable from public Telegram or unauthenticated HTTP input with data modification impact; or a deployment default that exposes the private admin app publicly without auth.</p>
+
+<p>High findings would include login/session flaws that allow credential theft, session forgery, persistent privilege after user deletion/demotion, brute-forceable admin login without meaningful throttling, browser-exposed bearer tokens or temporary passwords through static assets/logs/storage, public VPS APIs accepting shared/reused tokens for different privileges, or Nginx/systemd examples that cause the public service to listen on a public interface with secrets readable by the wrong user.</p>
+
+<p>Medium findings would include missing or weak rate limits on login or public sync endpoints, insufficient validation causing catalog corruption or subscription bypass, overly verbose operational status responses, unsafe handling of proxy headers that enables rate-limit evasion, temporary passwords remaining valid after first login, or repository scripts that make accidental deployment of <code>.env</code>, SQLite data, or Google JSON likely.</p>
+
+<p>Low findings would include minor information leaks in generic error messages, missing hardening headers for a loopback-only admin UI, weak documentation around token rotation, developer-only scripts with unsafe assumptions that require local shell access, or tests/examples that use insecure placeholder values without affecting runtime defaults.</p>
+
+<h2 id="findings">Findings</h2>
+
+<table>
+<thead><tr>
+<th>Finding</th>
+<th>Severity</th>
+<th>Confidence</th>
+</tr></thead>
+<tbody>
+<tr>
+<td><a href="#1-google-service-account-key-is-present-in-the-deployable-app-tree">Google service account key is present in the deployable app tree</a></td>
+<td>High</td>
+<td>High</td>
+</tr>
+<tr>
+<td><a href="#2-forced-password-change-state-is-enforced-only-in-the-browser-ui">Forced password-change state is enforced only in the browser UI</a></td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td><a href="#3-public-bot-bearer-tokens-accept-trivially-weak-or-placeholder-values">Public bot bearer tokens accept trivially weak or placeholder values</a></td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td><a href="#4-authenticated-non-admin-users-can-list-and-retry-failed-telegram-jobs">Authenticated non-admin users can list and retry failed Telegram jobs</a></td>
+<td>Medium</td>
+<td>High</td>
+</tr>
+<tr>
+<td><a href="#5-credentials-login-has-no-failed-attempt-throttling">Credentials login has no failed-attempt throttling</a></td>
+<td>Low</td>
+<td>High</td>
+</tr>
+<tr>
+<td><a href="#6-status-and-subscription-bearer-endpoints-do-not-throttle-failed-authentication">Status and subscription bearer endpoints do not throttle failed authentication</a></td>
+<td>Low</td>
+<td>High</td>
+</tr>
+</tbody></table>
+
+<h3 id="confidence-scale">Confidence Scale</h3>
+
+<table>
+<thead><tr>
+<th>Label</th>
+<th>Meaning</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>high</td>
+<td>Direct source, configuration, or runtime evidence supports the finding, with no material unresolved reachability or exploitability blocker.</td>
+</tr>
+<tr>
+<td>medium</td>
+<td>Source evidence supports a plausible issue, but runtime behavior, deployment configuration, role reachability, type constraints, or exploit reliability still need proof.</td>
+</tr>
+<tr>
+<td>low</td>
+<td>Weak or incomplete evidence; included only when follow-up candidates are intentionally retained.</td>
+</tr>
+</tbody></table>
+
+<h3 id="1-google-service-account-key-is-present-in-the-deployable-app-tree">[1] Google service account key is present in the deployable app tree</h3>
+
+<table>
+<thead><tr>
+<th>Field</th>
+<th>Value</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>Severity</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Confidence</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Confidence rationale</td>
+<td>Redacted local inspection confirmed the file exists, has service_account structure, includes private key fields, is not git-tracked, and is ignored by .gitignore. Searches for the actual local secret values across client and dist output did not find browser exposure.</td>
+</tr>
+<tr>
+<td>Category</td>
+<td>Hardcoded credentials / secret material in deployable source tree</td>
+</tr>
+<tr>
+<td>CWE</td>
+<td>CWE-798: Use of Hard-coded Credentials</td>
+</tr>
+<tr>
+<td>Affected lines</td>
+<td>apps/public-search-bot/google-service-account.json:1; .gitignore:4; apps/public-search-bot/src/config.ts:49</td>
+</tr>
+</tbody></table>
+
+<h4 id="summary">Summary</h4>
+
+<p>A real Google service account JSON key is present at the root of the deployable public-search bot package. It is ignored by git and not bundled into browser code, but VPS copy, backup, archive, SFTP, support, or misconfigured static serving workflows can expose a credential that grants Google Sheets access.</p>
+
+<h4 id="validation">Validation</h4>
+
+<p>Redacted local inspection confirmed the file exists, has service_account structure, includes private key fields, is not git-tracked, and is ignored by .gitignore. Searches for the actual local secret values across client and dist output did not find browser exposure.</p>
+
+<p>Validation artifacts and receipts are saved under <code>artifacts/05_findings/DEPLOY-SECRETS-001</code>.</p>
+
+<h4 id="dataflow">Dataflow</h4>
+
+<p>Local credential file -&gt; GOOGLE_SERVICE_ACCOUNT_KEY_FILE config -&gt; Google Sheets client authentication -&gt; read/write subscription sheet operations.</p>
+
+<h4 id="reachability">Reachability</h4>
+
+<p>Anyone who gains access to a deployment archive, VPS copy, backup, or mistakenly served source directory can recover the key without needing application authentication. Direct browser exposure was not observed in this repo.</p>
+
+<h4 id="severity">Severity</h4>
+
+<p>high: High because the file is live credential material in a deployable directory and compromise gives access to the subscription control-plane data store. Severity would drop after rotation and moving credentials outside the source/deploy tree; it would rise if the VPS serves repository files directly.</p>
+
+<h4 id="remediation">Remediation</h4>
+
+<p>Revoke and rotate the Google service account key. Store credentials outside the repo and deploy tree, preferably as a root-owned environment secret, systemd credential, or secret-manager mount. Keep only a path or injected JSON in runtime config, deny web access to source directories, and add a startup check that rejects key files under the repository path.</p>
+
+<h3 id="2-forced-password-change-state-is-enforced-only-in-the-browser-ui">[2] Forced password-change state is enforced only in the browser UI</h3>
+
+<table>
+<thead><tr>
+<th>Field</th>
+<th>Value</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>Severity</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Confidence</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Confidence rationale</td>
+<td>A validation test created an admin user with must_change_password=1 and showed GET /api/admin/users still returns 200. The same test showed an existing signed-in admin session remains authorized after the database flips must_change_password to true.</td>
+</tr>
+<tr>
+<td>Category</td>
+<td>Authorization bypass / incomplete server-side session enforcement</td>
+</tr>
+<tr>
+<td>CWE</td>
+<td>CWE-602: Client-Side Enforcement of Server-Side Security</td>
+</tr>
+<tr>
+<td>Affected lines</td>
+<td>src/server/auth/session.ts:106-127; src/client/auth/AuthGate.tsx:78-85; src/server/admin/users.routes.ts:75-83; src/server/admin/users.routes.ts:128-132</td>
+</tr>
+</tbody></table>
+
+<h4 id="summary">Summary</h4>
+
+<p>Temporary and reset credentials set mustChangePassword, and the React auth gate sends those users to the change-password screen. The server-side API middleware refreshes the DB user but does not deny API access while mustChangePassword remains true, so the sensitive state is only enforced by client navigation.</p>
+
+<h4 id="validation">Validation</h4>
+
+<p>A validation test created an admin user with must_change_password=1 and showed GET /api/admin/users still returns 200. The same test showed an existing signed-in admin session remains authorized after the database flips must_change_password to true.</p>
+
+<p>Validation artifacts and receipts are saved under <code>artifacts/05_findings/AUTH-MUSTCHANGE-001</code>.</p>
+
+<h4 id="dataflow">Dataflow</h4>
+
+<p>Temporary/reset credential -&gt; Auth.js credentials authorize -&gt; session cookie -&gt; /api middleware requireApiAuth -&gt; res.locals.authUser -&gt; protected admin routes.</p>
+
+<h4 id="reachability">Reachability</h4>
+
+<p>An attacker with a temporary password, reset password, or stolen session can bypass the browser gate by calling APIs directly from same-origin tooling or any request path that satisfies the admin API request guard.</p>
+
+<h4 id="severity">Severity</h4>
+
+<p>medium: Medium because exploitation requires a valid account credential or session and the app is intended for private administration, but it breaks a high-value account recovery boundary. Severity would rise if the admin app is exposed beyond a trusted operator network or if temporary passwords are distributed through weak channels.</p>
+
+<h4 id="remediation">Remediation</h4>
+
+<p>Make requireApiAuth reject mustChangePassword sessions for all APIs except /api/auth/change-password and sign-out/session refresh endpoints. Refresh JWT/session state after password change, add regression tests for every privileged router, and consider invalidating old sessions on reset.</p>
+
+<h3 id="3-public-bot-bearer-tokens-accept-trivially-weak-or-placeholder-values">[3] Public bot bearer tokens accept trivially weak or placeholder values</h3>
+
+<table>
+<thead><tr>
+<th>Field</th>
+<th>Value</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>Severity</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Confidence</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Confidence rationale</td>
+<td>A validation test loaded the public-search bot config with one-character and placeholder tokens and confirmed both cases were accepted. The current local .env uses long random-looking tokens, so this is a deployment guardrail weakness rather than proof that the live deployment is weak.</td>
+</tr>
+<tr>
+<td>Category</td>
+<td>Weak secret validation / insecure deployment default</td>
+</tr>
+<tr>
+<td>CWE</td>
+<td>CWE-521: Weak Password Requirements</td>
+</tr>
+<tr>
+<td>Affected lines</td>
+<td>apps/public-search-bot/src/config.ts:3-5; apps/public-search-bot/src/config.ts:31-49; apps/public-search-bot/src/config.ts:50-58</td>
+</tr>
+</tbody></table>
+
+<h4 id="summary">Summary</h4>
+
+<p>The public VPS bot protects sync, status, and subscription admin APIs with bearer tokens, but requiredSecret only enforces a trimmed length of at least one character. Placeholder-looking or one-character tokens pass startup validation as long as the three values differ.</p>
+
+<h4 id="validation">Validation</h4>
+
+<p>A validation test loaded the public-search bot config with one-character and placeholder tokens and confirmed both cases were accepted. The current local .env uses long random-looking tokens, so this is a deployment guardrail weakness rather than proof that the live deployment is weak.</p>
+
+<p>Validation artifacts and receipts are saved under <code>artifacts/05_findings/CAND-PSB-001</code>.</p>
+
+<h4 id="dataflow">Dataflow</h4>
+
+<p>VPS environment variable -&gt; requiredSecret min(1) -&gt; config.publicSearchSyncToken/statusToken/subscriptionAdminToken -&gt; bearer comparison in public HTTP routes.</p>
+
+<h4 id="reachability">Reachability</h4>
+
+<p>If an operator follows the example but leaves short or placeholder tokens in production, internet clients reaching the VPS endpoints can brute force or guess tokens that authorize catalog sync, status reads, or subscription actions.</p>
+
+<h4 id="severity">Severity</h4>
+
+<p>medium: Medium because the affected APIs are intended to be public-network reachable behind Nginx and tokens are the main application-level control. Severity would drop if deployment automation always injects strong random secrets; it would rise if weak values are already deployed.</p>
+
+<h4 id="remediation">Remediation</h4>
+
+<p>Require at least 32 bytes of entropy or a 43+ character URL-safe/base64 secret, reject common placeholder words, and fail startup when tokens match example values. Update .env.example and README generation commands to use openssl rand or equivalent.</p>
+
+<h3 id="4-authenticated-non-admin-users-can-list-and-retry-failed-telegram-jobs">[4] Authenticated non-admin users can list and retry failed Telegram jobs</h3>
+
+<table>
+<thead><tr>
+<th>Field</th>
+<th>Value</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>Severity</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Confidence</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Confidence rationale</td>
+<td>A validation test signed in a non-admin superadmin-role user, inserted a failed Telegram job, and received 200 responses for both GET /api/telegram/jobs/failed and POST /api/telegram/jobs/:id/retry.</td>
+</tr>
+<tr>
+<td>Category</td>
+<td>Missing authorization for privileged job operations</td>
+</tr>
+<tr>
+<td>CWE</td>
+<td>CWE-862: Missing Authorization</td>
+</tr>
+<tr>
+<td>Affected lines</td>
+<td>src/server/telegram/telegram.admin.routes.ts:19-30; src/server/app.ts:64-69; src/server/telegram/telegram.queue.ts:355-377; src/server/telegram/telegram.queue.ts:527-538; src/server/telegram/telegram.client.ts:89</td>
+</tr>
+</tbody></table>
+
+<h4 id="summary">Summary</h4>
+
+<p>Telegram job routes are mounted after global authentication but do not check the caller role. The UI exposes Telegram Jobs to every authenticated role, while user-management routes have an admin check. A non-admin authenticated user can view failed job error details and move failed jobs back into the outbound queue.</p>
+
+<h4 id="validation">Validation</h4>
+
+<p>A validation test signed in a non-admin superadmin-role user, inserted a failed Telegram job, and received 200 responses for both GET /api/telegram/jobs/failed and POST /api/telegram/jobs/:id/retry.</p>
+
+<p>Validation artifacts and receipts are saved under <code>artifacts/05_findings/TEL-JOB-AUTHZ-001</code>.</p>
+
+<h4 id="dataflow">Dataflow</h4>
+
+<p>Authenticated non-admin session -&gt; /api/telegram/jobs/:id/retry -&gt; retryFailedTelegramJob status update -&gt; processNextTelegramJob -&gt; Telegram Bot API send/edit/delete action.</p>
+
+<h4 id="reachability">Reachability</h4>
+
+<p>Any authenticated non-admin operator can trigger the route from the same-origin app or API client. The action is limited to retrying existing failed jobs, but those jobs represent privileged Telegram message operations.</p>
+
+<h4 id="severity">Severity</h4>
+
+<p>medium: Medium because it crosses a role boundary and can trigger external Telegram side effects, though it cannot create arbitrary new jobs by itself. Severity would rise if failed job payloads include sensitive content or if lower-privileged roles are given broadly to untrusted users.</p>
+
+<h4 id="remediation">Remediation</h4>
+
+<p>Add a role middleware for Telegram job listing/retry, likely the same admin role required for user management or a dedicated job-admin permission. Hide the sidebar item for unauthorized roles and add tests that non-admin users receive 403.</p>
+
+<h3 id="5-credentials-login-has-no-failed-attempt-throttling">[5] Credentials login has no failed-attempt throttling</h3>
+
+<table>
+<thead><tr>
+<th>Field</th>
+<th>Value</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>Severity</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>Confidence</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Confidence rationale</td>
+<td>A validation test sent fifteen wrong-password credentials callbacks for the same account and observed authentication failures without a 429 or lockout signal.</td>
+</tr>
+<tr>
+<td>Category</td>
+<td>Missing rate limiting on authentication endpoint</td>
+</tr>
+<tr>
+<td>CWE</td>
+<td>CWE-307: Improper Restriction of Excessive Authentication Attempts</td>
+</tr>
+<tr>
+<td>Affected lines</td>
+<td>src/server/auth/session.ts:58-64; src/server/auth/passwords.ts:36</td>
+</tr>
+</tbody></table>
+
+<h4 id="summary">Summary</h4>
+
+<p>The Auth.js credentials provider checks email and password and returns null for failures, but there is no per-IP, per-account, or global failed-login limiter around the credential callback.</p>
+
+<h4 id="validation">Validation</h4>
+
+<p>A validation test sent fifteen wrong-password credentials callbacks for the same account and observed authentication failures without a 429 or lockout signal.</p>
+
+<p>Validation artifacts and receipts are saved under <code>artifacts/05_findings/AUTH-LOGIN-RATE-001</code>.</p>
+
+<h4 id="dataflow">Dataflow</h4>
+
+<p>Attacker-supplied email/password -&gt; /auth/callback/credentials -&gt; authorize -&gt; findAuthUserByEmail and verifyPassword -&gt; null response without throttle state.</p>
+
+<h4 id="reachability">Reachability</h4>
+
+<p>Anyone who can reach the admin login endpoint can try repeated passwords. The admin request guard protects /api, not /auth, and no login-specific limiter was found in the credentials callback path.</p>
+
+<h4 id="severity">Severity</h4>
+
+<p>low: Low in the intended private-loopback deployment because network exposure should be limited, but it becomes medium if the admin login is reachable from the internet or a shared network. Severity would drop if upstream VPN or reverse-proxy throttling is guaranteed and tested.</p>
+
+<h4 id="remediation">Remediation</h4>
+
+<p>Add failed-login throttling keyed by IP and normalized email, return consistent errors, log lockouts, and add tests for repeated bad credentials and successful login after the window resets.</p>
+
+<h3 id="6-status-and-subscription-bearer-endpoints-do-not-throttle-failed-authentication">[6] Status and subscription bearer endpoints do not throttle failed authentication</h3>
+
+<table>
+<thead><tr>
+<th>Field</th>
+<th>Value</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>Severity</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>Confidence</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Confidence rationale</td>
+<td>A validation test sent twenty invalid bearer requests to status and subscription endpoints and observed only 401 responses. The same source review found sync has a dedicated bad-auth limiter, demonstrating the intended control pattern exists for one sibling route but not the others.</td>
+</tr>
+<tr>
+<td>Category</td>
+<td>Missing rate limiting on token-protected public endpoints</td>
+</tr>
+<tr>
+<td>CWE</td>
+<td>CWE-307: Improper Restriction of Excessive Authentication Attempts</td>
+</tr>
+<tr>
+<td>Affected lines</td>
+<td>apps/public-search-bot/src/status.routes.ts:20-23; apps/public-search-bot/src/subscriptions/routes.ts:15-18; apps/public-search-bot/src/sync.routes.ts:22-38</td>
+</tr>
+</tbody></table>
+
+<h4 id="summary">Summary</h4>
+
+<p>The sync endpoint has a bad-auth limiter, but the status and subscription admin routes compare bearer tokens directly and return 401 for every bad attempt without throttling. This leaves the read-only status token and subscription admin token easier to brute force if deployed weakly.</p>
+
+<h4 id="validation">Validation</h4>
+
+<p>A validation test sent twenty invalid bearer requests to status and subscription endpoints and observed only 401 responses. The same source review found sync has a dedicated bad-auth limiter, demonstrating the intended control pattern exists for one sibling route but not the others.</p>
+
+<p>Validation artifacts and receipts are saved under <code>artifacts/05_findings/CAND-PSB-002</code>.</p>
+
+<h4 id="dataflow">Dataflow</h4>
+
+<p>Internet request with Authorization header -&gt; /api/status or /api/subscriptions/* -&gt; direct token comparison -&gt; unlimited 401 responses until the correct token is guessed.</p>
+
+<h4 id="reachability">Reachability</h4>
+
+<p>The routes are intended for VPS access from local status checks or Google Apps Script. Attackers need network access to the VPS endpoint and benefit most if token policy also allows weak secrets.</p>
+
+<h4 id="severity">Severity</h4>
+
+<p>low: Low on its own because strong random tokens make guessing impractical, but the missing limiter compounds the weak-token startup policy. Severity would rise if endpoint logs show internet scanning or if deployed tokens are short.</p>
+
+<h4 id="remediation">Remediation</h4>
+
+<p>Apply the same bad-auth fixed-window limiter used by /sync to status and subscription routes, ideally with separate buckets for token class and client IP. Add tests that repeated invalid status/subscription bearer attempts return 429.</p>
+
+<h2 id="reviewed-surfaces">Reviewed Surfaces</h2>
+
+<table>
+<thead><tr>
+<th>Surface</th>
+<th>Risk Area</th>
+<th>Outcome</th>
+<th>Notes</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>Auth login, sessions, temporary-password flow</td>
+<td>Credential theft, reset bypass, forced password-change bypass, browser credential exposure</td>
+<td>Reported</td>
+<td>AUTH-MUSTCHANGE-001 and AUTH-LOGIN-RATE-001 survived validation. Browser searches did not find secret values or credential persistence in client storage.</td>
+</tr>
+<tr>
+<td>Admin request guard and user-management API</td>
+<td>Cross-site API calls, stale/deleted user sessions, role checks</td>
+<td>No issue found</td>
+<td>Global /api guard checks custom header/origin/host; user-management router has an admin role check.</td>
+</tr>
+<tr>
+<td>Public-search bot bearer-token configuration</td>
+<td>Weak deployment secrets for sync/status/subscription APIs</td>
+<td>Reported</td>
+<td>CAND-PSB-001 survived validation; current local .env values appear long, but code permits weak or placeholder production values.</td>
+</tr>
+<tr>
+<td>Public-search bot status and subscription routes</td>
+<td>Token brute force and failed-auth throttling</td>
+<td>Reported</td>
+<td>CAND-PSB-002 survived validation; sync route has a bad-auth limiter but sibling status/subscription routes do not.</td>
+</tr>
+<tr>
+<td>Private Telegram failed-job operations</td>
+<td>Role bypass and external Telegram side effects</td>
+<td>Reported</td>
+<td>TEL-JOB-AUTHZ-001 survived validation; non-admin authenticated role can list and retry failed jobs.</td>
+</tr>
+<tr>
+<td>Public Telegram bot season callbacks</td>
+<td>Trial quota bypass and callback tampering</td>
+<td>Rejected</td>
+<td>CAND-PUBBOT-001 was ruled out as intended non-consuming callback behavior with tests denying exhausted/blocked users.</td>
+</tr>
+<tr>
+<td>Deployment files and local secrets</td>
+<td>Credential exposure in deployable source tree</td>
+<td>Reported</td>
+<td>DEPLOY-SECRETS-001 survived validation. .env files and the Google key are ignored and not tracked; the key still exists in the deployable app tree.</td>
+</tr>
+<tr>
+<td>Media/TMDB/database repositories</td>
+<td>SQL injection, SSRF, public URL validation, unsafe DB updates</td>
+<td>No issue found</td>
+<td>Reviewed queries use prepared statements and TMDB/public URL sources are configuration-driven.</td>
+</tr>
+<tr>
+<td>Local public search sync/status UI</td>
+<td>Token leakage to browser, unsafe status rendering, data exposure</td>
+<td>No issue found</td>
+<td>No secret tokens are returned to the browser; status output is whitelisted operational state.</td>
+</tr>
+</tbody></table>
+
+<h2 id="open-questions-and-follow-up">Open Questions And Follow Up</h2>
+
+<ul><li>Run a live VPS configuration review focused on Nginx routing, systemd hardening, firewall rules, and whether repository files are ever served as static content.</li><li>After fixes, rerun the validation artifacts in <code>artifacts/05_findings/*/validation_artifacts</code> to confirm the expected status codes change from vulnerable behavior to denied or throttled behavior.</li><li>Review account lifecycle policy for temporary passwords: how they are distributed, when they expire, and whether password reset should invalidate all existing sessions.</li></ul>
+
+<h2 id="secure-vps-deployment-guide">Secure VPS Deployment Guide</h2>
+
+<ol><li>Rotate before deploy: revoke the current Google service account key, create a fresh least-privilege key for only the required spreadsheet, and generate fresh 32+ byte values for <code>PUBLIC_SEARCH_SYNC_TOKEN</code>, <code>PUBLIC_SEARCH_STATUS_TOKEN</code>, <code>SUBSCRIPTION_ADMIN_TOKEN</code>, <code>PUBLIC_BOT_TOKEN</code>, and <code>SUBSCRIPTION_BOT_TOKEN</code>.</li><li>Create a non-root Linux user such as <code>infinitylinks</code>; keep the app under <code>/opt/infinitylinks/public-search-bot</code> and runtime data under <code>/var/lib/infinitylinks</code> with owner <code>infinitylinks:infinitylinks</code>.</li><li>Keep secrets outside the repo: place the env file at <code>/etc/infinitylinks/public-search-bot.env</code> with mode <code>600</code>, and place the Google key at <code>/etc/infinitylinks/google-service-account.json</code> or inject it through a systemd credential. Do not copy <code>apps/public-search-bot/google-service-account.json</code> to the deploy tree.</li><li>Build locally or in CI with <code>npm ci</code>, <code>npm run build</code>, and <code>npm run build -w apps/public-search-bot</code>; deploy only the compiled app/package files needed to run, not <code>.env</code>, git metadata, tests, scan artifacts, or local database files.</li><li>In systemd, set <code>User=infinitylinks</code>, <code>EnvironmentFile=/etc/infinitylinks/public-search-bot.env</code>, <code>WorkingDirectory=/opt/infinitylinks/public-search-bot</code>, <code>NoNewPrivileges=true</code>, <code>PrivateTmp=true</code>, <code>ProtectSystem=strict</code>, <code>ProtectHome=true</code>, and <code>ReadWritePaths=/var/lib/infinitylinks</code>.</li><li>Bind the Node service to <code>127.0.0.1:3001</code>; expose it only through Nginx with TLS, request body limits, and rate limits on <code>/api/status</code>, <code>/api/sync</code>, and <code>/api/subscriptions</code>.</li><li>Lock Nginx down to proxy only expected routes. Do not serve the repository directory as static content; deny dotfiles, source maps if not needed, env files, JSON credential files, and backups.</li><li>Configure firewall rules: allow SSH only from your IP if possible, allow HTTP/HTTPS, deny direct access to port 3001, and enable automatic security updates plus fail2ban or equivalent SSH protection.</li><li>Verify after deployment with redacted checks: <code>systemctl status</code>, localhost <code>/api/status</code> with the status token, a wrong-token request that should be rejected and eventually rate-limited, and <code>find /opt/infinitylinks -name .env -o -name &#x27;*service-account*.json&#x27;</code> to confirm secrets are not in the deploy tree.</li><li>Add operations hygiene: back up only the SQLite data directory with encrypted backups, rotate tokens after admin turnover, log failed bearer attempts without logging token values, and keep a rollback package that does not contain secrets.</li></ol>
+    </main>
+  </div>
+  <script>
+    const toggle = document.getElementById('navToggle');
+    const icon = document.getElementById('navToggleIcon');
+    const collapsedKey = 'codex-security-report:sidebar-collapsed';
+
+    function setCollapsed(collapsed) {
+      document.body.classList.toggle('sidebar-collapsed', collapsed);
+      if (toggle) {
+        toggle.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
+        toggle.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+        toggle.setAttribute('title', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+      }
+      if (icon) icon.setAttribute('d', collapsed ? 'M9 6l6 6-6 6' : 'M15 6l-6 6 6 6');
+      try { localStorage.setItem(collapsedKey, collapsed ? '1' : '0'); } catch {}
+    }
+
+    try { setCollapsed(localStorage.getItem(collapsedKey) === '1'); } catch {}
+    if (toggle) toggle.addEventListener('click', () => setCollapsed(!document.body.classList.contains('sidebar-collapsed')));
+
+    const tocLinks = Array.from(document.querySelectorAll('.toc a'));
+    const sections = tocLinks.map((link) => {
+      const id = decodeURIComponent(link.getAttribute('href').slice(1));
+      return [link, document.getElementById(id)];
+    }).filter((pair) => pair[1]);
+
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (!visible) return;
+      tocLinks.forEach((link) => link.parentElement.classList.remove('active'));
+      const active = tocLinks.find((link) => link.getAttribute('href') === '#' + visible.target.id);
+      if (active) active.parentElement.classList.add('active');
+    }, { rootMargin: '-10% 0px -75% 0px', threshold: [0, 1] });
+
+    sections.forEach(([, section]) => observer.observe(section));
+  </script>
+</body>
+</html>

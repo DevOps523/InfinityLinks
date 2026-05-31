@@ -1,0 +1,11 @@
+# Attack Path Analysis Summary
+
+| Candidate | Severity | Disposition | Rationale |
+|---|---|---|---|
+| DEPLOY-SECRETS-001 | high | reportable | High because the file is live credential material in a deployable directory and compromise gives access to the subscription control-plane data store. Severity would drop after rotation and moving credentials outside the source/deploy tree; it would rise if the VPS serves repository files directly. |
+| AUTH-MUSTCHANGE-001 | medium | reportable | Medium because exploitation requires a valid account credential or session and the app is intended for private administration, but it breaks a high-value account recovery boundary. Severity would rise if the admin app is exposed beyond a trusted operator network or if temporary passwords are distributed through weak channels. |
+| CAND-PSB-001 | medium | reportable | Medium because the affected APIs are intended to be public-network reachable behind Nginx and tokens are the main application-level control. Severity would drop if deployment automation always injects strong random secrets; it would rise if weak values are already deployed. |
+| TEL-JOB-AUTHZ-001 | medium | reportable | Medium because it crosses a role boundary and can trigger external Telegram side effects, though it cannot create arbitrary new jobs by itself. Severity would rise if failed job payloads include sensitive content or if lower-privileged roles are given broadly to untrusted users. |
+| AUTH-LOGIN-RATE-001 | low | reportable | Low in the intended private-loopback deployment because network exposure should be limited, but it becomes medium if the admin login is reachable from the internet or a shared network. Severity would drop if upstream VPN or reverse-proxy throttling is guaranteed and tested. |
+| CAND-PSB-002 | low | reportable | Low on its own because strong random tokens make guessing impractical, but the missing limiter compounds the weak-token startup policy. Severity would rise if endpoint logs show internet scanning or if deployed tokens are short. |
+| CAND-PUBBOT-001 | none | rejected | Existing behavior and tests show season callbacks are non-consuming by design, exhausted/blocked users are denied season details, and ordinary Telegram clients can only press callback buttons produced by the bot. |

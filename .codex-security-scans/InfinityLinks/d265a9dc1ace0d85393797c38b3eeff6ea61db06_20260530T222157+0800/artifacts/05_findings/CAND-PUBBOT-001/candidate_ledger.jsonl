@@ -1,0 +1,3 @@
+{"phase":"discovery","candidate_id":"CAND-PUBBOT-001","status":"candidate","receipt":"Season callback quota bypass concern identified during public Telegram bot review."}
+{"phase":"validation","candidate_id":"CAND-PUBBOT-001","status":"rejected","receipt":"Existing behavior and tests show season callbacks are non-consuming by design, exhausted/blocked users are denied season details, and ordinary Telegram clients can only press callback buttons produced by the bot."}
+{"phase":"attack_path","candidate_id":"CAND-PUBBOT-001","status":"not_reportable","receipt":"No independently exploitable path survived validation; behavior is documented/tested product semantics."}
